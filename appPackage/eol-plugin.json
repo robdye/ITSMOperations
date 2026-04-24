@@ -1,0 +1,63 @@
+{
+    "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
+    "schema_version": "v2.4",
+    "name_for_human": "EOL Lifecycle Intelligence",
+    "description_for_human": "End-of-life product lifecycle data from endoflife.date for asset compliance and risk forecasting",
+    "namespace": "eoldata",
+    "functions": [
+        { "name": "get-eol-product", "description": "Get lifecycle information for a specific product including all release cycles, EOL dates, and support status." },
+        { "name": "get-eol-all-products", "description": "List all products tracked by endoflife.date." },
+        { "name": "check-eol-status", "description": "Check if a specific product version is end-of-life or end-of-support." }
+    ],
+    "runtimes": [
+        {
+            "type": "RemoteMCPServer",
+            "run_for_functions": ["get-eol-product", "get-eol-all-products", "check-eol-status"],
+            "spec": {
+                "url": "${{CHANGE_MCP_ENDPOINT}}",
+                "mcp_tool_description": {
+                    "tools": [
+                        {
+                            "name": "get-eol-product",
+                            "description": "Get full lifecycle data for a product (e.g. windows-server, ubuntu, nodejs, postgresql). Returns all release cycles with EOL dates, LTS status, and support timeline.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "product": { "type": "string", "description": "Product identifier from endoflife.date (e.g. windows-server, rhel, nodejs, postgresql, java)" }
+                                },
+                                "required": ["product"],
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "get-eol-all-products",
+                            "description": "List all products tracked by endoflife.date. Returns product identifiers that can be used with get-eol-product.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {},
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "check-eol-status",
+                            "description": "Check EOL/EOS status for a specific product version. Returns lifecycle status, dates, and risk classification.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "product": { "type": "string", "description": "Product identifier (e.g. windows-server)" },
+                                    "version": { "type": "string", "description": "Version to check (e.g. 2019, 22.04, 18)" }
+                                },
+                                "required": ["product", "version"],
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        }
+                    ]
+                }
+            },
+            "auth": { "type": "None" }
+        }
+    ]
+}

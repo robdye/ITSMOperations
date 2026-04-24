@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Change Management Dashboard</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f5f5f5;color:#242424;padding:20px;line-height:1.5}
+.widget{background:#fff;border-radius:12px;border:1px solid #e0e0e0;overflow:hidden;max-width:900px;margin:0 auto}
+.widget-header{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid #f0f0f0}
+.widget-icon{width:36px;height:36px;border-radius:8px;background:#e3f2fd;display:flex;align-items:center;justify-content:center;font-size:18px}
+.widget-title h2{font-size:16px;font-weight:600;color:#242424}
+.widget-title p{font-size:12px;color:#616161}
+.badge{background:#1976d2;color:#fff;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;margin-left:auto}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#f0f0f0;border-bottom:1px solid #f0f0f0}
+.kpi{background:#fff;padding:16px 12px;text-align:center}
+.kpi .val{font-size:24px;font-weight:700;line-height:1.2}
+.kpi .lbl{font-size:11px;color:#616161;margin-top:2px;text-transform:uppercase;letter-spacing:0.3px}
+.list{padding:12px 16px;display:flex;flex-direction:column;gap:8px}
+.chg-card{display:grid;grid-template-columns:4px 1fr auto auto;gap:0;align-items:stretch;background:#fafafa;border:1px solid #e8e8e8;border-radius:10px;overflow:hidden;cursor:pointer;transition:all .15s ease}
+.chg-card:hover{border-color:#1976d2;box-shadow:0 2px 8px rgba(25,118,210,.1)}
+.risk-bar{border-radius:0}
+.chg-body{padding:12px 12px 12px 12px;display:flex;flex-direction:column;gap:4px}
+.chg-body h3{font-size:13px;font-weight:600;color:#242424}
+.chg-body .meta{font-size:11px;color:#757575;display:flex;flex-wrap:wrap;gap:8px}
+.chg-right{padding:12px 8px;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:6px}
+.chg-score{padding:12px 16px 12px 0;display:flex;align-items:center;justify-content:center}
+.score-circle{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff}
+.state-tag{padding:3px 10px;border-radius:20px;font-size:10px;font-weight:600}
+.sNew{background:#e8f5e9;color:#2e7d32}.sAssess{background:#fff3e0;color:#e65100}.sImpl{background:#e3f2fd;color:#1565c0}.sReview{background:#f3e5f5;color:#7b1fa2}.sClosed{background:#f5f5f5;color:#757575}
+.itil-tag{padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}
+.itStd{background:#e8f5e9;color:#2e7d32}.itNorm{background:#fff3e0;color:#e65100}.itEmerg{background:#ffebee;color:#c62828}
+.empty{text-align:center;color:#9e9e9e;padding:48px 20px;font-size:14px}
+.footer{padding:10px 16px;border-top:1px solid #f0f0f0;text-align:right;font-size:10px;color:#bdbdbd}
+</style>
+</head>
+<body>
+<div class="widget">
+  <div class="widget-header">
+    <div class="widget-icon">🔄</div>
+    <div class="widget-title"><h2>Change Management Dashboard</h2><p>ServiceNow · Change Requests</p></div>
+    <span class="badge" id="total-badge">0</span>
+  </div>
+  <div class="kpis" id="summary"></div>
+  <div class="list" id="changes-list"></div>
+  <div class="footer" id="footer"></div>
+</div>
+<script>
+var to=window.__TOOL_DATA__||(window.openai&&window.openai.toolOutput)||{};
+var changes=to.changes||[];var si=to.snowInstance||'';
+document.getElementById('total-badge').textContent=changes.length+' Changes';
+var crit=0,high=0,med=0,low=0;
+for(var i=0;i<changes.length;i++){var rs=changes[i]._riskScore;if(!rs)continue;
+if(rs.category==='Critical')crit++;else if(rs.category==='High')high++;else if(rs.category==='Medium')med++;else low++;}
+document.getElementById('summary').innerHTML=
+'<div class="kpi"><div class="val" style="color:#c62828">'+crit+'</div><div class="lbl">Critical</div></div>'+
+'<div class="kpi"><div class="val" style="color:#e65100">'+high+'</div><div class="lbl">High</div></div>'+
+'<div class="kpi"><div class="val" style="color:#f57f17">'+med+'</div><div class="lbl">Medium</div></div>'+
+'<div class="kpi"><div class="val" style="color:#2e7d32">'+low+'</div><div class="lbl">Low</div></div>';
+var html='';
+for(var i=0;i<changes.length;i++){var c=changes[i];var rs=c._riskScore||{};
+var sc=rs.score||0;var rcol=rs.color||'#757575';
+var link=si+'/nav_to.do?uri=change_request.do?sys_id='+(c.sys_id||'');
+var st=(c.state||'').toLowerCase();var stClass=st.includes('new')?'sNew':st.includes('assess')?'sAssess':st.includes('implement')?'sImpl':st.includes('review')?'sReview':'sClosed';
+var tp=(c.type||'').toLowerCase();var itClass=tp.includes('standard')?'itStd':tp.includes('emergency')?'itEmerg':'itNorm';
+html+='<div class="chg-card" onclick="window.open(\''+link+'\',\'_blank\')" role="button" tabindex="0">'+
+'<div class="risk-bar" style="background:'+rcol+'"></div>'+
+'<div class="chg-body"><h3>'+(c.number||'')+' — '+(c.short_description||'')+'</h3>'+
+'<div class="meta"><span>📂 '+(c.category||'General')+'</span><span>👥 '+(c.assignment_group||'Unassigned')+'</span></div></div>'+
+'<div class="chg-right"><span class="state-tag '+stClass+'">'+(c.state||'New')+'</span>'+
+'<span class="itil-tag '+itClass+'">'+(c.type||'Normal')+'</span></div>'+
+'<div class="chg-score"><div class="score-circle" style="background:'+rcol+'">'+sc+'</div></div></div>';}
+document.getElementById('changes-list').innerHTML=html||'<div class="empty">No change requests found.</div>';
+document.getElementById('footer').textContent='Showing '+changes.length+' change request'+(changes.length!==1?'s':'')+' · Data from ServiceNow';
+</script>
+</body></html>

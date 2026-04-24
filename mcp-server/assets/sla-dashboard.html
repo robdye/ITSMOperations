@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>SLA Dashboard</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f5f5f5;color:#242424;padding:20px;line-height:1.5}
+.widget{background:#fff;border-radius:12px;border:1px solid #e0e0e0;overflow:hidden;max-width:900px;margin:0 auto}
+.widget-header{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid #f0f0f0}
+.widget-icon{width:36px;height:36px;border-radius:8px;background:#fff3e0;display:flex;align-items:center;justify-content:center;font-size:18px}
+.widget-title h2{font-size:16px;font-weight:600}.widget-title p{font-size:12px;color:#616161}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#f0f0f0;border-bottom:1px solid #f0f0f0}
+.kpi{background:#fff;padding:16px 12px;text-align:center;cursor:pointer;transition:all .15s;border-bottom:3px solid transparent}
+.kpi:hover{background:#fafafa}.kpi.active{border-bottom-color:#e65100;background:#fff8f0}
+.kpi .val{font-size:24px;font-weight:700;line-height:1.2}
+.kpi .lbl{font-size:11px;color:#616161;margin-top:2px;text-transform:uppercase;letter-spacing:.3px}
+.sla-groups{padding:12px 16px}
+.sla-group{background:#fafafa;border:1px solid #e8e8e8;border-radius:10px;margin-bottom:10px;overflow:hidden}
+.sla-group-header{padding:12px 16px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:background .15s}
+.sla-group-header:hover{background:#f0f0f0}
+.sla-group-header h3{font-size:13px;font-weight:600;flex:1}
+.sla-group-kpi{display:flex;gap:12px}
+.sla-mini-kpi{text-align:center;font-size:10px}
+.sla-mini-kpi .v{font-size:16px;font-weight:700}
+.sla-group-items{display:none;border-top:1px solid #e8e8e8;padding:8px 12px}
+.sla-group-items.show{display:block}
+.sla-card{display:grid;grid-template-columns:1fr 160px;gap:12px;align-items:center;padding:8px 4px;border-bottom:1px solid #f0f0f0}
+.sla-card:last-child{border-bottom:none}
+.sla-info h4{font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px;margin-bottom:2px}
+.sla-info .meta{font-size:11px;color:#757575}
+.sla-progress{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.sla-bar{width:140px;height:8px;background:#e0e0e0;border-radius:4px;overflow:hidden}
+.sla-fill{height:100%;border-radius:4px;transition:width .3s}
+.sla-pct{font-size:11px;font-weight:600;color:#616161}
+.breach-tag{background:#ffebee;color:#c62828;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600}
+.ok-tag{background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600}
+.atrisk-tag{background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600}
+.empty{text-align:center;color:#9e9e9e;padding:48px 20px;font-size:14px}
+.footer{padding:10px 16px;border-top:1px solid #f0f0f0;text-align:right;font-size:10px;color:#bdbdbd}
+/* Detail overlay */
+.overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.45);z-index:1000;justify-content:center;align-items:flex-start;padding:30px 20px;overflow-y:auto}
+.overlay.show{display:flex}
+.detail-panel{background:#fff;border-radius:14px;width:100%;max-width:700px;box-shadow:0 8px 32px rgba(0,0,0,.18);overflow:hidden;animation:slideUp .2s ease}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.detail-header{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid #f0f0f0}
+.detail-header h2{font-size:16px;font-weight:700;flex:1}
+.detail-close{width:32px;height:32px;border:none;background:#f5f5f5;border-radius:8px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s}
+.detail-close:hover{background:#e0e0e0}
+.detail-body{padding:20px;display:flex;flex-direction:column;gap:14px}
+.detail-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.detail-field{display:flex;flex-direction:column;gap:4px}
+.detail-field.full{grid-column:1/-1}
+.detail-field label{font-size:11px;font-weight:600;color:#616161;text-transform:uppercase;letter-spacing:.3px}
+.detail-field .val{font-size:13px;color:#242424;padding:8px 10px;background:#fafafa;border:1px solid #e8e8e8;border-radius:6px;min-height:36px;word-break:break-word}
+.detail-actions{display:flex;gap:10px;padding:16px 20px;border-top:1px solid #f0f0f0;background:#fafafa}
+.btn{padding:9px 20px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.btn-secondary{background:#fff;color:#424242;border:1px solid #d0d0d0}.btn-secondary:hover{background:#f5f5f5}
+.btn-snow{background:#fff;color:#e65100;border:1px solid #e65100;margin-left:auto}.btn-snow:hover{background:#fff3e0}
+</style>
+</head>
+<body>
+<div class="widget">
+  <div class="widget-header"><div class="widget-icon">⏱️</div><div class="widget-title"><h2>SLA Compliance Dashboard</h2><p>ServiceNow · Service Level Agreements</p></div></div>
+  <div class="kpis" id="kpis"></div>
+  <div class="sla-groups" id="sla-groups"></div>
+  <div class="footer" id="footer"></div>
+</div>
+<div class="overlay" id="overlay" onclick="if(event.target===this)closeSlaDetail()">
+  <div class="detail-panel">
+    <div class="detail-header">
+      <div class="widget-icon" style="background:#fff3e0">⏱️</div>
+      <h2 id="detail-title">SLA Detail</h2>
+      <button class="detail-close" onclick="closeSlaDetail()" title="Close">&times;</button>
+    </div>
+    <div class="detail-body" id="detail-body"></div>
+    <div class="detail-actions" id="detail-actions"></div>
+  </div>
+</div>
+<script>
+var to=window.__TOOL_DATA__||(window.openai&&window.openai.toolOutput)||{};
+var allSlas=to.slas||[];
+var breached=allSlas.filter(function(s){return s.has_breached==='true'||s.has_breached===true}).length;
+var active=allSlas.filter(function(s){return s.stage==='In progress'}).length;
+var completed=allSlas.filter(function(s){return s.stage==='Completed'}).length;
+var complianceRate=allSlas.length>0?Math.round((allSlas.length-breached)/allSlas.length*100):100;
+var crColor=complianceRate>=95?'#2e7d32':complianceRate>=80?'#e65100':'#c62828';
+var activeFilter=null;
+function render(filter){
+activeFilter=filter;
+var filtered=allSlas;
+if(filter==='breached')filtered=allSlas.filter(function(s){return s.has_breached==='true'||s.has_breached===true});
+if(filter==='active')filtered=allSlas.filter(function(s){return s.stage==='In progress'});
+if(filter==='completed')filtered=allSlas.filter(function(s){return s.stage==='Completed'});
+var kpiData=[{f:null,val:complianceRate+'%',lbl:'Compliance Rate',color:crColor},{f:'breached',val:breached,lbl:'Breached',color:'#c62828'},{f:'active',val:active,lbl:'In Progress',color:'#e65100'},{f:'completed',val:completed,lbl:'Completed',color:'#2e7d32'}];
+var khtml='';
+for(var i=0;i<kpiData.length;i++){var k=kpiData[i];var isActive=filter===k.f?' active':'';
+khtml+='<div class="kpi'+isActive+'" onclick="render('+(filter===k.f?'null':(k.f===null?'null':"'"+k.f+"'"))+')"><div class="val" style="color:'+k.color+'">'+k.val+'</div><div class="lbl">'+k.lbl+'</div></div>';}
+document.getElementById('kpis').innerHTML=khtml;
+// Group by SLA name
+var groups={};
+for(var i=0;i<filtered.length;i++){var s=filtered[i];
+var slaName=s.sla&&typeof s.sla==='object'?(s.sla.display_value||s.sla.value||'Unknown'):s.sla||'Unknown';
+if(!groups[slaName])groups[slaName]=[];groups[slaName].push(s);}
+var ghtml='';
+var gIdx=0;
+for(var gName in groups){var items=groups[gName];
+var gBreached=items.filter(function(s){return s.has_breached==='true'||s.has_breached===true}).length;
+var gOk=items.length-gBreached;
+var gRate=items.length>0?Math.round(gOk/items.length*100):100;
+var gColor=gRate>=95?'#2e7d32':gRate>=80?'#e65100':'#c62828';
+ghtml+='<div class="sla-group"><div class="sla-group-header" onclick="toggleSlaGroup('+gIdx+')"><h3>'+gName+'</h3>'+
+'<div class="sla-group-kpi"><div class="sla-mini-kpi"><div class="v" style="color:'+gColor+'">'+gRate+'%</div>compliance</div>'+
+'<div class="sla-mini-kpi"><div class="v" style="color:#c62828">'+gBreached+'</div>breached</div>'+
+'<div class="sla-mini-kpi"><div class="v">'+items.length+'</div>total</div></div></div>';
+ghtml+='<div class="sla-group-items" id="sla-group-'+gIdx+'">';
+for(var j=0;j<items.length;j++){var s=items[j];
+var pct=parseInt(s.percentage)||0;var isBreach=s.has_breached==='true'||s.has_breached===true;
+var barColor=isBreach?'#ef5350':pct>80?'#ff9800':'#66bb6a';
+var tag=isBreach?'<span class="breach-tag">Breached</span>':pct>80?'<span class="atrisk-tag">At Risk</span>':'<span class="ok-tag">On Track</span>';
+var taskName=s.task&&typeof s.task==='object'?(s.task.display_value||s.task.value||''):s.task||'';
+ghtml+='<div class="sla-card" onclick="openSlaDetail(\''+gName.replace(/'/g,"\\'")+'\','+j+')" style="cursor:pointer"><div class="sla-info"><h4>'+tag+' '+taskName+'</h4>'+
+'<div class="meta">Stage: '+(s.stage||'')+' · Time Left: '+(s.business_time_left||'N/A')+'</div></div>'+
+'<div class="sla-progress"><div class="sla-bar"><div class="sla-fill" style="width:'+Math.min(pct,100)+'%;background:'+barColor+'"></div></div>'+
+'<div class="sla-pct">'+pct+'% elapsed</div></div></div>';}
+ghtml+='</div></div>';gIdx++;}
+document.getElementById('sla-groups').innerHTML=ghtml||'<div class="empty">No SLA data found.</div>';
+document.getElementById('footer').textContent='Showing '+filtered.length+' SLA'+(filtered.length!==1?'s':'')+' in '+Object.keys(groups).length+' group'+(Object.keys(groups).length!==1?'s':'')+' · Data from ServiceNow';}
+window.render=render;render(null);
+window.toggleSlaGroup=function(idx){document.getElementById('sla-group-'+idx).classList.toggle('show');};
+var slaGroups={};
+function rebuildGroups(){
+slaGroups={};
+for(var i=0;i<allSlas.length;i++){var s=allSlas[i];
+var slaName=s.sla&&typeof s.sla==='object'?(s.sla.display_value||s.sla.value||'Unknown'):s.sla||'Unknown';
+if(!slaGroups[slaName])slaGroups[slaName]=[];slaGroups[slaName].push(s);}}
+rebuildGroups();
+function openSlaDetail(groupName,idx){
+var items=slaGroups[groupName]||[];var s=items[idx];if(!s)return;
+var taskName=s.task&&typeof s.task==='object'?(s.task.display_value||s.task.value||''):s.task||'';
+var slaName=s.sla&&typeof s.sla==='object'?(s.sla.display_value||s.sla.value||''):s.sla||'';
+document.getElementById('detail-title').textContent=taskName+' — '+slaName;
+var pct=parseInt(s.percentage)||0;var isBreach=s.has_breached==='true'||s.has_breached===true;
+var h='<div class="detail-row">';
+h+='<div class="detail-field"><label>SLA Name</label><div class="val">'+slaName+'</div></div>';
+h+='<div class="detail-field"><label>Task</label><div class="val">'+taskName+'</div></div></div>';
+h+='<div class="detail-row">';
+h+='<div class="detail-field"><label>Stage</label><div class="val">'+(s.stage||'—')+'</div></div>';
+h+='<div class="detail-field"><label>Breached</label><div class="val" style="color:'+(isBreach?'#c62828':'#2e7d32')+';font-weight:600">'+(isBreach?'Yes — BREACHED':'No')+'</div></div></div>';
+h+='<div class="detail-row">';
+h+='<div class="detail-field"><label>Percentage Elapsed</label><div class="val">'+pct+'%</div></div>';
+h+='<div class="detail-field"><label>Time Remaining</label><div class="val">'+(s.business_time_left||'N/A')+'</div></div></div>';
+h+='<div class="detail-row">';
+h+='<div class="detail-field"><label>Start Time</label><div class="val">'+(s.start_time||'—')+'</div></div>';
+h+='<div class="detail-field"><label>End Time</label><div class="val">'+(s.end_time||'—')+'</div></div></div>';
+h+='<div class="detail-row">';
+h+='<div class="detail-field"><label>Planned End</label><div class="val">'+(s.planned_end_time||'—')+'</div></div>';
+h+='<div class="detail-field"><label>Business Duration</label><div class="val">'+(s.business_duration||'—')+'</div></div></div>';
+if(s.pause_duration)h+='<div class="detail-field full"><label>Pause Duration</label><div class="val">'+s.pause_duration+'</div></div>';
+document.getElementById('detail-body').innerHTML=h;
+var si2=to.snowInstance||'';
+var taskId=s.task&&typeof s.task==='object'?(s.task.value||''):(s.task||'');
+var link=si2+'/nav_to.do?uri=task_sla.do?sys_id='+(s.sys_id||'');
+document.getElementById('detail-actions').innerHTML=
+'<button class="btn btn-secondary" onclick="closeSlaDetail()">Close</button>'+
+'<a class="btn btn-snow" href="'+link+'" target="_blank" rel="noopener">↗ View in ServiceNow</a>';
+document.getElementById('overlay').classList.add('show');}
+function closeSlaDetail(){document.getElementById('overlay').classList.remove('show');}
+window.openSlaDetail=openSlaDetail;window.closeSlaDetail=closeSlaDetail;
+</script>
+</body></html>

@@ -1,0 +1,39 @@
+{
+    "$schema": "https://developer.microsoft.com/json-schemas/copilot/declarative-agent/v1.6/schema.json",
+    "version": "v1.6",
+    "name": "ITSM Operations",
+    "description": "ITSM Operations Command Center — an ITIL 4-aligned multi-agent digital worker that orchestrates 13 child workers across Incident, Change, Problem, Asset/CMDB, SLA, Knowledge, Vendor, Service Desk, Monitoring, Release, Capacity, Continuity, and Security management practices. Grounded in ITIL 4 and NIST 800-53.",
+    "instructions": "$[file('instruction-short.txt')]",
+    "capabilities": [
+        { "name": "CodeInterpreter" },
+        { "name": "People" },
+        { "name": "Email" },
+        { "name": "TeamsMessages" },
+        {
+            "name": "OneDriveAndSharePoint",
+            "items_by_url": [{ "url": "https://absx68251802.sharepoint.com/Shared%20Documents" }]
+        }
+    ],
+    "actions": [
+        { "id": "changemgmt", "file": "change-mgmt-plugin.json" },
+        { "id": "eoldata", "file": "eol-plugin.json" }
+    ],
+    "conversation_starters": [
+        { "title": "ITSM Operations Briefing", "text": "Give me my ITSM operations briefing. What's happening across incidents, problems, changes, and SLAs?" },
+        { "title": "Incident Dashboard", "text": "Show me all active incidents. Are there any P1s or P2s?" },
+        { "title": "Problem Backlog", "text": "Show me the problem dashboard. How many known errors do we have?" },
+        { "title": "SLA Compliance", "text": "Show me the SLA compliance dashboard. Are any SLAs breached or at risk?" },
+        { "title": "Change Risk Briefing", "text": "Give me the change risk briefing. Any collisions or high-risk changes?" },
+        { "title": "Search Knowledge Base", "text": "Search the knowledge base for Oracle failover procedures." },
+        { "title": "Triage My ITSM Inbox", "text": "Triage my inbox — what ITSM items need my attention today?" },
+        { "title": "Upcoming CAB Meetings", "text": "Find any upcoming CAB meetings and show me what changes are on the agenda." },
+        { "title": "Find Escalation Path", "text": "Show me the org chart and escalation path for the Infrastructure team lead." },
+        { "title": "IT Ops Channel Activity", "text": "What's the latest activity in the IT Operations Teams channels?" },
+        { "title": "Service Catalog", "text": "Show me the service catalog. What services can users request?" },
+        { "title": "Active Monitoring Alerts", "text": "Are there any active monitoring alerts or events that need attention?" },
+        { "title": "Release Schedule", "text": "What releases are scheduled for this week? Are they ready to deploy?" },
+        { "title": "Capacity Planning", "text": "Review our infrastructure capacity. Are any systems approaching resource limits?" },
+        { "title": "DR Readiness", "text": "What's our disaster recovery readiness? When was the last DR test?" },
+        { "title": "Security Posture", "text": "Give me a security posture overview. Any critical vulnerabilities or pending access reviews?" }
+    ]
+}

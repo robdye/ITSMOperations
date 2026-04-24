@@ -1,0 +1,92 @@
+[
+  {
+    "manifestId": "mfst-004-snow",
+    "displayName": "ServiceNow ITSM Connector",
+    "approvedBy": "Sarah Chen (IT Governance)",
+    "approvalDate": "2025-06-15",
+    "approvalCR": "CR-2025-0342",
+    "reviewDate": "2026-06-15",
+    "businessJustification": "Core ITSM integration for incident and change management workflows",
+    "riskAssessment": "VRA-2025-018"
+  },
+  {
+    "manifestId": "mfst-006-itsm",
+    "displayName": "ITSM Operations Agent",
+    "approvedBy": "Robert Dye (IT Operations)",
+    "approvalDate": "2026-01-10",
+    "approvalCR": "CR-2026-0015",
+    "reviewDate": "2026-07-10",
+    "businessJustification": "Intelligent IT service management with incident triage and SLA monitoring",
+    "riskAssessment": "RA-2026-003"
+  },
+  {
+    "manifestId": "mfst-008-finance",
+    "displayName": "Finance Reporting Bot",
+    "approvedBy": "James Wu (Finance Director)",
+    "approvalDate": "2025-11-20",
+    "approvalCR": "CR-2025-0891",
+    "reviewDate": "2026-05-20",
+    "businessJustification": "Quarterly financial report automation reducing manual effort by 60%",
+    "riskAssessment": "RA-2025-042"
+  },
+  {
+    "manifestId": "mfst-009-legal",
+    "displayName": "Legal Contract Reviewer",
+    "approvedBy": "Maria Santos (General Counsel)",
+    "approvalDate": "2026-02-01",
+    "approvalCR": "CR-2026-0089",
+    "reviewDate": "2026-08-01",
+    "businessJustification": "Automated contract clause analysis reducing legal review time from 5 days to 4 hours",
+    "riskAssessment": "RA-2026-011"
+  },
+  {
+    "manifestId": "mfst-011-helpdesk",
+    "displayName": "IT Help Desk Bot",
+    "approvedBy": "Sarah Chen (IT Governance)",
+    "approvalDate": "2025-08-01",
+    "approvalCR": "CR-2025-0567",
+    "reviewDate": "2026-02-01",
+    "businessJustification": "Tier-0 self-service IT support reducing help desk call volume by 35%",
+    "riskAssessment": "RA-2025-029"
+  },
+  {
+    "manifestId": "mfst-012-analytics",
+    "displayName": "Data Analytics Agent",
+    "approvedBy": "Sarah Chen (IT Governance)",
+    "approvalDate": "2026-02-15",
+    "approvalCR": "CR-2026-0112",
+    "reviewDate": "2026-08-15",
+    "businessJustification": "Enterprise data visualization and statistical analysis for business intelligence",
+    "riskAssessment": "VRA-2026-005"
+  },
+  {
+    "manifestId": "mfst-013-vendor",
+    "displayName": "Vendor Onboarding Agent",
+    "approvedBy": "Sarah Chen (IT Governance)",
+    "approvalDate": "2025-10-01",
+    "approvalCR": "CR-2025-0734",
+    "reviewDate": "2026-04-01",
+    "businessJustification": "Automated vendor due diligence — BLOCKED pending security review after data leak concern",
+    "riskAssessment": "RA-2025-038"
+  },
+  {
+    "manifestId": "mfst-014-feedback",
+    "displayName": "Customer Feedback Analyzer",
+    "approvedBy": "Lisa Park (CX Director)",
+    "approvalDate": "2025-12-01",
+    "approvalCR": "CR-2025-0923",
+    "reviewDate": "2026-06-01",
+    "businessJustification": "Sentiment analysis for customer feedback across support channels",
+    "riskAssessment": "RA-2025-051"
+  },
+  {
+    "manifestId": "mfst-015-portfolio",
+    "displayName": "Project Portfolio Tracker",
+    "approvedBy": "James Wu (Finance Director)",
+    "approvalDate": "2026-03-01",
+    "approvalCR": "CR-2026-0156",
+    "reviewDate": "2026-09-01",
+    "businessJustification": "Cross-team project status aggregation for executive reporting",
+    "riskAssessment": "RA-2026-019"
+  }
+]

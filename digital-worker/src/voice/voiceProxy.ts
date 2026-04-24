@@ -1,0 +1,158 @@
+// ITSM Operations Digital Worker — Voice Live WebSocket proxy
+// Bridges browser audio to Azure Voice Live service for ITSM operations.
+
+import { WebSocket, WebSocketServer } from 'ws';
+import type { Server } from 'http';
+import { DefaultAzureCredential } from '@azure/identity';
+import { VOICE_TOOLS, executeVoiceTool } from './voiceTools';
+import { isVoiceEnabled } from './voiceGate';
+
+const VOICELIVE_ENDPOINT = process.env.VOICELIVE_ENDPOINT || '';
+const VOICELIVE_MODEL = process.env.VOICELIVE_MODEL || 'gpt-4o';
+const MANAGER_NAME = process.env.MANAGER_NAME || 'the IT Director';
+
+function extractVoiceData(result: unknown): string {
+  const str = typeof result === 'string' ? result : JSON.stringify(result);
+  if (str.includes('<!DOCTYPE html>') || str.includes('<html')) {
+    const dataMatch = str.match(/window\.__TOOL_DATA__\s*=\s*({[\s\S]*?});?\s*<\/script>/);
+    if (dataMatch) { try { return JSON.stringify(JSON.parse(dataMatch[1])); } catch {} }
+    const text = str.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 4000);
+    return text || '(No extractable data)';
+  }
+  return str.length > 8000 ? str.substring(0, 8000) + '...' : str;
+}
+
+const VOICE_SYSTEM_PROMPT = `You are an ITSM Operations Manager who handles incidents, problems, changes, and SLAs for a financial services firm. You follow ITIL V4 and NIST 800-53.
+
+You are speaking via voice. Keep responses concise and conversational. No markdown, no tables, no emoji. Speak numbers clearly.
+
+TOOL USAGE - always call tools for real data:
+- For incident status: call get_incident_dashboard or get_incidents
+- For incidents on a specific system: call get_incidents_for_ci
+- For problems and known errors: call get_problem_dashboard
+- For change requests: call get_change_dashboard or get_change_request
+- For blast radius/dependencies: call get_blast_radius
+- For change metrics and KPIs: call get_change_metrics
+- For change collisions: call detect_collisions
+- For CAB preparation: call generate_cab_agenda
+- For post-implementation review: call post_implementation_review  
+- For SLA compliance: call get_sla_dashboard
+- For knowledge base search: call search_knowledge
+- For CMDB lookups: call get_cmdb_ci
+- For EOL status: call check_eol_status
+- For the full ITSM briefing: call get_itsm_briefing
+- For asset lifecycle: call get_asset_lifecycle
+- For expired warranties: call get_expired_warranties
+
+RULES:
+- Always call tools for real data from ServiceNow
+- Use real ticket numbers (INC, CHG, PRB) and CI names
+- When citing risk scores, explain: "Risk score X out of 25, classified as [Low/Medium/High/Critical]"
+- Keep voice responses under 30 seconds
+- For ITIL references, keep them brief: "Per ITIL V4..." not the full standard text
+
+Your manager is ${MANAGER_NAME}.`;
+
+function buildVoiceLiveUrl(): string {
+  const url = new URL(VOICELIVE_ENDPOINT);
+  return `wss://${url.host}/voice-live/realtime?api-version=2025-10-01&model=${VOICELIVE_MODEL}`;
+}
+
+async function getAccessToken(): Promise<string> {
+  const cred = new DefaultAzureCredential();
+  const token = await cred.getToken('https://cognitiveservices.azure.com/.default');
+  return token.token;
+}
+
+export function attachVoiceWebSocket(server: Server): void {
+  if (!VOICELIVE_ENDPOINT) {
+    console.log('[voice] VOICELIVE_ENDPOINT not set - voice proxy disabled');
+    return;
+  }
+
+  const wss = new WebSocketServer({ noServer: true });
+
+  server.on('upgrade', (request, socket, head) => {
+    const pathname = new URL(request.url || '', `http://${request.headers.host}`).pathname;
+    if (pathname === '/api/voice') {
+      if (!isVoiceEnabled()) {
+        socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+      wss.handleUpgrade(request, socket, head, (ws) => { wss.emit('connection', ws, request); });
+    }
+  });
+
+  wss.on('connection', async (clientWs) => {
+    console.log('[voice] Browser connected');
+    let serviceWs: WebSocket | null = null;
+
+    try {
+      const token = await getAccessToken();
+      serviceWs = new WebSocket(buildVoiceLiveUrl(), { headers: { Authorization: `Bearer ${token}` } });
+
+      serviceWs.on('open', () => {
+        console.log('[voice] Connected to Voice Live');
+        serviceWs!.send(JSON.stringify({
+          type: 'session.update',
+          session: {
+            modalities: ['text', 'audio'],
+            instructions: VOICE_SYSTEM_PROMPT,
+            voice: { name: 'en-US-Ava:DragonHDLatestNeural', type: 'azure-standard', temperature: 0.8 },
+            input_audio_sampling_rate: 24000,
+            input_audio_transcription: { model: 'azure-speech', language: 'en' },
+            turn_detection: { type: 'azure_semantic_vad', silence_duration_ms: 500, interrupt_response: true, auto_truncate: true },
+            input_audio_noise_reduction: { type: 'azure_deep_noise_suppression' },
+            input_audio_echo_cancellation: { type: 'server_echo_cancellation' },
+            tools: VOICE_TOOLS,
+            tool_choice: 'auto',
+          },
+        }));
+      });
+
+      serviceWs.on('message', async (data) => {
+        let event: any;
+        try { event = JSON.parse(data.toString()); } catch { return; }
+
+        if (event.type === 'response.function_call_arguments.done') {
+          const { call_id, name: fnName, arguments: fnArgs } = event;
+          console.log(`[voice] Tool: ${fnName}(${fnArgs})`);
+          try {
+            const result = await executeVoiceTool(fnName, JSON.parse(fnArgs));
+            const voiceData = extractVoiceData(result);
+            if (serviceWs?.readyState === WebSocket.OPEN) {
+              serviceWs.send(JSON.stringify({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id, output: voiceData } }));
+              serviceWs.send(JSON.stringify({ type: 'response.create' }));
+            }
+          } catch (err) {
+            if (serviceWs?.readyState === WebSocket.OPEN) {
+              serviceWs.send(JSON.stringify({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id, output: JSON.stringify({ error: String(err) }) } }));
+              serviceWs.send(JSON.stringify({ type: 'response.create' }));
+            }
+          }
+          return;
+        }
+
+        if (clientWs.readyState === WebSocket.OPEN) clientWs.send(data.toString());
+      });
+
+      serviceWs.on('close', () => { if (clientWs.readyState === WebSocket.OPEN) clientWs.close(1000); });
+      serviceWs.on('error', (err) => { console.error('[voice] Voice Live error:', err.message); if (clientWs.readyState === WebSocket.OPEN) clientWs.close(1011); });
+
+      clientWs.on('message', (data) => {
+        if (!serviceWs || serviceWs.readyState !== WebSocket.OPEN) return;
+        if (typeof data === 'string') { serviceWs.send(data); }
+        else { serviceWs.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: Buffer.from(data as ArrayBuffer).toString('base64') })); }
+      });
+    } catch (err) {
+      console.error('[voice] Failed to connect:', err);
+      if (clientWs.readyState === WebSocket.OPEN) clientWs.close(1011);
+    }
+
+    clientWs.on('close', () => { if (serviceWs?.readyState === WebSocket.OPEN) serviceWs.close(); });
+    clientWs.on('error', () => { if (serviceWs?.readyState === WebSocket.OPEN) serviceWs.close(); });
+  });
+
+  console.log('[voice] ITSM Voice proxy ready at /api/voice');
+}

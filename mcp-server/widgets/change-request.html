@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Change Request Detail</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f5f5f5;color:#242424;padding:20px;line-height:1.5}
+.widget{background:#fff;border-radius:12px;border:1px solid #e0e0e0;overflow:hidden;max-width:800px;margin:0 auto}
+.widget-header{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid #f0f0f0}
+.widget-icon{width:36px;height:36px;border-radius:8px;background:#e3f2fd;display:flex;align-items:center;justify-content:center;font-size:18px}
+.widget-title h2{font-size:16px;font-weight:600;color:#242424}
+.widget-title p{font-size:12px;color:#616161}
+.risk-banner{margin:16px 20px 0;padding:14px 16px;border-radius:10px;display:flex;align-items:center;gap:12px}
+.risk-low{background:#e8f5e9;border:1px solid #a5d6a7}.risk-med{background:#fff3e0;border:1px solid #ffcc80}.risk-high{background:#fbe9e7;border:1px solid #ffab91}.risk-crit{background:#ffebee;border:1px solid #ef9a9a}
+.risk-score-circle{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#fff}
+.risk-text h3{font-size:14px;font-weight:600}.risk-text p{font-size:12px;color:#616161}
+.detail-body{padding:20px}
+.section-label{font-size:12px;font-weight:600;color:#616161;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;margin-top:20px;padding-top:14px;border-top:1px solid #f0f0f0}
+.section-label:first-child{margin-top:0;padding-top:0;border-top:none}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.detail-item{display:flex;flex-direction:column;gap:2px}
+.detail-item .lbl{font-size:11px;color:#757575;text-transform:uppercase;letter-spacing:0.3px}
+.detail-item .val{font-size:13px;font-weight:500;color:#242424}
+.detail-full{grid-column:1/-1}
+.state-tag{display:inline-flex;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.sNew{background:#e8f5e9;color:#2e7d32}.sAssess{background:#fff3e0;color:#e65100}.sImpl{background:#e3f2fd;color:#1565c0}.sClosed{background:#f5f5f5;color:#757575}
+.nist-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.nist-tag{background:#e3f2fd;color:#1565c0;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600}
+.incidents-section{margin-top:16px}
+.inc-mini{background:#fafafa;border:1px solid #e8e8e8;border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:12px;cursor:pointer;transition:border-color .15s}
+.inc-mini:hover{border-color:#1976d2}
+.inc-mini strong{color:#c62828}
+.btn-open{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:#1976d2;color:#fff;margin-top:16px;transition:background .15s}
+.btn-open:hover{background:#1565c0}
+.footer{padding:10px 16px;border-top:1px solid #f0f0f0;text-align:right;font-size:10px;color:#bdbdbd}
+</style>
+</head>
+<body>
+<div class="widget">
+  <div class="widget-header">
+    <div class="widget-icon">📋</div>
+    <div class="widget-title"><h2 id="cr-title">Change Request</h2><p id="cr-sub">ServiceNow · Change Detail</p></div>
+  </div>
+  <div id="risk-banner"></div>
+  <div class="detail-body" id="detail-body"></div>
+  <div class="footer" id="footer"></div>
+</div>
+<script>
+var to=window.__TOOL_DATA__||(window.openai&&window.openai.toolOutput)||{};
+var cr=to.changeRequest||{};var rs=to.riskScore||{};var eol=to.eolData||null;var incidents=to.incidents||[];
+var si=to.snowInstance||'';
+document.getElementById('cr-title').textContent=(cr.number||'Change Request')+' — '+(cr.short_description||'');
+document.getElementById('cr-sub').textContent='ServiceNow · '+(cr.number||'');
+var riskCls=rs.category==='Critical'?'risk-crit':rs.category==='High'?'risk-high':rs.category==='Medium'?'risk-med':'risk-low';
+var scoreColor=rs.color||'#757575';
+document.getElementById('risk-banner').innerHTML='<div class="risk-banner '+riskCls+'">'+
+'<div class="risk-score-circle" style="background:'+scoreColor+'">'+(rs.score||0)+'</div>'+
+'<div class="risk-text"><h3>'+(rs.category||'Low')+' Risk</h3><p>'+(rs.itilProcess||'')+'</p>'+
+'<div class="nist-tags">'+(rs.nistControls||[]).map(function(c){return'<span class="nist-tag">'+c+'</span>';}).join('')+'</div></div></div>';
+var st=(cr.state||'').toLowerCase();var stClass=st.includes('new')?'sNew':st.includes('assess')?'sAssess':st.includes('implement')?'sImpl':'sClosed';
+var html='<div class="section-label">Change Details</div><div class="detail-grid">'+
+'<div class="detail-item"><span class="lbl">State</span><span class="state-tag '+stClass+'">'+(cr.state||'—')+'</span></div>'+
+'<div class="detail-item"><span class="lbl">Type</span><span class="val">'+(cr.type||'Normal')+'</span></div>'+
+'<div class="detail-item"><span class="lbl">Priority</span><span class="val">'+(cr.priority||'—')+'</span></div>'+
+'<div class="detail-item"><span class="lbl">Category</span><span class="val">'+(cr.category||'—')+'</span></div>'+
+'<div class="detail-item"><span class="lbl">Assignment Group</span><span class="val">'+(cr.assignment_group||'—')+'</span></div>'+
+'<div class="detail-item"><span class="lbl">Requested By</span><span class="val">'+(cr.requested_by||'—')+'</span></div>'+
+'<div class="detail-item detail-full"><span class="lbl">Description</span><span class="val">'+(cr.description||cr.short_description||'—')+'</span></div></div>';
+if(cr.cmdb_ci){html+='<div class="section-label">Affected Configuration Item</div><div class="detail-grid">'+
+'<div class="detail-item"><span class="lbl">CI Name</span><span class="val">'+(typeof cr.cmdb_ci==='object'?(cr.cmdb_ci.display_value||''):cr.cmdb_ci)+'</span></div></div>';}
+if(eol){html+='<div class="section-label">EOL Status</div><div class="detail-grid">'+
+'<div class="detail-item"><span class="lbl">Product</span><span class="val">'+(eol.product||'—')+'</span></div>'+
+'<div class="detail-item"><span class="lbl">Status</span><span class="val">'+(eol._riskClassification?eol._riskClassification.status:'—')+'</span></div></div>';}
+if(incidents.length){html+='<div class="section-label">Active Incidents on this CI</div><div class="incidents-section">';
+for(var i=0;i<incidents.length;i++){var inc=incidents[i];var iLink=si+'/nav_to.do?uri=incident.do?sys_id='+(inc.sys_id||'');
+html+='<div class="inc-mini" onclick="window.open(\''+iLink+'\',\'_blank\')"><strong>'+inc.number+'</strong> — '+(inc.short_description||'')+' · '+(inc.priority||'')+'</div>';}
+html+='</div>';}
+var crLink=si+'/nav_to.do?uri=change_request.do?sys_id='+(cr.sys_id||'');
+html+='<button class="btn-open" onclick="window.open(\''+crLink+'\',\'_blank\')">Open in ServiceNow →</button>';
+document.getElementById('detail-body').innerHTML=html;
+document.getElementById('footer').textContent='Generated '+new Date(to.generatedAt||'').toLocaleString('en-GB')+' · Data from ServiceNow';
+</script>
+</body></html>

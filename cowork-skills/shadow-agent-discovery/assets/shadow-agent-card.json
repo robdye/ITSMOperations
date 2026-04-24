@@ -1,0 +1,115 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "Shadow Agent Discovery — Scan Results",
+      "weight": "Bolder",
+      "size": "Large",
+      "wrap": true
+    },
+    {
+      "type": "TextBlock",
+      "text": "Scan Date: {scan_date} | Packages Scanned: {total_packages}",
+      "isSubtle": true,
+      "spacing": "None"
+    },
+    {
+      "type": "ColumnSet",
+      "separator": true,
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            { "type": "TextBlock", "text": "Registered", "weight": "Bolder" },
+            { "type": "TextBlock", "text": "{registered_count}", "size": "ExtraLarge", "color": "Good" }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            { "type": "TextBlock", "text": "Shadow", "weight": "Bolder" },
+            { "type": "TextBlock", "text": "{shadow_count}", "size": "ExtraLarge", "color": "Attention" }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            { "type": "TextBlock", "text": "Coverage", "weight": "Bolder" },
+            { "type": "TextBlock", "text": "{coverage_pct}%", "size": "ExtraLarge", "color": "{coverage_color}" }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "Risk Breakdown",
+      "weight": "Bolder",
+      "size": "Medium",
+      "separator": true
+    },
+    {
+      "type": "FactSet",
+      "facts": [
+        { "title": "🔴 Critical", "value": "{critical_count} — Unregistered custom agents" },
+        { "title": "🟠 High", "value": "{high_count} — Unregistered external agents" },
+        { "title": "🟡 Medium", "value": "{medium_count} — Expired or modified approvals" }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "⚠️ Scope Alarms",
+      "weight": "Bolder",
+      "size": "Medium",
+      "separator": true,
+      "color": "Attention"
+    },
+    {
+      "type": "TextBlock",
+      "text": "{scope_alarm_summary}",
+      "wrap": true,
+      "isSubtle": true
+    },
+    {
+      "type": "TextBlock",
+      "text": "Top Shadow Agents by Risk",
+      "weight": "Bolder",
+      "size": "Medium",
+      "separator": true
+    },
+    {
+      "type": "Container",
+      "id": "shadowAgentsList",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "{shadow_agents_detail}",
+          "wrap": true
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.OpenUrl",
+      "title": "View Investigation Workbook",
+      "url": "{workbook_url}"
+    },
+    {
+      "type": "Action.OpenUrl",
+      "title": "Open Admin Center",
+      "url": "https://admin.microsoft.com/#/Settings/IntegratedApps"
+    },
+    {
+      "type": "Action.Submit",
+      "title": "🚫 Block All Critical",
+      "style": "destructive",
+      "data": { "action": "block_critical" }
+    }
+  ]
+}

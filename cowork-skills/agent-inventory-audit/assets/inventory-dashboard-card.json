@@ -1,0 +1,103 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "Agent Inventory — Tenant Audit Dashboard",
+      "weight": "Bolder",
+      "size": "Large",
+      "wrap": true
+    },
+    {
+      "type": "TextBlock",
+      "text": "Generated: {date} | Total Packages: {total_agents}",
+      "isSubtle": true,
+      "spacing": "None"
+    },
+    {
+      "type": "ColumnSet",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            { "type": "TextBlock", "text": "Microsoft", "weight": "Bolder" },
+            { "type": "TextBlock", "text": "{microsoft_count}", "size": "ExtraLarge", "color": "Good" }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            { "type": "TextBlock", "text": "External", "weight": "Bolder" },
+            { "type": "TextBlock", "text": "{external_count}", "size": "ExtraLarge", "color": "Accent" }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            { "type": "TextBlock", "text": "Custom", "weight": "Bolder" },
+            { "type": "TextBlock", "text": "{custom_count}", "size": "ExtraLarge", "color": "Warning" }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            { "type": "TextBlock", "text": "Blocked", "weight": "Bolder" },
+            { "type": "TextBlock", "text": "{blocked_count}", "size": "ExtraLarge", "color": "Attention" }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "Risk Distribution",
+      "weight": "Bolder",
+      "size": "Medium",
+      "separator": true
+    },
+    {
+      "type": "FactSet",
+      "facts": [
+        { "title": "🔴 High Risk", "value": "{high_risk_count} packages — custom agents with tenant-wide scope" },
+        { "title": "🟠 Medium Risk", "value": "{medium_risk_count} packages — broad scope or external" },
+        { "title": "🟢 Low Risk", "value": "{low_risk_count} packages — properly scoped" }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "Top 5 Stale Agents (>90 days without update)",
+      "weight": "Bolder",
+      "size": "Medium",
+      "separator": true
+    },
+    {
+      "type": "Container",
+      "id": "staleAgentsList",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "_{stale_agents_summary}_",
+          "wrap": true,
+          "isSubtle": true
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.OpenUrl",
+      "title": "Open Admin Center",
+      "url": "https://admin.microsoft.com/#/Settings/IntegratedApps"
+    },
+    {
+      "type": "Action.OpenUrl",
+      "title": "View Full Report",
+      "url": "{report_url}"
+    }
+  ]
+}

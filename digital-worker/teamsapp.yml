@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://aka.ms/teams-toolkit/v1.8/yaml.schema.json
+version: v1.8
+
+environmentFolderPath: ./env
+
+provision:
+  - uses: teamsApp/create
+    with:
+      name: ITSM Digital Worker-${{APP_NAME_SUFFIX}}
+    writeToEnvironmentFile:
+      teamsAppId: TEAMS_APP_ID
+
+  - uses: teamsApp/zipAppPackage
+    with:
+      manifestPath: ./manifest/manifest.json
+      outputZipPath: ./build/appPackage.${{TEAMSFX_ENV}}.zip
+      outputFolder: ./build
+
+  - uses: teamsApp/update
+    with:
+      appPackagePath: ./build/appPackage.${{TEAMSFX_ENV}}.zip
+
+projectId: 00000000-0000-0000-0000-000000000002

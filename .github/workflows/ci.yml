@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Digital Worker ──────────────────────────────────────────────
+  digital-worker:
+    name: Digital Worker (lint + typecheck + test + docker)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: digital-worker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: digital-worker/package-lock.json
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Docker build (validate)
+        run: docker build -t itsm-digital-worker:ci .
+
+  # ── MCP Server ─────────────────────────────────────────────────
+  mcp-server:
+    name: MCP Server (lint + typecheck + test + docker)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Docker build (validate)
+        run: docker build -t itsm-mcp-server:ci .
+
+  # ── Teams App Package ──────────────────────────────────────────
+  validate-app-package:
+    name: Validate Teams manifest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate manifest.json schema
+        run: |
+          node -e "
+            const m = require('./appPackage/manifest.json');
+            const required = ['manifestVersion','version','id','developer','name','description','icons'];
+            const missing = required.filter(k => !m[k]);
+            if (missing.length) { console.error('Missing:', missing); process.exit(1); }
+            if (!m.copilotAgents?.declarativeAgents?.length) { console.error('No declarative agents'); process.exit(1); }
+            console.log('Manifest valid:', m.name.short, 'v' + m.version);
+          "

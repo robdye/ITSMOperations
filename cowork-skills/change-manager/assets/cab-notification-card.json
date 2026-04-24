@@ -1,0 +1,97 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "ColumnSet",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "⚙️",
+              "size": "Large"
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "Agent Change Request — CAB Review",
+              "weight": "Bolder",
+              "size": "Medium",
+              "wrap": true
+            },
+            {
+              "type": "TextBlock",
+              "text": "{change_id} | {date}",
+              "isSubtle": true,
+              "spacing": "None"
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "{risk_tier}",
+              "weight": "Bolder",
+              "color": "{risk_color}",
+              "size": "Medium"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "FactSet",
+      "facts": [
+        { "title": "Agent", "value": "{agent_name}" },
+        { "title": "Event", "value": "{event_type}" },
+        { "title": "ITIL Type", "value": "{itil_type}" },
+        { "title": "Risk Score", "value": "{risk_score}/25 ({risk_tier})" },
+        { "title": "Scope", "value": "{current_scope} → {proposed_scope}" },
+        { "title": "Requestor", "value": "{requestor}" }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "**Impact:** {impact_summary}",
+      "wrap": true,
+      "separator": true
+    },
+    {
+      "type": "TextBlock",
+      "text": "**NIST Controls:** {nist_controls_summary}",
+      "wrap": true,
+      "isSubtle": true
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.Submit",
+      "title": "✅ Approve",
+      "style": "positive",
+      "data": { "action": "approve", "changeId": "{change_id}" }
+    },
+    {
+      "type": "Action.Submit",
+      "title": "ℹ️ Request More Info",
+      "data": { "action": "info", "changeId": "{change_id}" }
+    },
+    {
+      "type": "Action.Submit",
+      "title": "❌ Reject",
+      "style": "destructive",
+      "data": { "action": "reject", "changeId": "{change_id}" }
+    }
+  ]
+}

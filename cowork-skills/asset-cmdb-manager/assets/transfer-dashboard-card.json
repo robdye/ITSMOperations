@@ -1,0 +1,126 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "Agent Ownership Transfer",
+      "weight": "Bolder",
+      "size": "Large",
+      "wrap": true
+    },
+    {
+      "type": "ColumnSet",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            { "type": "TextBlock", "text": "Departing Employee", "weight": "Bolder", "isSubtle": true },
+            { "type": "TextBlock", "text": "{employee_name}", "size": "Medium" },
+            { "type": "TextBlock", "text": "Departure: {departure_date}", "isSubtle": true, "spacing": "None" }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            { "type": "TextBlock", "text": "{agent_count}", "size": "ExtraLarge", "weight": "Bolder", "color": "Accent" },
+            { "type": "TextBlock", "text": "Agents", "horizontalAlignment": "Center", "isSubtle": true, "spacing": "None" }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "Urgency Breakdown",
+      "weight": "Bolder",
+      "size": "Medium",
+      "separator": true
+    },
+    {
+      "type": "ColumnSet",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            { "type": "TextBlock", "text": "Critical", "weight": "Bolder", "color": "Attention" },
+            { "type": "TextBlock", "text": "{critical_count}", "size": "ExtraLarge" },
+            { "type": "TextBlock", "text": "1-day SLA", "isSubtle": true, "spacing": "None" }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            { "type": "TextBlock", "text": "Elevated", "weight": "Bolder", "color": "Warning" },
+            { "type": "TextBlock", "text": "{elevated_count}", "size": "ExtraLarge" },
+            { "type": "TextBlock", "text": "3-day SLA", "isSubtle": true, "spacing": "None" }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            { "type": "TextBlock", "text": "Standard", "weight": "Bolder", "color": "Good" },
+            { "type": "TextBlock", "text": "{standard_count}", "size": "ExtraLarge" },
+            { "type": "TextBlock", "text": "5-day SLA", "isSubtle": true, "spacing": "None" }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "Transfer Progress",
+      "weight": "Bolder",
+      "size": "Medium",
+      "separator": true
+    },
+    {
+      "type": "FactSet",
+      "facts": [
+        { "title": "⏳ Pending", "value": "{pending_count}" },
+        { "title": "🔄 In Progress", "value": "{in_progress_count}" },
+        { "title": "✅ Completed", "value": "{completed_count}" }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "Agents Requiring Transfer",
+      "weight": "Bolder",
+      "size": "Medium",
+      "separator": true
+    },
+    {
+      "type": "Container",
+      "id": "agentTransferList",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "{agent_transfer_details}",
+          "wrap": true
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.OpenUrl",
+      "title": "View Handover Document",
+      "url": "{handover_doc_url}"
+    },
+    {
+      "type": "Action.Submit",
+      "title": "✅ Approve All Transfers",
+      "style": "positive",
+      "data": { "action": "approve_all", "employeeId": "{employee_id}" }
+    },
+    {
+      "type": "Action.OpenUrl",
+      "title": "Open Admin Center",
+      "url": "https://admin.microsoft.com/#/Settings/IntegratedApps"
+    }
+  ]
+}

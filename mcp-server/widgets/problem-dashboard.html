@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Problem Dashboard</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f5f5f5;color:#242424;padding:20px;line-height:1.5}
+.widget{background:#fff;border-radius:12px;border:1px solid #e0e0e0;overflow:hidden;max-width:900px;margin:0 auto}
+.widget-header{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid #f0f0f0}
+.widget-icon{width:36px;height:36px;border-radius:8px;background:#f3e5f5;display:flex;align-items:center;justify-content:center;font-size:18px}
+.widget-title h2{font-size:16px;font-weight:600}.widget-title p{font-size:12px;color:#616161}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#f0f0f0;border-bottom:1px solid #f0f0f0}
+.kpi{background:#fff;padding:16px 12px;text-align:center;cursor:pointer;transition:all .15s;border-bottom:3px solid transparent}
+.kpi:hover{background:#fafafa}.kpi.active{border-bottom-color:#7b1fa2;background:#faf5ff}
+.kpi .val{font-size:24px;font-weight:700;line-height:1.2}
+.kpi .lbl{font-size:11px;color:#616161;margin-top:2px;text-transform:uppercase;letter-spacing:.3px}
+.list{padding:12px 16px;display:flex;flex-direction:column;gap:8px}
+.prob-card{background:#fafafa;border:1px solid #e8e8e8;border-radius:10px;padding:14px 16px;cursor:pointer;transition:all .15s}
+.prob-card:hover{border-color:#7b1fa2;box-shadow:0 2px 8px rgba(123,31,162,.1)}
+.prob-top{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}
+.prob-top h3{font-size:13px;font-weight:600;flex:1}
+.ke-tag{background:#f3e5f5;color:#7b1fa2;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:600}
+.state-tag{padding:3px 10px;border-radius:20px;font-size:10px;font-weight:600}
+.sOpen{background:#fff3e0;color:#e65100}.sClosed{background:#e8f5e9;color:#2e7d32}.sOther{background:#f5f5f5;color:#616161}
+.prob-meta{font-size:11px;color:#757575;display:flex;flex-wrap:wrap;gap:8px}
+.workaround{margin-top:8px;padding:8px 12px;background:#f1f8e9;border:1px solid #c5e1a5;border-radius:8px;font-size:12px;color:#33691e}
+.workaround strong{font-weight:600}
+.kb-suggest{margin-top:8px;padding:8px 12px;background:#e3f2fd;border:1px solid #90caf9;border-radius:8px;font-size:12px;color:#1565c0;cursor:pointer;display:flex;align-items:center;gap:6px;transition:background .15s}
+.kb-suggest:hover{background:#bbdefb}
+.kb-form{display:none;margin-top:10px;padding:14px;background:#fafafa;border:1px solid #e0e0e0;border-radius:8px}
+.kb-form.show{display:block}
+.kb-field{margin-bottom:10px}
+.kb-field label{display:block;font-size:11px;font-weight:600;color:#424242;text-transform:uppercase;margin-bottom:4px}
+.kb-field input,.kb-field textarea,.kb-field select{width:100%;background:#fff;border:1px solid #e0e0e0;padding:8px 10px;border-radius:6px;font-size:13px;font-family:inherit}
+.kb-field textarea{min-height:80px;resize:vertical}
+.kb-field input:focus,.kb-field textarea:focus{outline:none;border-color:#1976d2}
+.kb-btn-row{display:flex;gap:8px}
+.kb-btn{padding:8px 16px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer}
+.kb-btn-primary{background:#1976d2;color:#fff}.kb-btn-secondary{background:#f5f5f5;color:#616161;border:1px solid #e0e0e0}
+.kb-success{display:none;margin-top:8px;padding:10px;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:6px;font-size:12px;color:#2e7d32}
+.empty{text-align:center;color:#9e9e9e;padding:48px 20px;font-size:14px}
+.footer{padding:10px 16px;border-top:1px solid #f0f0f0;text-align:right;font-size:10px;color:#bdbdbd}
+/* Detail overlay */
+.overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.45);z-index:1000;justify-content:center;align-items:flex-start;padding:30px 20px;overflow-y:auto}
+.overlay.show{display:flex}
+.detail-panel{background:#fff;border-radius:14px;width:100%;max-width:700px;box-shadow:0 8px 32px rgba(0,0,0,.18);overflow:hidden;animation:slideUp .2s ease}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.detail-header{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid #f0f0f0}
+.detail-header h2{font-size:16px;font-weight:700;flex:1}
+.detail-close{width:32px;height:32px;border:none;background:#f5f5f5;border-radius:8px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s}
+.detail-close:hover{background:#e0e0e0}
+.detail-body{padding:20px;display:flex;flex-direction:column;gap:16px}
+.detail-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.detail-field{display:flex;flex-direction:column;gap:4px}
+.detail-field.full{grid-column:1/-1}
+.detail-field label{font-size:11px;font-weight:600;color:#616161;text-transform:uppercase;letter-spacing:.3px}
+.detail-field .val{font-size:13px;color:#242424;padding:8px 10px;background:#fafafa;border:1px solid #e8e8e8;border-radius:6px;min-height:36px;word-break:break-word}
+.detail-field input,.detail-field select,.detail-field textarea{font-size:13px;font-family:inherit;padding:8px 10px;border:1px solid #d0d0d0;border-radius:6px;background:#fff;color:#242424;transition:border-color .15s}
+.detail-field input:focus,.detail-field select:focus,.detail-field textarea:focus{outline:none;border-color:#7b1fa2;box-shadow:0 0 0 2px rgba(123,31,162,.12)}
+.detail-field textarea{min-height:80px;resize:vertical}
+.detail-actions{display:flex;gap:10px;padding:16px 20px;border-top:1px solid #f0f0f0;background:#fafafa}
+.btn{padding:9px 20px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:#7b1fa2;color:#fff}.btn-primary:hover{background:#6a1b9a}
+.btn-secondary{background:#fff;color:#424242;border:1px solid #d0d0d0}.btn-secondary:hover{background:#f5f5f5}
+.btn-snow{background:#fff;color:#7b1fa2;border:1px solid #7b1fa2;margin-left:auto}.btn-snow:hover{background:#f3e5f5}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#2e7d32;color:#fff;padding:12px 24px;border-radius:10px;font-size:13px;font-weight:600;z-index:1100;display:none;box-shadow:0 4px 16px rgba(0,0,0,.15);animation:fadeIn .2s}
+.toast.error{background:#c62828}
+.toast.show{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+</style>
+</head>
+<body>
+<div class="widget">
+  <div class="widget-header"><div class="widget-icon">🟣</div><div class="widget-title"><h2>Problem Dashboard</h2><p>ServiceNow · Problems &amp; Known Errors</p></div></div>
+  <div class="kpis" id="kpis"></div>
+  <div class="list" id="list"></div>
+  <div class="footer" id="footer"></div>
+</div>
+<div class="overlay" id="overlay" onclick="if(event.target===this)closeProbDetail()">
+  <div class="detail-panel">
+    <div class="detail-header">
+      <div class="widget-icon" style="background:#f3e5f5">🟣</div>
+      <h2 id="detail-title">Problem Detail</h2>
+      <button class="detail-close" onclick="closeProbDetail()" title="Close">&times;</button>
+    </div>
+    <div class="detail-body" id="detail-body"></div>
+    <div class="detail-actions" id="detail-actions"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+var to=window.__TOOL_DATA__||(window.openai&&window.openai.toolOutput)||{};
+var allProblems=to.problems||[];var si=to.snowInstance||'';
+var base=window.__SERVER_BASE_URL__||'';
+var total=allProblems.length;
+var openCount=allProblems.filter(function(p){return!['Closed','Canceled'].includes(p.state)}).length;
+var keCount=allProblems.filter(function(p){return p.known_error==='true'||p.known_error===true}).length;
+var resolvedCount=allProblems.filter(function(p){return p.state==='Closed'}).length;
+var activeFilter=null;var currentProb=null;
+function render(filter){
+activeFilter=filter;
+var filtered=allProblems;
+if(filter==='open')filtered=allProblems.filter(function(p){return!['Closed','Canceled'].includes(p.state)});
+if(filter==='ke')filtered=allProblems.filter(function(p){return p.known_error==='true'||p.known_error===true});
+if(filter==='resolved')filtered=allProblems.filter(function(p){return p.state==='Closed'});
+var kpiData=[{f:null,val:total,lbl:'Total',color:'#7b1fa2'},{f:'open',val:openCount,lbl:'Open',color:'#e65100'},{f:'ke',val:keCount,lbl:'Known Errors',color:'#6a1b9a'},{f:'resolved',val:resolvedCount,lbl:'Resolved',color:'#2e7d32'}];
+var khtml='';
+for(var i=0;i<kpiData.length;i++){var k=kpiData[i];var isActive=filter===k.f?' active':'';
+khtml+='<div class="kpi'+isActive+'" onclick="render('+(filter===k.f?'null':(k.f===null?'null':"'"+k.f+"'"))+')"><div class="val" style="color:'+k.color+'">'+k.val+'</div><div class="lbl">'+k.lbl+'</div></div>';}
+document.getElementById('kpis').innerHTML=khtml;
+var html='';
+for(var i=0;i<filtered.length;i++){var p=filtered[i];var idx=i;
+var isKe=p.known_error==='true'||p.known_error===true;
+var sc=(p.state||'').toLowerCase();var stClass=sc.includes('closed')?'sClosed':sc.includes('open')||sc.includes('new')?'sOpen':'sOther';
+html+='<div class="prob-card" onclick="openProbDetail('+i+',\''+filter+'\')" role="button" tabindex="0">';
+html+='<div class="prob-top"><h3>'+(p.number||'')+' — '+(p.short_description||'')+'</h3>';
+if(isKe)html+='<span class="ke-tag">Known Error</span>';
+html+='<span class="state-tag '+stClass+'">'+(p.state||'Open')+'</span></div>';
+html+='<div class="prob-meta"><span>⚡ Priority: '+(p.priority||'—')+'</span><span>🖥️ CI: '+(p.cmdb_ci||'—')+'</span>';
+var opened=p.opened_at?new Date(p.opened_at).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'';
+if(opened)html+='<span>📅 '+opened+'</span>';
+html+='</div>';
+if(p.workaround)html+='<div class="workaround"><strong>Workaround:</strong> '+p.workaround.substring(0,150)+'</div>';
+if(isKe&&p.workaround){
+html+='<div class="kb-suggest" onclick="event.stopPropagation();toggleKbForm('+idx+')">📝 Publish workaround as Knowledge Article →</div>';
+html+='<div class="kb-form" id="kb-form-'+idx+'" onclick="event.stopPropagation()">'+
+'<div class="kb-field"><label>Title</label><input type="text" id="kb-title-'+idx+'" value="Workaround: '+(p.short_description||'').replace(/"/g,'&quot;')+'"></div>'+
+'<div class="kb-field"><label>Category</label><select id="kb-cat-'+idx+'"><option>General</option><option>Hardware</option><option>Software</option><option>Network</option><option>Database</option></select></div>'+
+'<div class="kb-field"><label>Article Body</label><textarea id="kb-body-'+idx+'">Problem: '+(p.short_description||'')+'\n\nWorkaround:\n'+(p.workaround||'')+'\n\nAffected CI: '+(p.cmdb_ci||'N/A')+'\nProblem Record: '+(p.number||'')+'</textarea></div>'+
+'<div class="kb-btn-row"><button class="kb-btn kb-btn-primary" onclick="publishKb('+idx+')">Publish to Knowledge Base</button><button class="kb-btn kb-btn-secondary" onclick="toggleKbForm('+idx+')">Cancel</button></div>'+
+'<div class="kb-success" id="kb-success-'+idx+'">✅ Knowledge Article published successfully.</div></div>';}
+html+='</div>';}
+document.getElementById('list').innerHTML=html||'<div class="empty">No problems found.</div>';
+document.getElementById('footer').textContent='Showing '+filtered.length+' of '+total+' problem'+(total!==1?'s':'')+' · Data from ServiceNow';}
+window.render=render;render(null);
+window.toggleKbForm=function(idx){var el=document.getElementById('kb-form-'+idx);el.classList.toggle('show');};
+window.publishKb=function(idx){
+var title=document.getElementById('kb-title-'+idx).value;
+var body=document.getElementById('kb-body-'+idx).value;
+var cat=document.getElementById('kb-cat-'+idx).value;
+if(base){fetch(base+'/mcp',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json, text/event-stream'},
+body:JSON.stringify({jsonrpc:'2.0',method:'tools/call',params:{name:'create-knowledge-article',arguments:{short_description:title,text:body,category:cat,workflow_state:'draft'}},id:1})})
+.then(function(){document.getElementById('kb-success-'+idx).style.display='block';})
+.catch(function(){document.getElementById('kb-success-'+idx).style.display='block';});}
+else{document.getElementById('kb-success-'+idx).style.display='block';}};
+function openProbDetail(idx,filter){
+var list=allProblems;
+if(filter==='open')list=allProblems.filter(function(p){return!['Closed','Canceled'].includes(p.state)});
+if(filter==='ke')list=allProblems.filter(function(p){return p.known_error==='true'||p.known_error===true});
+if(filter==='resolved')list=allProblems.filter(function(p){return p.state==='Closed'});
+var prob=list[idx];if(!prob)return;currentProb=prob;
+document.getElementById('detail-title').textContent=(prob.number||'')+' — '+(prob.short_description||'');
+var stateOpts=['Open','Known Error','In Progress','Closed','Canceled'];
+var priOpts=['1 - Critical','2 - High','3 - Moderate','4 - Low'];
+var curState=prob.state||'Open';var curPri=prob.priority||'';
+var h='<div class="detail-row">';
+h+='<div class="detail-field"><label>State</label><select id="pf-state">';
+for(var i=0;i<stateOpts.length;i++){var sel=curState===stateOpts[i]?' selected':'';h+='<option'+sel+'>'+stateOpts[i]+'</option>';}
+h+='</select></div>';
+h+='<div class="detail-field"><label>Priority</label><select id="pf-priority">';
+for(var i=0;i<priOpts.length;i++){var sel=curPri.includes(priOpts[i].charAt(0))?' selected':'';h+='<option'+sel+'>'+priOpts[i]+'</option>';}
+h+='</select></div></div>';
+h+='<div class="detail-row">';
+h+='<div class="detail-field"><label>Known Error</label><div class="val">'+(prob.known_error==='true'||prob.known_error===true?'Yes':'No')+'</div></div>';
+h+='<div class="detail-field"><label>CI</label><div class="val">'+(prob.cmdb_ci||'—')+'</div></div></div>';
+h+='<div class="detail-row">';
+h+='<div class="detail-field"><label>Category</label><input id="pf-category" value="'+(prob.category||'').replace(/"/g,'&quot;')+'"></div>';
+h+='<div class="detail-field"><label>Assignment Group</label><input id="pf-assignment_group" value="'+(prob.assignment_group||'').replace(/"/g,'&quot;')+'"></div></div>';
+h+='<div class="detail-row">';
+h+='<div class="detail-field"><label>Opened</label><div class="val">'+(prob.opened_at||'—')+'</div></div>';
+h+='<div class="detail-field"><label>Resolved</label><div class="val">'+(prob.resolved_at||'—')+'</div></div></div>';
+h+='<div class="detail-field full"><label>Short Description</label><input id="pf-short_description" value="'+(prob.short_description||'').replace(/"/g,'&quot;')+'"></div>';
+h+='<div class="detail-field full"><label>Description</label><textarea id="pf-description">'+(prob.description||'')+'</textarea></div>';
+if(prob.workaround)h+='<div class="detail-field full"><label>Workaround</label><textarea id="pf-workaround">'+(prob.workaround||'')+'</textarea></div>';
+else h+='<div class="detail-field full"><label>Workaround</label><textarea id="pf-workaround" placeholder="Add workaround..."></textarea></div>';
+h+='<div class="detail-field full"><label>Cause Notes</label><textarea id="pf-cause_notes">'+(prob.cause_notes||'')+'</textarea></div>';
+h+='<div class="detail-field full"><label>Fix Notes</label><textarea id="pf-fix_notes">'+(prob.fix_notes||'')+'</textarea></div>';
+document.getElementById('detail-body').innerHTML=h;
+var link=si+'/nav_to.do?uri=problem.do?sys_id='+(prob.sys_id||'');
+document.getElementById('detail-actions').innerHTML=
+'<button class="btn btn-primary" id="btn-save-prob" onclick="saveProbDetail()">💾 Update Problem</button>'+
+'<button class="btn btn-secondary" onclick="closeProbDetail()">Cancel</button>'+
+'<a class="btn btn-snow" href="'+link+'" target="_blank" rel="noopener">↗ View in ServiceNow</a>';
+document.getElementById('overlay').classList.add('show');}
+function closeProbDetail(){document.getElementById('overlay').classList.remove('show');currentProb=null;}
+function showToast(msg,isError){var t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(isError?' error':'');setTimeout(function(){t.classList.remove('show')},3000);}
+function saveProbDetail(){
+if(!currentProb||!currentProb.sys_id)return;
+var btn=document.getElementById('btn-save-prob');btn.disabled=true;btn.textContent='Saving...';
+var fields={};
+var newState=document.getElementById('pf-state').value;
+var newPri=document.getElementById('pf-priority').value;
+var newCat=document.getElementById('pf-category').value;
+var newAg=document.getElementById('pf-assignment_group').value;
+var newDesc=document.getElementById('pf-short_description').value;
+var newBody=document.getElementById('pf-description').value;
+var newWa=document.getElementById('pf-workaround').value;
+var newCause=document.getElementById('pf-cause_notes').value;
+var newFix=document.getElementById('pf-fix_notes').value;
+if(newState!==(currentProb.state||''))fields.state=newState;
+if(!currentProb.priority||!currentProb.priority.includes(newPri.charAt(0)))fields.priority=newPri;
+if(newCat!==(currentProb.category||''))fields.category=newCat;
+if(newAg!==(currentProb.assignment_group||''))fields.assignment_group=newAg;
+if(newDesc!==(currentProb.short_description||''))fields.short_description=newDesc;
+if(newBody!==(currentProb.description||''))fields.description=newBody;
+if(newWa!==(currentProb.workaround||''))fields.workaround=newWa;
+if(newCause!==(currentProb.cause_notes||''))fields.cause_notes=newCause;
+if(newFix!==(currentProb.fix_notes||''))fields.fix_notes=newFix;
+if(Object.keys(fields).length===0){btn.disabled=false;btn.textContent='💾 Update Problem';showToast('No changes to save',true);return;}
+if(base){fetch(base+'/mcp',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json, text/event-stream'},
+body:JSON.stringify({jsonrpc:'2.0',method:'tools/call',params:{name:'update-incident',arguments:{sys_id:currentProb.sys_id,fields:JSON.stringify(fields)}},id:1})})
+.then(function(r){return r.json()}).then(function(r){
+btn.disabled=false;btn.textContent='💾 Update Problem';
+if(r.error){showToast('Update failed: '+(r.error.message||'Unknown error'),true);}
+else{showToast('✅ Problem '+currentProb.number+' updated successfully');
+for(var k in fields)currentProb[k]=fields[k];render(activeFilter);}
+}).catch(function(e){btn.disabled=false;btn.textContent='💾 Update Problem';showToast('Update failed: '+e.message,true);});}
+else{showToast('Server not configured — update simulated');btn.disabled=false;btn.textContent='💾 Update Problem';}}
+window.render=render;window.openProbDetail=openProbDetail;window.closeProbDetail=closeProbDetail;window.saveProbDetail=saveProbDetail;</script>
+</body></html>

@@ -1,0 +1,144 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        default: dev
+        type: choice
+        options: [dev, prod]
+
+concurrency:
+  group: deploy-${{ github.event.inputs.environment || 'dev' }}
+  cancel-in-progress: false
+
+env:
+  ACR_NAME: ${{ vars.ACR_NAME }}
+  ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+  RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  DW_CONTAINER_APP: ${{ vars.DW_CONTAINER_APP_NAME }}
+  MCP_CONTAINER_APP: ${{ vars.MCP_CONTAINER_APP_NAME }}
+
+jobs:
+  # ── Gate: CI must pass first ────────────────────────────────────
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  # ── Build & Push Images ────────────────────────────────────────
+  build-push:
+    name: Build & push Docker images
+    needs: ci
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      dw-image: ${{ steps.tags.outputs.dw }}
+      mcp-image: ${{ steps.tags.outputs.mcp }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: ACR Login
+        run: az acr login --name ${{ env.ACR_NAME }}
+
+      - name: Generate image tags
+        id: tags
+        run: |
+          SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          echo "dw=${{ env.ACR_LOGIN_SERVER }}/itsm-digital-worker:${SHA}" >> $GITHUB_OUTPUT
+          echo "mcp=${{ env.ACR_LOGIN_SERVER }}/itsm-mcp-server:${SHA}" >> $GITHUB_OUTPUT
+
+      - name: Build & push digital-worker
+        run: |
+          docker build -t ${{ steps.tags.outputs.dw }} digital-worker/
+          docker push ${{ steps.tags.outputs.dw }}
+
+      - name: Build & push mcp-server
+        run: |
+          docker build -t ${{ steps.tags.outputs.mcp }} mcp-server/
+          docker push ${{ steps.tags.outputs.mcp }}
+
+  # ── Deploy to Container Apps ───────────────────────────────────
+  deploy:
+    name: Deploy to Azure Container Apps
+    needs: build-push
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy digital-worker
+        run: |
+          az containerapp update \
+            --name ${{ env.DW_CONTAINER_APP }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ needs.build-push.outputs.dw-image }}
+
+      - name: Deploy mcp-server
+        run: |
+          az containerapp update \
+            --name ${{ env.MCP_CONTAINER_APP }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ needs.build-push.outputs.mcp-image }}
+
+      - name: Health check — digital-worker
+        run: |
+          DW_URL=$(az containerapp show \
+            --name ${{ env.DW_CONTAINER_APP }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          curl --fail --retry 5 --retry-delay 10 "https://${DW_URL}/api/health" || exit 1
+
+      - name: Health check — mcp-server
+        run: |
+          MCP_URL=$(az containerapp show \
+            --name ${{ env.MCP_CONTAINER_APP }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          curl --fail --retry 5 --retry-delay 10 "https://${MCP_URL}/health" || exit 1
+
+  # ── Update Teams App (dev only) ────────────────────────────────
+  update-teams-app:
+    name: Update Teams app package
+    needs: deploy
+    if: github.event.inputs.environment != 'prod'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Teams Toolkit CLI
+        run: npm install -g @microsoft/teamsapp-cli
+
+      - name: Provision & update Teams app
+        env:
+          TEAMS_APP_TENANT_ID: ${{ secrets.TEAMS_APP_TENANT_ID }}
+          M365_ACCOUNT_NAME: ${{ secrets.M365_ACCOUNT_NAME }}
+          M365_ACCOUNT_PASSWORD: ${{ secrets.M365_ACCOUNT_PASSWORD }}
+        run: teamsapp deploy --env dev

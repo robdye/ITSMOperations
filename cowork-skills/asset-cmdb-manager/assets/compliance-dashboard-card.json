@@ -1,0 +1,101 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "Agent Compliance Dashboard",
+      "weight": "Bolder",
+      "size": "Large",
+      "wrap": true
+    },
+    {
+      "type": "TextBlock",
+      "text": "Audit Date: {audit_date} | Packages Assessed: {total_packages}",
+      "isSubtle": true,
+      "spacing": "None"
+    },
+    {
+      "type": "ColumnSet",
+      "separator": true,
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            { "type": "TextBlock", "text": "Overall Compliance", "weight": "Bolder" },
+            { "type": "TextBlock", "text": "{overall_compliance_pct}%", "size": "ExtraLarge", "color": "{compliance_color}" }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            { "type": "TextBlock", "text": "Grade Distribution", "weight": "Bolder" },
+            {
+              "type": "FactSet",
+              "facts": [
+                { "title": "A (Compliant)", "value": "{grade_a_count}" },
+                { "title": "B (Minor)", "value": "{grade_b_count}" },
+                { "title": "C (Significant)", "value": "{grade_c_count}" },
+                { "title": "D (Major)", "value": "{grade_d_count}" },
+                { "title": "F (Critical)", "value": "{grade_f_count}" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "Rule-by-Rule Breakdown",
+      "weight": "Bolder",
+      "size": "Medium",
+      "separator": true
+    },
+    {
+      "type": "FactSet",
+      "facts": [
+        { "title": "R1 Sensitivity", "value": "{r1_pass}✅ {r1_warn}⚠️ {r1_fail}❌" },
+        { "title": "R2 Scope", "value": "{r2_pass}✅ {r2_warn}⚠️ {r2_fail}❌" },
+        { "title": "R3 Staleness", "value": "{r3_pass}✅ {r3_warn}⚠️ {r3_fail}❌" },
+        { "title": "R4 CMDB", "value": "{r4_pass}✅ {r4_warn}⚠️ {r4_fail}❌" },
+        { "title": "R5 Owner", "value": "{r5_pass}✅ {r5_warn}⚠️ {r5_fail}❌" },
+        { "title": "R6 Description", "value": "{r6_pass}✅ {r6_warn}⚠️ {r6_fail}❌" },
+        { "title": "R7 Version", "value": "{r7_pass}✅ {r7_warn}⚠️ {r7_fail}❌" }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "Worst Offenders (Grade D or F)",
+      "weight": "Bolder",
+      "size": "Medium",
+      "separator": true,
+      "color": "Attention"
+    },
+    {
+      "type": "Container",
+      "id": "worstOffendersList",
+      "items": [
+        {
+          "type": "TextBlock",
+          "text": "{worst_offenders_summary}",
+          "wrap": true
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.OpenUrl",
+      "title": "View Full Audit Workbook",
+      "url": "{report_url}"
+    },
+    {
+      "type": "Action.OpenUrl",
+      "title": "Open Admin Center",
+      "url": "https://admin.microsoft.com/#/Settings/IntegratedApps"
+    }
+  ]
+}

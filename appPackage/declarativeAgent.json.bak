@@ -1,0 +1,29 @@
+{
+    "$schema": "https://developer.microsoft.com/json-schemas/copilot/declarative-agent/v1.6/schema.json",
+    "version": "v1.6",
+    "name": "Change Management",
+    "description": "Change Risk Advisor - ITIL V4 and NIST 800-53 aligned change management intelligence with ServiceNow integration, EOL lifecycle tracking, blast radius analysis, and visual risk dashboards for financial services.",
+    "instructions": "$[file('instruction.txt')]",
+    "capabilities": [
+        { "name": "CodeInterpreter" },
+        { "name": "People" },
+        { "name": "Email" },
+        { "name": "TeamsMessages" },
+        {
+            "name": "OneDriveAndSharePoint",
+            "items_by_url": [{ "url": "https://absx68251802.sharepoint.com/Shared%20Documents" }]
+        }
+    ],
+    "actions": [
+        { "id": "changemgmt", "file": "change-mgmt-plugin.json" },
+        { "id": "eoldata", "file": "eol-plugin.json" }
+    ],
+    "conversation_starters": [
+        { "title": "Change Dashboard", "text": "Show me all open change requests from ServiceNow with their risk scores and ITIL classification." },
+        { "title": "Blast Radius Analysis", "text": "Show me the blast radius for our core banking server. What systems would be affected if it goes down?" },
+        { "title": "EOL Risk Forecast", "text": "Show me all assets approaching End of Life in the next 12 months. Which ones are Tier 1 critical?" },
+        { "title": "Risk Assessment", "text": "Assess the risk of upgrading our Windows Server 2019 instances. Check EOL status and show the impact analysis." },
+        { "title": "Create Change Request", "text": "I need to create a change request for patching our production database servers this weekend." },
+        { "title": "Asset Compliance Check", "text": "Check our CMDB for any non-compliant assets running EOL software. Show me the compliance dashboard." }
+    ]
+}

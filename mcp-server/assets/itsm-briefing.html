@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>ITSM Operations Briefing</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f5f5f5;color:#242424;padding:20px;line-height:1.5}
+.widget{background:#fff;border-radius:12px;border:1px solid #e0e0e0;overflow:hidden;max-width:900px;margin:0 auto}
+.widget-header{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid #f0f0f0}
+.widget-icon{width:36px;height:36px;border-radius:8px;background:#e3f2fd;display:flex;align-items:center;justify-content:center;font-size:18px}
+.widget-title h2{font-size:16px;font-weight:600}.widget-title p{font-size:12px;color:#616161}
+.pulse{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:#f0f0f0}
+.pulse-card{background:#fff;padding:18px 10px;text-align:center;cursor:pointer;transition:all .15s;border-bottom:3px solid transparent;user-select:none}
+.pulse-card:hover{background:#fafafa}.pulse-card.active{border-bottom-color:#1976d2;background:#f5f9ff}
+.pulse-card .num{font-size:26px;font-weight:700;line-height:1.2}
+.pulse-card .lbl{font-size:10px;color:#616161;margin-top:2px;text-transform:uppercase;letter-spacing:.3px}
+.pulse-card .sub{font-size:9px;color:#9e9e9e;margin-top:2px}
+.panel{display:none;padding:12px 16px;border-top:1px solid #f0f0f0}
+.panel.show{display:block}
+.section{background:#fafafa;border:1px solid #e8e8e8;border-radius:10px;padding:14px 16px;margin-bottom:10px}
+.section h2{font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.section h2 .ct{background:#e0e0e0;color:#616161;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:600}
+.alert{border:1px solid #e8e8e8;border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer;transition:all .15s;font-size:12px;background:#fff}
+.alert:hover{border-color:#1976d2;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.alert:last-child{margin-bottom:0}
+.alert strong{display:block;margin-bottom:2px;font-size:13px}.alert p{color:#757575;font-size:11px}
+.p1-alert{border-left:3px solid #d32f2f}.p1-alert strong{color:#c62828}
+.sla-alert{border-left:3px solid #e65100}.sla-alert strong{color:#e65100}
+.collision-alert{border-left:3px solid #f57f17}.collision-alert strong{color:#f57f17}
+.stale-alert{border-left:3px solid #9e9e9e}.stale-alert strong{color:#616161}
+.high-risk-alert{border-left:3px solid #d32f2f}.high-risk-alert strong{color:#c62828}
+.reco{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #f0f0f0;align-items:flex-start;font-size:12px;color:#424242}
+.reco:last-child{border-bottom:none}
+.reco-num{background:#1976d2;color:#fff;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0}
+.reco-urgent .reco-num{background:#d32f2f}
+.footer{padding:10px 16px;border-top:1px solid #f0f0f0;text-align:right;font-size:10px;color:#bdbdbd}
+/* Detail overlay */
+.overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.45);z-index:1000;justify-content:center;align-items:flex-start;padding:30px 20px;overflow-y:auto}
+.overlay.show{display:flex}
+.detail-panel{background:#fff;border-radius:14px;width:100%;max-width:700px;box-shadow:0 8px 32px rgba(0,0,0,.18);overflow:hidden;animation:slideUp .2s ease}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.detail-header{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid #f0f0f0}
+.detail-header h2{font-size:16px;font-weight:700;flex:1}
+.detail-close{width:32px;height:32px;border:none;background:#f5f5f5;border-radius:8px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s}
+.detail-close:hover{background:#e0e0e0}
+.detail-body{padding:20px;display:flex;flex-direction:column;gap:16px}
+.detail-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.detail-field{display:flex;flex-direction:column;gap:4px}
+.detail-field.full{grid-column:1/-1}
+.detail-field label{font-size:11px;font-weight:600;color:#616161;text-transform:uppercase;letter-spacing:.3px}
+.detail-field .val{font-size:13px;color:#242424;padding:8px 10px;background:#fafafa;border:1px solid #e8e8e8;border-radius:6px;min-height:36px;word-break:break-word}
+.detail-field input,.detail-field select,.detail-field textarea{font-size:13px;font-family:inherit;padding:8px 10px;border:1px solid #d0d0d0;border-radius:6px;background:#fff;color:#242424;transition:border-color .15s}
+.detail-field input:focus,.detail-field select:focus,.detail-field textarea:focus{outline:none;border-color:#1976d2;box-shadow:0 0 0 2px rgba(25,118,210,.12)}
+.detail-field textarea{min-height:80px;resize:vertical}
+.detail-actions{display:flex;gap:10px;padding:16px 20px;border-top:1px solid #f0f0f0;background:#fafafa}
+.btn{padding:9px 20px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.btn-primary{background:#1976d2;color:#fff}.btn-primary:hover{background:#1565c0}
+.btn-secondary{background:#fff;color:#424242;border:1px solid #d0d0d0}.btn-secondary:hover{background:#f5f5f5}
+.btn-snow{background:#fff;color:#1976d2;border:1px solid #1976d2;margin-left:auto}.btn-snow:hover{background:#e3f2fd}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#2e7d32;color:#fff;padding:12px 24px;border-radius:10px;font-size:13px;font-weight:600;z-index:1100;display:none;box-shadow:0 4px 16px rgba(0,0,0,.15);animation:fadeIn .2s}
+.toast.error{background:#c62828}
+.toast.show{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+.toolbar{display:flex;gap:8px;padding:8px 16px;border-bottom:1px solid #f0f0f0;background:#fafafa;flex-wrap:wrap;align-items:center}
+.toolbar-btn{padding:5px 12px;border:1px solid #e0e0e0;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;background:#fff;color:#424242;display:inline-flex;align-items:center;gap:4px;transition:all .15s}
+.toolbar-btn:hover{background:#e3f2fd;border-color:#1976d2;color:#1976d2}
+.followups{display:flex;gap:8px;padding:10px 16px;border-top:1px solid #f0f0f0;flex-wrap:wrap}
+.followup-btn{padding:6px 14px;border:1px solid #1976d2;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;background:#fff;color:#1976d2;transition:all .15s}
+.followup-btn:hover{background:#1976d2;color:#fff}
+</style>
+</head>
+<body>
+<div class="widget">
+  <div class="widget-header">
+    <div class="widget-icon">📊</div>
+    <div class="widget-title"><h2>ITSM Operations Briefing</h2><p id="ts">ServiceNow · Operations Overview</p></div>
+  </div>
+  <div class="pulse" id="pulse"></div>
+  <div class="panel" id="panel-incidents"></div>
+  <div class="panel" id="panel-problems"></div>
+  <div class="panel" id="panel-slas"></div>
+  <div class="panel" id="panel-changes"></div>
+  <div class="panel" id="panel-actions"></div>
+  <div class="footer" id="footer"></div>
+</div>
+<div class="overlay" id="overlay" onclick="if(event.target===this)closeDetail()">
+  <div class="detail-panel">
+    <div class="detail-header">
+      <div class="widget-icon">📋</div>
+      <h2 id="detail-title">Record Detail</h2>
+      <button class="detail-close" onclick="closeDetail()" title="Close">&times;</button>
+    </div>
+    <div class="detail-body" id="detail-body"></div>
+    <div class="detail-actions" id="detail-actions"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+var to=window.__TOOL_DATA__||(window.openai&&window.openai.toolOutput)||{};
+var d=to;var si=d.snowInstance||'';
+var base=window.__SERVER_BASE_URL__||'';
+var ts=d.generatedAt?new Date(d.generatedAt).toLocaleString('en-GB',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+document.getElementById('ts').textContent='ServiceNow · '+ts;
+var currentRec=null;var currentType='';
+var p=d.pulse||{};
+var cards=[
+{id:'incidents',num:p.p1Incidents||0,lbl:'P1 Incidents',sub:(p.totalIncidents||0)+' total',color:'#c62828'},
+{id:'problems',num:p.openProblems||0,lbl:'Open Problems',sub:(p.knownErrors||0)+' known errors',color:'#7b1fa2'},
+{id:'slas',num:p.slaBreaches||0,lbl:'SLA Breaches',sub:(p.slaAtRisk||0)+' at risk',color:'#e65100'},
+{id:'changes',num:p.openChanges||0,lbl:'Open Changes',sub:(p.collisions||0)+' collisions',color:'#1565c0'},
+{id:'actions',num:(d.recommendations||[]).length,lbl:'Action Items',sub:(p.changeSuccessRate||0)+'% change success',color:'#2e7d32'}];
+var pulseHtml='';
+for(var i=0;i<cards.length;i++){var c=cards[i];
+pulseHtml+='<div class="pulse-card" data-panel="panel-'+c.id+'" onclick="togglePanel(this)"><div class="num" style="color:'+c.color+'">'+c.num+'</div><div class="lbl">'+c.lbl+'</div><div class="sub">'+c.sub+'</div></div>';}
+document.getElementById('pulse').innerHTML=pulseHtml;
+// Build panels
+var majors=d.majorIncidents||[];var incHtml='';
+if(majors.length){incHtml+='<div class="section"><h2 style="color:#c62828">🔴 Major Incidents <span class="ct">'+majors.length+'</span></h2>';
+for(var i=0;i<majors.length;i++){var m=majors[i];
+incHtml+='<div class="alert p1-alert" onclick="openIncDetail('+i+')" role="button" tabindex="0"><strong>'+m.number+' — '+(m.short_description||'')+'</strong><p>Priority: '+m.priority+' · CI: '+(m.cmdb_ci||'—')+' · Opened: '+(m.opened_at||'')+'</p></div>';}
+incHtml+='</div>';}else{incHtml='<div class="section" style="text-align:center;color:#2e7d32;padding:16px">✅ No major incidents</div>';}
+document.getElementById('panel-incidents').innerHTML=incHtml;
+// Problems
+var probHtml='<div class="section" style="text-align:center;color:#7b1fa2;padding:16px">'+(p.openProblems||0)+' open problems, '+(p.knownErrors||0)+' known errors. Use "Show me the problem dashboard" for details.</div>';
+document.getElementById('panel-problems').innerHTML=probHtml;
+// SLAs
+var slaBreach=d.slaBreaches||[];var slaHtml='';
+if(slaBreach.length){slaHtml+='<div class="section"><h2 style="color:#e65100">⏱️ SLA Breaches <span class="ct">'+slaBreach.length+'</span></h2>';
+for(var i=0;i<Math.min(slaBreach.length,8);i++){var s=slaBreach[i];
+slaHtml+='<div class="alert sla-alert"><strong>'+(s.taskName||'')+' — '+(s.slaName||'')+'</strong><p>Breached · Time over: '+(s.businessTimeLeft||'N/A')+'</p></div>';}
+slaHtml+='</div>';}else{slaHtml='<div class="section" style="text-align:center;color:#2e7d32;padding:16px">✅ No SLA breaches</div>';}
+document.getElementById('panel-slas').innerHTML=slaHtml;
+// Changes
+var coll=d.collisions||[];var stale=d.staleChanges||[];var highRisk=d.highRiskChanges||[];var chgHtml='';
+if(coll.length){chgHtml+='<div class="section"><h2 style="color:#f57f17">⚠️ Change Collisions <span class="ct">'+coll.length+'</span></h2>';
+for(var i=0;i<coll.length;i++){chgHtml+='<div class="alert collision-alert"><strong>'+coll[i].title+'</strong><p>'+coll[i].detail+'</p></div>';}chgHtml+='</div>';}
+if(highRisk.length){chgHtml+='<div class="section"><h2 style="color:#c62828">🔥 High Risk <span class="ct">'+highRisk.length+'</span></h2>';
+for(var i=0;i<highRisk.length;i++){var hr=highRisk[i];
+chgHtml+='<div class="alert high-risk-alert" onclick="openChgDetail(\'highRisk\','+i+')" role="button" tabindex="0"><strong>'+(hr.number||'')+' — '+(hr.short_description||'')+'</strong><p>Risk Score: '+(hr.riskScore||'—')+' · CAB review required</p></div>';}chgHtml+='</div>';}
+if(stale.length){chgHtml+='<div class="section"><h2 style="color:#616161">📋 Stale Changes <span class="ct">'+stale.length+'</span></h2>';
+for(var i=0;i<Math.min(stale.length,5);i++){var sc=stale[i];
+chgHtml+='<div class="alert stale-alert" onclick="openChgDetail(\'stale\','+i+')" role="button" tabindex="0"><strong>'+(sc.number||'')+' — '+(sc.short_description||'')+'</strong><p>Open '+(sc.daysOpen||0)+' days</p></div>';}chgHtml+='</div>';}
+if(!chgHtml)chgHtml='<div class="section" style="text-align:center;color:#2e7d32;padding:16px">✅ No change risks</div>';
+document.getElementById('panel-changes').innerHTML=chgHtml;
+// Actions
+var recos=d.recommendations||[];var rhtml='<div class="section"><h2>Action Items</h2>';
+for(var i=0;i<recos.length;i++){var uc=recos[i].urgent?' reco-urgent':'';
+rhtml+='<div class="reco'+uc+'"><div class="reco-num">'+(i+1)+'</div><div>'+recos[i].text+'</div></div>';}
+rhtml+='</div>';
+document.getElementById('panel-actions').innerHTML=rhtml||'<div class="section" style="color:#9e9e9e;text-align:center;padding:16px">No action items.</div>';
+document.getElementById('footer').textContent='Generated '+ts+' · Data from ServiceNow';
+// Toggle
+function togglePanel(el){var panels=document.querySelectorAll('.panel');var cards=document.querySelectorAll('.pulse-card');
+var target=el.getAttribute('data-panel');var panel=document.getElementById(target);var isActive=el.classList.contains('active');
+cards.forEach(function(c){c.classList.remove('active')});panels.forEach(function(p){p.classList.remove('show')});
+if(!isActive){el.classList.add('active');panel.classList.add('show');}}
+window.togglePanel=togglePanel;
+// Detail overlay functions
+function openIncDetail(idx){
+var m=majors[idx];if(!m)return;currentRec=m;currentType='incident';
+document.getElementById('detail-title').textContent=(m.number||'')+' — '+(m.short_description||'');
+var stateOpts=['New','In Progress','On Hold','Resolved','Closed','Canceled'];
+var priOpts=['1 - Critical','2 - High','3 - Moderate','4 - Low','5 - Planning'];
+var curState=m.state||'New';var curPri=m.priority||'';
+var h='<div class="detail-row">';
+h+='<div class="detail-field"><label>State</label><select id="bf-state">';
+for(var i=0;i<stateOpts.length;i++){var sel=curState===stateOpts[i]?' selected':'';h+='<option'+sel+'>'+stateOpts[i]+'</option>';}
+h+='</select></div>';
+h+='<div class="detail-field"><label>Priority</label><select id="bf-priority">';
+for(var i=0;i<priOpts.length;i++){var sel=curPri.includes(priOpts[i].charAt(0))?' selected':'';h+='<option'+sel+'>'+priOpts[i]+'</option>';}
+h+='</select></div></div>';
+h+='<div class="detail-row">';
+h+='<div class="detail-field"><label>Category</label><input id="bf-category" value="'+(m.category||'').replace(/"/g,'&quot;')+'"></div>';
+h+='<div class="detail-field"><label>Assignment Group</label><input id="bf-assignment_group" value="'+(m.assignment_group||'').replace(/"/g,'&quot;')+'"></div></div>';
+h+='<div class="detail-row">';
+h+='<div class="detail-field"><label>CI</label><div class="val">'+(m.cmdb_ci||'—')+'</div></div>';
+h+='<div class="detail-field"><label>Opened</label><div class="val">'+(m.opened_at||'—')+'</div></div></div>';
+h+='<div class="detail-field full"><label>Short Description</label><input id="bf-short_description" value="'+(m.short_description||'').replace(/"/g,'&quot;')+'"></div>';
+h+='<div class="detail-field full"><label>Work Notes (add new)</label><textarea id="bf-work_notes" placeholder="Add work notes..."></textarea></div>';
+document.getElementById('detail-body').innerHTML=h;
+var link=si+'/nav_to.do?uri=incident.do?sys_id='+(m.sys_id||'');
+document.getElementById('detail-actions').innerHTML=
+'<button class="btn btn-primary" id="btn-save-b" onclick="saveBriefDetail()">💾 Update Incident</button>'+
+'<button class="btn btn-secondary" onclick="closeDetail()">Cancel</button>'+
+'<a class="btn btn-snow" href="'+link+'" target="_blank" rel="noopener">↗ View in ServiceNow</a>';
+document.getElementById('overlay').classList.add('show');}
+function openChgDetail(src,idx){
+var list=src==='highRisk'?highRisk:stale;
+var c=list[idx];if(!c)return;currentRec=c;currentType='change';
+document.getElementById('detail-title').textContent=(c.number||'')+' — '+(c.short_description||'');
+var h='<div class="detail-row">';
+h+='<div class="detail-field"><label>State</label><div class="val">'+(c.state||'—')+'</div></div>';
+h+='<div class="detail-field"><label>Priority</label><div class="val">'+(c.priority||'—')+'</div></div></div>';
+h+='<div class="detail-row">';
+h+='<div class="detail-field"><label>Risk</label><div class="val">'+(c.risk||c.riskScore||'—')+'</div></div>';
+h+='<div class="detail-field"><label>Type</label><div class="val">'+(c.type||'—')+'</div></div></div>';
+h+='<div class="detail-row">';
+h+='<div class="detail-field"><label>CI</label><div class="val">'+(c.cmdb_ci||'—')+'</div></div>';
+h+='<div class="detail-field"><label>Assignment Group</label><div class="val">'+(c.assignment_group||'—')+'</div></div></div>';
+if(c.daysOpen)h+='<div class="detail-field full"><label>Days Open</label><div class="val">'+c.daysOpen+' days</div></div>';
+h+='<div class="detail-field full"><label>Short Description</label><div class="val">'+(c.short_description||'—')+'</div></div>';
+if(c.justification)h+='<div class="detail-field full"><label>Justification</label><div class="val">'+c.justification+'</div></div>';
+if(c.backout_plan)h+='<div class="detail-field full"><label>Backout Plan</label><div class="val">'+c.backout_plan+'</div></div>';
+document.getElementById('detail-body').innerHTML=h;
+var link=si+'/nav_to.do?uri=change_request.do?sys_id='+(c.sys_id||'');
+document.getElementById('detail-actions').innerHTML=
+'<button class="btn btn-secondary" onclick="closeDetail()">Close</button>'+
+'<a class="btn btn-snow" href="'+link+'" target="_blank" rel="noopener">↗ View in ServiceNow</a>';
+document.getElementById('overlay').classList.add('show');}
+function closeDetail(){document.getElementById('overlay').classList.remove('show');currentRec=null;currentType='';}
+function showToast(msg,isError){var t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(isError?' error':'');setTimeout(function(){t.classList.remove('show')},3000);}
+function saveBriefDetail(){
+if(!currentRec||!currentRec.sys_id||currentType!=='incident')return;
+var btn=document.getElementById('btn-save-b');btn.disabled=true;btn.textContent='Saving...';
+var fields={};
+var newState=document.getElementById('bf-state').value;
+var newPri=document.getElementById('bf-priority').value;
+var newCat=document.getElementById('bf-category').value;
+var newAg=document.getElementById('bf-assignment_group').value;
+var newDesc=document.getElementById('bf-short_description').value;
+var workNotes=document.getElementById('bf-work_notes').value;
+if(newState!==(currentRec.state||''))fields.state=newState;
+if(!currentRec.priority||!currentRec.priority.includes(newPri.charAt(0)))fields.priority=newPri;
+if(newCat!==(currentRec.category||''))fields.category=newCat;
+if(newAg!==(currentRec.assignment_group||''))fields.assignment_group=newAg;
+if(newDesc!==(currentRec.short_description||''))fields.short_description=newDesc;
+if(workNotes)fields.work_notes=workNotes;
+if(Object.keys(fields).length===0){btn.disabled=false;btn.textContent='💾 Update Incident';showToast('No changes to save',true);return;}
+if(base){fetch(base+'/mcp',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json, text/event-stream'},
+body:JSON.stringify({jsonrpc:'2.0',method:'tools/call',params:{name:'update-incident',arguments:{sys_id:currentRec.sys_id,fields:JSON.stringify(fields)}},id:1})})
+.then(function(r){return r.json()}).then(function(r){
+btn.disabled=false;btn.textContent='💾 Update Incident';
+if(r.error){showToast('Update failed: '+(r.error.message||'Unknown error'),true);}
+else{showToast('✅ '+currentRec.number+' updated successfully');for(var k in fields){if(k!=='work_notes')currentRec[k]=fields[k];}}
+}).catch(function(e){btn.disabled=false;btn.textContent='💾 Update Incident';showToast('Update failed: '+e.message,true);});}
+else{showToast('Server not configured — update simulated');btn.disabled=false;btn.textContent='💾 Update Incident';}}
+window.openIncDetail=openIncDetail;window.openChgDetail=openChgDetail;window.closeDetail=closeDetail;window.saveBriefDetail=saveBriefDetail;
+// Toolbar — fullscreen
+var tbEl=document.createElement('div');tbEl.className='toolbar';var tbHtml='';
+if(window.openai&&window.openai.requestDisplayMode){tbHtml+='<button class="toolbar-btn" onclick="toggleFS()">⛶ Fullscreen</button>';}
+if(tbHtml){tbEl.innerHTML=tbHtml;document.querySelector('.widget').insertBefore(tbEl,document.getElementById('pulse'));}
+var isFS=false;function toggleFS(){if(!window.openai||!window.openai.requestDisplayMode)return;isFS=!isFS;window.openai.requestDisplayMode({mode:isFS?'fullscreen':'compact'});}
+window.toggleFS=toggleFS;
+// Follow-up suggestions
+if(window.openai&&window.openai.sendFollowUpMessage){
+var suggestions=[{text:'Show me all active incidents. Are there any P1s or P2s?',label:'🔴 Incident Dashboard'},{text:'Show me our change management KPIs',label:'📊 Change Metrics'},{text:'Show me the SLA compliance dashboard',label:'⏱️ SLA Dashboard'},{text:'Search the knowledge base for Oracle failover procedures',label:'📚 Knowledge Base'}];
+var fuDiv=document.createElement('div');fuDiv.className='followups';var fuH='';
+for(var fi=0;fi<suggestions.length;fi++){var fs=suggestions[fi];fuH+='<button class="followup-btn" onclick="window.openai.sendFollowUpMessage({prompt:\''+fs.text.replace(/'/g,"\\'")+'\'})">'+fs.label+'</button>';}
+fuDiv.innerHTML=fuH;document.querySelector('.widget').appendChild(fuDiv);}
+</script>
+</body></html>

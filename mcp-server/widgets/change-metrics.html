@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Change Metrics</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f5f5f5;color:#242424;padding:20px;line-height:1.5}
+.widget{background:#fff;border-radius:12px;border:1px solid #e0e0e0;overflow:hidden;max-width:900px;margin:0 auto}
+.widget-header{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid #f0f0f0}
+.widget-icon{width:36px;height:36px;border-radius:8px;background:#e8f5e9;display:flex;align-items:center;justify-content:center;font-size:18px}
+.widget-title h2{font-size:16px;font-weight:600}.widget-title p{font-size:12px;color:#616161}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#f0f0f0;border-bottom:1px solid #f0f0f0}
+.kpi{background:#fff;padding:16px 12px;text-align:center}
+.kpi .val{font-size:24px;font-weight:700;line-height:1.2}
+.kpi .lbl{font-size:11px;color:#616161;margin-top:2px;text-transform:uppercase;letter-spacing:.3px}
+.charts{padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.chart-card{background:#fafafa;border:1px solid #e8e8e8;border-radius:10px;padding:16px}
+.chart-card h3{font-size:13px;font-weight:600;margin-bottom:12px}
+.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.bar-label{font-size:11px;color:#616161;width:80px;flex-shrink:0;text-align:right}
+.bar-track{flex:1;height:20px;background:#e0e0e0;border-radius:4px;overflow:hidden}
+.bar-fill{height:100%;border-radius:4px;display:flex;align-items:center;padding-left:6px;font-size:10px;color:#fff;font-weight:600;min-width:24px;transition:width .3s}
+.outcomes{display:flex;flex-direction:column;gap:8px}
+.outcome-row{display:flex;align-items:center;gap:10px;font-size:12px}
+.outcome-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.outcome-label{flex:1;color:#424242}.outcome-val{font-weight:600;color:#242424}
+.footer{padding:10px 16px;border-top:1px solid #f0f0f0;text-align:right;font-size:10px;color:#bdbdbd}
+</style>
+</head>
+<body>
+<div class="widget">
+  <div class="widget-header"><div class="widget-icon">📈</div><div class="widget-title"><h2>Change Management KPIs</h2><p>ServiceNow · Performance Metrics</p></div></div>
+  <div class="kpis" id="kpis"></div>
+  <div class="charts" id="charts"></div>
+  <div class="footer" id="footer"></div>
+</div>
+<script>
+var to=window.__TOOL_DATA__||(window.openai&&window.openai.toolOutput)||{};
+var m=to.metrics||to;
+var sr=m.successRate||0;var srColor=sr>=90?'#2e7d32':sr>=75?'#e65100':'#c62828';
+var emPct=m.emergencyPct||0;var emColor=emPct<=5?'#2e7d32':emPct<=10?'#e65100':'#c62828';
+document.getElementById('kpis').innerHTML=
+'<div class="kpi"><div class="val" style="color:'+srColor+'">'+sr+'%</div><div class="lbl">Success Rate</div></div>'+
+'<div class="kpi"><div class="val" style="color:'+emColor+'">'+emPct+'%</div><div class="lbl">Emergency Changes</div></div>'+
+'<div class="kpi"><div class="val" style="color:#1565c0">'+(m.openCount||m.totalOpen||0)+'</div><div class="lbl">Open Pipeline</div></div>'+
+'<div class="kpi"><div class="val" style="color:#616161">'+(m.avgDaysOpen||m.avgAge||0)+'d</div><div class="lbl">Avg Age</div></div>';
+// byState is an array of {state,count}
+var byState=m.byState||[];var byType=m.byType||[];var byRisk=m.byRisk||[];
+var stateColors={New:'#42a5f5',Assess:'#ffb74d',Authorize:'#ab47bc',Scheduled:'#26a69a',Implement:'#5c6bc0',Review:'#8d6e63',Closed:'#78909c',Canceled:'#ef5350'};
+var typeColors={Normal:'#42a5f5',Standard:'#66bb6a',Emergency:'#ef5350'};
+var riskColors={Low:'#66bb6a',Moderate:'#ffb74d',High:'#ef5350',None:'#bdbdbd'};
+function buildBars(arr,keyField,valField,colorMap){
+var maxVal=1;for(var i=0;i<arr.length;i++){var v=arr[i][valField]||0;if(v>maxVal)maxVal=v;}
+var html='';for(var i=0;i<arr.length;i++){var item=arr[i];var k=item[keyField]||'Unknown';var v=item[valField]||0;
+var pct=Math.round(v/maxVal*100);var col=colorMap[k]||'#90a4ae';
+html+='<div class="bar-row"><span class="bar-label">'+k+'</span><div class="bar-track"><div class="bar-fill" style="width:'+pct+'%;background:'+col+'">'+v+'</div></div></div>';}
+return html;}
+var stateHtml=buildBars(byState,'state','count',stateColors);
+var typeHtml=buildBars(byType,'type','count',typeColors);
+var riskHtml=buildBars(byRisk,'risk','count',riskColors);
+// Outcomes
+var outHtml='';
+var successful=m.successful||0;var totalClosed=m.totalClosed||0;var unsuccessful=totalClosed-successful;
+var outColors={Successful:'#66bb6a',Unsuccessful:'#ef5350'};
+outHtml+='<div class="outcome-row"><div class="outcome-dot" style="background:#66bb6a"></div><span class="outcome-label">Successful</span><span class="outcome-val">'+successful+'</span></div>';
+outHtml+='<div class="outcome-row"><div class="outcome-dot" style="background:#ef5350"></div><span class="outcome-label">Unsuccessful</span><span class="outcome-val">'+unsuccessful+'</span></div>';
+outHtml+='<div class="outcome-row"><div class="outcome-dot" style="background:#bdbdbd"></div><span class="outcome-label">Total Closed</span><span class="outcome-val">'+totalClosed+'</span></div>';
+document.getElementById('charts').innerHTML=
+'<div class="chart-card"><h3>By State</h3>'+(stateHtml||'<div style="color:#9e9e9e;font-size:12px">No data</div>')+'</div>'+
+'<div class="chart-card"><h3>By Type (ITIL)</h3>'+(typeHtml||'<div style="color:#9e9e9e;font-size:12px">No data</div>')+'</div>'+
+'<div class="chart-card"><h3>By Risk Level</h3>'+(riskHtml||'<div style="color:#9e9e9e;font-size:12px">No data</div>')+'</div>'+
+'<div class="chart-card"><h3>Outcomes</h3><div class="outcomes">'+outHtml+'</div></div>';
+document.getElementById('footer').textContent='Change Management KPIs · '+sr+'% success rate across '+totalClosed+' closed changes · Data from ServiceNow';
+</script>
+</body></html>
