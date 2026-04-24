@@ -1,7 +1,9 @@
 name: Deploy
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main, master]
   workflow_dispatch:
     inputs:
@@ -27,14 +29,10 @@ env:
   MCP_CONTAINER_APP: ${{ vars.MCP_CONTAINER_APP_NAME }}
 
 jobs:
-  # ── Gate: CI must pass first ────────────────────────────────────
-  ci:
-    uses: ./.github/workflows/ci.yml
-
   # ── Build & Push Images ────────────────────────────────────────
   build-push:
     name: Build & push Docker images
-    needs: ci
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || 'dev' }}
     permissions:
