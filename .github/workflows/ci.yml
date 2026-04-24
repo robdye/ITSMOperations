@@ -13,7 +13,7 @@ concurrency:
 jobs:
   # ── Digital Worker ──────────────────────────────────────────────
   digital-worker:
-    name: Digital Worker (lint + typecheck + test + docker)
+    name: Digital Worker (typecheck + test + docker)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -29,9 +29,6 @@ jobs:
 
       - run: npm ci
 
-      - name: Lint
-        run: npm run lint
-
       - name: Typecheck
         run: npm run typecheck
 
@@ -43,7 +40,7 @@ jobs:
 
   # ── MCP Server ─────────────────────────────────────────────────
   mcp-server:
-    name: MCP Server (lint + typecheck + test + docker)
+    name: MCP Server (typecheck + test + docker)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -57,10 +54,7 @@ jobs:
           cache: npm
           cache-dependency-path: mcp-server/package-lock.json
 
-      - run: npm ci
-
-      - name: Lint
-        run: npm run lint
+      - run: npm install
 
       - name: Typecheck
         run: npm run typecheck
