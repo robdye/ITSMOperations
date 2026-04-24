@@ -20,6 +20,9 @@ env:
   ACR_NAME: ${{ vars.ACR_NAME }}
   ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
   RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  MCP_ACR_NAME: ${{ vars.MCP_ACR_NAME }}
+  MCP_ACR_LOGIN_SERVER: ${{ vars.MCP_ACR_LOGIN_SERVER }}
+  MCP_RESOURCE_GROUP: ${{ vars.MCP_RESOURCE_GROUP }}
   DW_CONTAINER_APP: ${{ vars.DW_CONTAINER_APP_NAME }}
   MCP_CONTAINER_APP: ${{ vars.MCP_CONTAINER_APP_NAME }}
 
@@ -51,14 +54,16 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: ACR Login
-        run: az acr login --name ${{ env.ACR_NAME }}
+        run: |
+          az acr login --name ${{ env.ACR_NAME }}
+          az acr login --name ${{ env.MCP_ACR_NAME }}
 
       - name: Generate image tags
         id: tags
         run: |
           SHA=$(echo ${{ github.sha }} | cut -c1-7)
-          echo "dw=${{ env.ACR_LOGIN_SERVER }}/itsm-digital-worker:${SHA}" >> $GITHUB_OUTPUT
-          echo "mcp=${{ env.ACR_LOGIN_SERVER }}/itsm-mcp-server:${SHA}" >> $GITHUB_OUTPUT
+          echo "dw=${{ env.ACR_LOGIN_SERVER }}/itsm-worker:${SHA}" >> $GITHUB_OUTPUT
+          echo "mcp=${{ env.MCP_ACR_LOGIN_SERVER }}/itsm-mcp-server:${SHA}" >> $GITHUB_OUTPUT
 
       - name: Build & push digital-worker
         run: |
@@ -100,7 +105,7 @@ jobs:
         run: |
           az containerapp update \
             --name ${{ env.MCP_CONTAINER_APP }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --resource-group ${{ env.MCP_RESOURCE_GROUP }} \
             --image ${{ needs.build-push.outputs.mcp-image }}
 
       - name: Health check — digital-worker
@@ -115,7 +120,7 @@ jobs:
         run: |
           MCP_URL=$(az containerapp show \
             --name ${{ env.MCP_CONTAINER_APP }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --resource-group ${{ env.MCP_RESOURCE_GROUP }} \
             --query properties.configuration.ingress.fqdn -o tsv)
           curl --fail --retry 5 --retry-delay 10 "https://${MCP_URL}/health" || exit 1
 
