@@ -6,7 +6,7 @@ environmentFolderPath: ./env
 provision:
   - uses: teamsApp/create
     with:
-      name: Change Management-${{APP_NAME_SUFFIX}}
+      name: ITSM Operations-${{APP_NAME_SUFFIX}}
     writeToEnvironmentFile:
       teamsAppId: TEAMS_APP_ID
 

@@ -27,13 +27,9 @@
         { "title": "Search Knowledge Base", "text": "Search the knowledge base for Oracle failover procedures." },
         { "title": "Triage My ITSM Inbox", "text": "Triage my inbox — what ITSM items need my attention today?" },
         { "title": "Upcoming CAB Meetings", "text": "Find any upcoming CAB meetings and show me what changes are on the agenda." },
-        { "title": "Find Escalation Path", "text": "Show me the org chart and escalation path for the Infrastructure team lead." },
-        { "title": "IT Ops Channel Activity", "text": "What's the latest activity in the IT Operations Teams channels?" },
         { "title": "Service Catalog", "text": "Show me the service catalog. What services can users request?" },
         { "title": "Active Monitoring Alerts", "text": "Are there any active monitoring alerts or events that need attention?" },
-        { "title": "Release Schedule", "text": "What releases are scheduled for this week? Are they ready to deploy?" },
-        { "title": "Capacity Planning", "text": "Review our infrastructure capacity. Are any systems approaching resource limits?" },
-        { "title": "DR Readiness", "text": "What's our disaster recovery readiness? When was the last DR test?" },
-        { "title": "Security Posture", "text": "Give me a security posture overview. Any critical vulnerabilities or pending access reviews?" }
+        { "title": "Security & DR Posture", "text": "Give me a security posture overview and DR readiness status." },
+        { "title": "Capacity & Release", "text": "Review infrastructure capacity and upcoming release schedule." }
     ]
 }
