@@ -10,5 +10,6 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/src/mission-control.html ./dist/
 EXPOSE 3978
 CMD ["node", "dist/index.js"]

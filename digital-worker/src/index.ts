@@ -126,9 +126,14 @@ server.get('/api/workers', (_req: Request, res: Response) => {
   res.status(200).json({ workers, total: workers.length });
 });
 
+// Mission Control dashboard
+server.get('/mission-control', (_req: Request, res: Response) => {
+  res.sendFile(path.join(__dirname, 'mission-control.html'));
+});
+
 // Apply JWT auth middleware for routes below — skip public routes
 server.use((req, res, next) => {
-  const publicPaths = ['/api/health', '/api/voice/status', '/voice', '/api/scheduled', '/api/workers', '/api/approvals', '/api/routines', '/api/audit', '/api/memory'];
+  const publicPaths = ['/api/health', '/api/voice/status', '/voice', '/api/scheduled', '/api/workers', '/api/approvals', '/api/routines', '/api/audit', '/api/memory', '/mission-control'];
   if (publicPaths.some(p => req.path === p)) {
     return next();
   }
@@ -187,6 +192,7 @@ httpServer.listen(port, host, async () => {
   console.log(`  Messages:  http://${host}:${port}/api/messages`);
   console.log(`  Voice:     http://${host}:${port}/voice`);
   console.log(`  Chat:      http://${host}:${port}/api/chat`);
+  console.log(`  Mission Control: http://${host}:${port}/mission-control`);
 
   attachVoiceWebSocket(httpServer);
 

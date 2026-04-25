@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ITSM Operations — Mission Control</title>
+  <style>
+    :root {
+      --bg-root: #0d1117; --bg-sidebar: #161b22; --bg-card: #161b22; --bg-card-alt: #1c2333;
+      --border: #30363d; --text: #c9d1d9; --text-dim: #8b949e; --text-muted: #484f58;
+      --blue: #58a6ff; --green: #3fb950; --orange: #f0883e; --red: #f85149;
+      --purple: #bc8cff; --cyan: #79c0ff; --pink: #f778ba;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg-root); color: var(--text); height: 100vh; overflow: hidden; }
+    .app { display: grid; grid-template-columns: 200px 1fr 280px; height: 100vh; }
+
+    /* ── Sidebar ── */
+    .sidebar { background: var(--bg-sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding-top: 0; }
+    .sidebar-brand { padding: 16px 16px 20px; border-bottom: 1px solid var(--border); }
+    .sidebar-brand h1 { font-size: 13px; font-weight: 700; color: var(--text); letter-spacing: 0.02em; }
+    .sidebar-brand .version { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+    .nav-items { list-style: none; padding: 8px 0; flex: 1; }
+    .nav-items li { padding: 10px 16px; font-size: 13px; color: var(--text-dim); cursor: pointer; display: flex; align-items: center; gap: 10px; transition: all 0.15s; border-left: 3px solid transparent; }
+    .nav-items li:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+    .nav-items li.active { color: var(--orange); border-left-color: var(--orange); background: rgba(240,136,62,0.08); font-weight: 600; }
+    .nav-items li .icon { width: 16px; text-align: center; font-size: 14px; }
+    .sidebar-footer { padding: 12px 16px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-muted); }
+
+    /* ── Topbar ── */
+    .topbar { height: 44px; background: var(--bg-sidebar); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
+    .topbar-left { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--text-dim); }
+    .topbar-left .label { color: var(--text); font-weight: 600; }
+    .topbar-right { display: flex; align-items: center; gap: 16px; }
+    .health-badge { padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+    .health-badge.healthy { background: rgba(63,185,80,0.15); color: var(--green); }
+    .health-badge.unhealthy { background: rgba(248,81,73,0.15); color: var(--red); }
+    .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse-dot 2s infinite; }
+    @keyframes pulse-dot { 0%,100%{ opacity:1; } 50%{ opacity:0.4; } }
+
+    /* ── Main content ── */
+    .main { display: flex; flex-direction: column; overflow: hidden; }
+    .content { flex: 1; overflow-y: auto; padding: 20px; }
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* ── Stats Row ── */
+    .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+    .stat-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; text-align: center; }
+    .stat-value { font-size: 28px; font-weight: 700; color: var(--text); line-height: 1.1; }
+    .stat-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 6px; }
+    .stat-value.blue { color: var(--blue); } .stat-value.green { color: var(--green); }
+    .stat-value.orange { color: var(--orange); } .stat-value.purple { color: var(--purple); }
+
+    /* ── Panels ── */
+    .panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .panel { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+    .panel-title { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; font-weight: 600; }
+    .panel-full { grid-column: 1 / -1; }
+    .metric-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(48,54,61,0.5); }
+    .metric-row:last-child { border-bottom: none; }
+    .metric-label { font-size: 13px; color: var(--text-dim); }
+    .metric-val { font-size: 15px; font-weight: 600; }
+
+    /* ── Tier Badges ── */
+    .tier-badge { padding: 3px 10px; border-radius: 6px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+    .tier-badge.core { background: rgba(63,185,80,0.15); color: var(--green); }
+    .tier-badge.extended { background: rgba(88,166,255,0.15); color: var(--blue); }
+    .tier-badge.strategic { background: rgba(188,140,255,0.15); color: var(--purple); }
+    .tier-badge.orchestrator { background: rgba(240,136,62,0.15); color: var(--orange); }
+
+    /* ── Status Badges ── */
+    .status-badge { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+    .status-badge.active { background: rgba(63,185,80,0.15); color: var(--green); }
+    .status-badge.inactive { background: rgba(139,148,158,0.15); color: var(--text-dim); }
+    .status-badge.pending { background: rgba(240,136,62,0.15); color: var(--orange); }
+    .status-badge.approved { background: rgba(63,185,80,0.15); color: var(--green); }
+    .status-badge.rejected { background: rgba(248,81,73,0.15); color: var(--red); }
+
+    /* ── Worker Cards ── */
+    .worker-card { background: var(--bg-card-alt); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; }
+    .worker-card .worker-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+    .worker-card .worker-body { flex: 1; min-width: 0; }
+    .worker-card .worker-name { font-size: 13px; font-weight: 600; color: var(--text); }
+    .worker-card .worker-practice { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+    .worker-card .worker-meta { display: flex; align-items: center; gap: 8px; }
+
+    /* ── Routine Table ── */
+    .routine-table { width: 100%; border-collapse: collapse; }
+    .routine-table th { text-align: left; font-size: 11px; color: var(--text-muted); text-transform: uppercase; padding: 8px 10px; border-bottom: 1px solid var(--border); font-weight: 600; }
+    .routine-table td { padding: 8px 10px; font-size: 12px; border-bottom: 1px solid rgba(48,54,61,0.4); color: var(--text-dim); vertical-align: top; }
+    .routine-table tr:hover td { background: rgba(255,255,255,0.02); }
+    .cron-badge { font-family: 'SF Mono', Consolas, monospace; font-size: 10px; padding: 2px 6px; background: rgba(88,166,255,0.1); color: var(--blue); border-radius: 3px; }
+
+    /* ── Approval Card ── */
+    .approval-card { background: var(--bg-card-alt); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 8px; display: flex; align-items: flex-start; gap: 12px; }
+    .approval-body { flex: 1; }
+    .approval-title { font-size: 13px; font-weight: 600; color: var(--text); }
+    .approval-meta { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+    /* ── ITIL Summary Cards ── */
+    .itil-card { background: var(--bg-card-alt); border: 1px solid var(--border); border-radius: 8px; padding: 20px; text-align: center; }
+    .itil-card .itil-icon { font-size: 28px; margin-bottom: 8px; }
+    .itil-card .itil-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+    .itil-card .itil-count { font-size: 24px; font-weight: 700; margin-top: 8px; }
+    .itil-card .itil-subtitle { font-size: 11px; color: var(--text-dim); }
+
+    /* ── Feed Panel ── */
+    .feed-panel { background: var(--bg-sidebar); border-left: 1px solid var(--border); display: flex; flex-direction: column; }
+    .feed-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .feed-header h3 { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
+    .feed-list { flex: 1; overflow-y: auto; padding: 0; }
+    .feed-item { padding: 8px 16px; border-bottom: 1px solid rgba(48,54,61,0.3); font-size: 11px; line-height: 1.4; }
+    .feed-item .feed-time { color: var(--text-muted); font-size: 10px; font-family: 'SF Mono', Consolas, monospace; }
+    .feed-item .feed-msg { color: var(--text-dim); margin-top: 2px; }
+    .feed-item .feed-agent { color: var(--blue); font-weight: 600; }
+
+    /* ── Empty States ── */
+    .empty-state { text-align: center; padding: 40px 20px; color: var(--text-muted); }
+    .empty-state .empty-icon { font-size: 32px; margin-bottom: 12px; opacity: 0.5; }
+    .empty-state .empty-text { font-size: 13px; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+  </style>
+</head>
+<body>
+<div class="app">
+  <!-- ── Sidebar ── -->
+  <nav class="sidebar">
+    <div class="sidebar-brand">
+      <h1>⚡ ITSM Operations</h1>
+      <div class="version">Mission Control</div>
+    </div>
+    <ul class="nav-items">
+      <li class="active" data-view="command-center"><span class="icon">◉</span> Command Center</li>
+      <li data-view="worker-registry"><span class="icon">◎</span> Worker Registry</li>
+      <li data-view="itil-operations"><span class="icon">◈</span> ITIL Operations</li>
+      <li data-view="approvals"><span class="icon">▣</span> Approvals</li>
+      <li data-view="routines"><span class="icon">◧</span> Routines</li>
+    </ul>
+    <div class="sidebar-footer">Digital Worker · Container Apps<br>Auto-refresh 10s</div>
+  </nav>
+
+  <!-- ── Main Area ── -->
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="label" id="view-title">Command Center</span>
+        <span>— ITSM Operations overview</span>
+      </div>
+      <div class="topbar-right">
+        <span style="font-size:12px;color:var(--text-dim)">uptime <span id="topbar-uptime" style="color:var(--text)">—</span></span>
+        <span class="health-badge healthy" id="health-badge">Healthy</span>
+        <div class="live-dot"></div>
+      </div>
+    </header>
+
+    <div class="content">
+      <!-- ═══ Command Center View ═══ -->
+      <div class="view active" id="view-command-center">
+        <div class="stats-row">
+          <div class="stat-card"><div class="stat-value blue" id="s-workers">14</div><div class="stat-label">Workers</div></div>
+          <div class="stat-card"><div class="stat-value green" id="s-routines">11</div><div class="stat-label">Routines</div></div>
+          <div class="stat-card"><div class="stat-value orange" id="s-approvals">0</div><div class="stat-label">Pending Approvals</div></div>
+          <div class="stat-card"><div class="stat-value purple" id="s-uptime">0m</div><div class="stat-label">Uptime</div></div>
+        </div>
+        <div class="panel-grid">
+          <div class="panel">
+            <div class="panel-title">Worker Overview</div>
+            <div id="cc-workers"><div class="empty-state"><div class="empty-icon">👷</div><div class="empty-text">Loading workers...</div></div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">Scheduled Routines</div>
+            <div id="cc-routines"><div class="empty-state"><div class="empty-icon">⏱</div><div class="empty-text">Loading routines...</div></div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">Approval Queue</div>
+            <div id="cc-approvals"><div class="empty-state"><div class="empty-icon">✋</div><div class="empty-text">No pending approvals</div></div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">Memory Store</div>
+            <div id="cc-memory"><div class="empty-state"><div class="empty-icon">🧠</div><div class="empty-text">Loading memory store...</div></div></div>
+          </div>
+          <div class="panel panel-full">
+            <div class="panel-title">Audit Trail — Recent</div>
+            <div id="cc-audit"><div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">No audit entries yet</div></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ Worker Registry View ═══ -->
+      <div class="view" id="view-worker-registry">
+        <div class="stats-row">
+          <div class="stat-card"><div class="stat-value blue" id="wr-total">0</div><div class="stat-label">Total Workers</div></div>
+          <div class="stat-card"><div class="stat-value green" id="wr-core">0</div><div class="stat-label">Core (Tier 1)</div></div>
+          <div class="stat-card"><div class="stat-value orange" id="wr-extended">0</div><div class="stat-label">Extended (Tier 2)</div></div>
+          <div class="stat-card"><div class="stat-value purple" id="wr-strategic">0</div><div class="stat-label">Strategic (Tier 3)</div></div>
+        </div>
+        <div id="wr-list"><div class="empty-state"><div class="empty-icon">👷</div><div class="empty-text">Loading worker registry...</div></div></div>
+      </div>
+
+      <!-- ═══ ITIL Operations View ═══ -->
+      <div class="view" id="view-itil-operations">
+        <div class="stats-row">
+          <div class="itil-card"><div class="itil-icon">🔥</div><div class="itil-title">Incidents</div><div class="itil-count blue" id="itil-incidents">—</div><div class="itil-subtitle">Active incidents</div></div>
+          <div class="itil-card"><div class="itil-icon">🔄</div><div class="itil-title">Changes</div><div class="itil-count green" id="itil-changes">—</div><div class="itil-subtitle">Open changes</div></div>
+          <div class="itil-card"><div class="itil-icon">🔍</div><div class="itil-title">Problems</div><div class="itil-count orange" id="itil-problems">—</div><div class="itil-subtitle">Open problems</div></div>
+          <div class="itil-card"><div class="itil-icon">🖥️</div><div class="itil-title">Assets</div><div class="itil-count purple" id="itil-assets">—</div><div class="itil-subtitle">CMDB items</div></div>
+        </div>
+        <div class="panel-grid">
+          <div class="panel">
+            <div class="panel-title">Incident Summary</div>
+            <div id="itil-incident-detail">
+              <div class="empty-state"><div class="empty-icon">🔥</div><div class="empty-text">No active incidents. Data will populate from ServiceNow integration.</div></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">Change Summary</div>
+            <div id="itil-change-detail">
+              <div class="empty-state"><div class="empty-icon">🔄</div><div class="empty-text">No open changes. Change requests will appear here when created.</div></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">Problem Summary</div>
+            <div id="itil-problem-detail">
+              <div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-text">No open problems. Problem records will appear when created from recurring incidents.</div></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">Asset Health</div>
+            <div id="itil-asset-detail">
+              <div class="empty-state"><div class="empty-icon">🖥️</div><div class="empty-text">No asset data. CMDB configuration items will appear from ServiceNow sync.</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ Approvals View ═══ -->
+      <div class="view" id="view-approvals">
+        <div class="stats-row">
+          <div class="stat-card"><div class="stat-value orange" id="ap-pending">0</div><div class="stat-label">Pending</div></div>
+          <div class="stat-card"><div class="stat-value green" id="ap-approved">0</div><div class="stat-label">Approved</div></div>
+          <div class="stat-card"><div class="stat-value red" id="ap-rejected">0</div><div class="stat-label">Rejected</div></div>
+          <div class="stat-card"><div class="stat-value blue" id="ap-total">0</div><div class="stat-label">Total</div></div>
+        </div>
+        <div class="panel panel-full">
+          <div class="panel-title">Pending Approval Items</div>
+          <div id="ap-list"><div class="empty-state"><div class="empty-icon">✋</div><div class="empty-text">No pending approvals. HITL approval items will appear when workers request write operations.</div></div></div>
+        </div>
+      </div>
+
+      <!-- ═══ Routines View ═══ -->
+      <div class="view" id="view-routines">
+        <div class="stats-row">
+          <div class="stat-card"><div class="stat-value green" id="rt-active">0</div><div class="stat-label">Active</div></div>
+          <div class="stat-card"><div class="stat-value blue" id="rt-total">0</div><div class="stat-label">Total</div></div>
+          <div class="stat-card"><div class="stat-value orange" id="rt-disabled">0</div><div class="stat-label">Disabled</div></div>
+          <div class="stat-card"><div class="stat-value purple" id="rt-workers">0</div><div class="stat-label">Workers Used</div></div>
+        </div>
+        <div class="panel panel-full">
+          <div class="panel-title">Scheduled Routines</div>
+          <div id="rt-table-container">
+            <div class="empty-state"><div class="empty-icon">⏱</div><div class="empty-text">Loading scheduled routines...</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Live Feed Panel ── -->
+  <aside class="feed-panel">
+    <div class="feed-header">
+      <h3>Live Operations Feed</h3>
+      <div class="live-dot"></div>
+    </div>
+    <div class="feed-list" id="feed-list">
+      <div class="feed-item"><span class="feed-time">--:--:--</span><div class="feed-msg">Waiting for activity...</div></div>
+    </div>
+  </aside>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// ITSM Operations Mission Control — Client-Side Logic
+// ═══════════════════════════════════════════════════════════════════
+
+const BASE = window.location.origin;
+const feedItems = [];
+let firstFetch = true;
+
+// Worker tier mapping
+const WORKER_TIERS = {
+  'incident-manager': 'core', 'change-manager': 'core', 'problem-manager': 'core',
+  'asset-cmdb-manager': 'core', 'sla-manager': 'core', 'knowledge-manager': 'core',
+  'vendor-manager': 'core',
+  'service-desk-manager': 'extended', 'monitoring-manager': 'extended', 'release-manager': 'extended',
+  'capacity-manager': 'strategic', 'continuity-manager': 'strategic', 'security-manager': 'strategic',
+  'command-center': 'orchestrator',
+};
+
+const WORKER_ICONS = {
+  'incident-manager': '🔥', 'change-manager': '🔄', 'problem-manager': '🔍',
+  'asset-cmdb-manager': '🖥️', 'sla-manager': '📊', 'knowledge-manager': '📚',
+  'vendor-manager': '🤝', 'service-desk-manager': '🎫', 'monitoring-manager': '👁️',
+  'release-manager': '🚀', 'capacity-manager': '📈', 'continuity-manager': '🛡️',
+  'security-manager': '🔒', 'command-center': '⚡',
+};
+
+const TIER_COLORS = {
+  core: 'var(--green)', extended: 'var(--blue)', strategic: 'var(--purple)', orchestrator: 'var(--orange)',
+};
+
+// ── Navigation ──
+document.querySelectorAll('.nav-items li').forEach(li => {
+  li.addEventListener('click', () => {
+    document.querySelectorAll('.nav-items li').forEach(l => l.classList.remove('active'));
+    li.classList.add('active');
+    const viewId = li.dataset.view;
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById('view-' + viewId).classList.add('active');
+    const titles = {
+      'command-center': 'Command Center', 'worker-registry': 'Worker Registry',
+      'itil-operations': 'ITIL Operations', 'approvals': 'Approvals', 'routines': 'Routines',
+    };
+    document.getElementById('view-title').textContent = titles[viewId] || viewId;
+  });
+});
+
+// ── Feed helper ──
+function addFeed(msg, agent) {
+  const now = new Date().toLocaleTimeString('en-US', { hour12: false });
+  feedItems.unshift({ time: now, msg, agent: agent || 'system' });
+  if (feedItems.length > 100) feedItems.length = 100;
+  const el = document.getElementById('feed-list');
+  el.innerHTML = feedItems.map(f =>
+    `<div class="feed-item"><span class="feed-time">${f.time}</span><div class="feed-msg"><span class="feed-agent">${f.agent}</span> — ${escHtml(f.msg)}</div></div>`
+  ).join('');
+}
+
+// ── Data Fetching ──
+async function fetchAll() {
+  const [healthR, workersR, routinesR, approvalsR, auditR, memoryR] = await Promise.allSettled([
+    fetch(`${BASE}/api/health`).then(r => r.json()),
+    fetch(`${BASE}/api/workers`).then(r => r.json()),
+    fetch(`${BASE}/api/routines`).then(r => r.json()),
+    fetch(`${BASE}/api/approvals`).then(r => r.json()),
+    fetch(`${BASE}/api/audit`).then(r => r.json()),
+    fetch(`${BASE}/api/memory`).then(r => r.json()),
+  ]);
+
+  const health = healthR.status === 'fulfilled' ? healthR.value : null;
+  const workers = workersR.status === 'fulfilled' ? workersR.value : null;
+  const routines = routinesR.status === 'fulfilled' ? routinesR.value : null;
+  const approvals = approvalsR.status === 'fulfilled' ? approvalsR.value : null;
+  const audit = auditR.status === 'fulfilled' ? auditR.value : null;
+  const memory = memoryR.status === 'fulfilled' ? memoryR.value : null;
+
+  if (health) renderHealth(health);
+  if (workers) renderWorkers(workers);
+  if (routines) renderRoutines(routines);
+  renderApprovals(approvals);
+  renderAudit(audit);
+  renderMemory(memory);
+
+  document.getElementById('health-badge').textContent = 'Healthy';
+  document.getElementById('health-badge').className = 'health-badge healthy';
+  if (firstFetch) {
+    addFeed('All systems online — polling every 10s', 'system');
+    firstFetch = false;
+  }
+}
+
+// ── Render: Health ──
+function renderHealth(data) {
+  const upStr = data.uptime || '—';
+  document.getElementById('topbar-uptime').textContent = upStr;
+  document.getElementById('s-uptime').textContent = upStr;
+}
+
+// ── Render: Workers (Command Center + Registry) ──
+function renderWorkers(data) {
+  const workers = data.workers || [];
+  const total = (data.total || workers.length) + 1; // +1 for command center
+  document.getElementById('s-workers').textContent = total;
+
+  // Command Center compact worker list
+  const ccHtml = workers.slice(0, 14).map(w => {
+    const tier = WORKER_TIERS[w.id] || 'core';
+    const icon = WORKER_ICONS[w.id] || '⚙';
+    return `<div class="metric-row">
+      <span class="metric-label">${icon} ${escHtml(w.name)}</span>
+      <span class="metric-val" style="font-size:12px"><span style="color:${TIER_COLORS[tier]}">${w.toolCount} tools</span></span>
+    </div>`;
+  }).join('');
+  document.getElementById('cc-workers').innerHTML = ccHtml || '<div class="empty-state"><div class="empty-icon">👷</div><div class="empty-text">No workers registered</div></div>';
+
+  // Worker Registry view
+  const coreWorkers = workers.filter(w => WORKER_TIERS[w.id] === 'core');
+  const extWorkers = workers.filter(w => WORKER_TIERS[w.id] === 'extended');
+  const stratWorkers = workers.filter(w => WORKER_TIERS[w.id] === 'strategic');
+  const orchWorkers = workers.filter(w => WORKER_TIERS[w.id] === 'orchestrator');
+
+  document.getElementById('wr-total').textContent = total;
+  document.getElementById('wr-core').textContent = coreWorkers.length;
+  document.getElementById('wr-extended').textContent = extWorkers.length;
+  document.getElementById('wr-strategic').textContent = stratWorkers.length;
+
+  function renderWorkerCards(list, tierLabel) {
+    if (list.length === 0) return '';
+    let html = `<div style="margin-bottom:16px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(48,54,61,0.3)">Tier: ${tierLabel}</div>`;
+    for (const w of list) {
+      const tier = WORKER_TIERS[w.id] || 'core';
+      const icon = WORKER_ICONS[w.id] || '⚙';
+      html += `<div class="worker-card">
+        <div class="worker-icon" style="background:rgba(${tier === 'core' ? '63,185,80' : tier === 'extended' ? '88,166,255' : tier === 'strategic' ? '188,140,255' : '240,136,62'},0.15)">${icon}</div>
+        <div class="worker-body">
+          <div class="worker-name">${escHtml(w.name)}</div>
+          <div class="worker-practice">${escHtml(w.itilPractice || '—')}</div>
+        </div>
+        <div class="worker-meta">
+          <span style="font-size:12px;color:var(--text-dim)">${w.toolCount} tools</span>
+          <span class="tier-badge ${tier}">${tier}</span>
+        </div>
+      </div>`;
+    }
+    html += '</div>';
+    return html;
+  }
+
+  document.getElementById('wr-list').innerHTML =
+    renderWorkerCards(orchWorkers, 'Orchestrator') +
+    renderWorkerCards(coreWorkers, 'Core ITSM') +
+    renderWorkerCards(extWorkers, 'Extended') +
+    renderWorkerCards(stratWorkers, 'Strategic') ||
+    '<div class="empty-state"><div class="empty-icon">👷</div><div class="empty-text">No workers registered</div></div>';
+}
+
+// ── Render: Routines ──
+function renderRoutines(data) {
+  const routines = data.routines || [];
+  document.getElementById('s-routines').textContent = routines.length;
+
+  // Command Center compact routine list
+  const ccHtml = routines.slice(0, 6).map(r => {
+    const statusCls = r.active ? 'active' : 'inactive';
+    return `<div class="metric-row">
+      <span class="metric-label" style="font-size:11px">${escHtml(r.description || r.id)}</span>
+      <span class="status-badge ${statusCls}" style="font-size:9px">${statusCls}</span>
+    </div>`;
+  }).join('');
+  const moreCount = routines.length > 6 ? `<div style="font-size:11px;color:var(--text-muted);text-align:center;padding-top:6px">+${routines.length - 6} more routines</div>` : '';
+  document.getElementById('cc-routines').innerHTML = ccHtml + moreCount || '<div class="empty-state"><div class="empty-icon">⏱</div><div class="empty-text">No routines configured</div></div>';
+
+  // Routines view
+  const activeCount = routines.filter(r => r.active).length;
+  const disabledCount = routines.filter(r => !r.enabled).length;
+  const workerSet = new Set(routines.map(r => r.worker));
+  document.getElementById('rt-active').textContent = activeCount;
+  document.getElementById('rt-total').textContent = routines.length;
+  document.getElementById('rt-disabled').textContent = disabledCount;
+  document.getElementById('rt-workers').textContent = workerSet.size;
+
+  if (routines.length === 0) {
+    document.getElementById('rt-table-container').innerHTML = '<div class="empty-state"><div class="empty-icon">⏱</div><div class="empty-text">No scheduled routines configured</div></div>';
+    return;
+  }
+
+  let tableHtml = `<table class="routine-table">
+    <thead><tr><th>Routine</th><th>Worker</th><th>Schedule</th><th>Status</th></tr></thead><tbody>`;
+  for (const r of routines) {
+    const statusCls = r.active ? 'active' : (r.enabled ? 'pending' : 'inactive');
+    const statusLabel = r.active ? 'active' : (r.enabled ? 'enabled' : 'disabled');
+    const icon = WORKER_ICONS[r.worker] || '⚙';
+    tableHtml += `<tr>
+      <td style="color:var(--text)">${escHtml(r.description || r.id)}</td>
+      <td>${icon} ${escHtml(r.worker)}</td>
+      <td><span class="cron-badge">${escHtml(r.schedule)}</span></td>
+      <td><span class="status-badge ${statusCls}">${statusLabel}</span></td>
+    </tr>`;
+  }
+  tableHtml += '</tbody></table>';
+  document.getElementById('rt-table-container').innerHTML = tableHtml;
+}
+
+// ── Render: Approvals ──
+function renderApprovals(data) {
+  if (!data) {
+    document.getElementById('s-approvals').textContent = '0';
+    return;
+  }
+
+  const pending = data.pending || [];
+  const history = data.history || [];
+  const pendingCount = Array.isArray(pending) ? pending.length : 0;
+  const approvedCount = Array.isArray(history) ? history.filter(h => h.status === 'approved').length : 0;
+  const rejectedCount = Array.isArray(history) ? history.filter(h => h.status === 'rejected').length : 0;
+  const totalCount = pendingCount + (Array.isArray(history) ? history.length : 0);
+
+  document.getElementById('s-approvals').textContent = pendingCount;
+  document.getElementById('ap-pending').textContent = pendingCount;
+  document.getElementById('ap-approved').textContent = approvedCount;
+  document.getElementById('ap-rejected').textContent = rejectedCount;
+  document.getElementById('ap-total').textContent = totalCount;
+
+  // Command Center approval summary
+  if (pendingCount > 0) {
+    const ccHtml = pending.slice(0, 4).map(p => `<div class="metric-row">
+      <span class="metric-label" style="font-size:11px">${escHtml(p.description || p.action || p.id || 'Pending item')}</span>
+      <span class="status-badge pending">pending</span>
+    </div>`).join('');
+    document.getElementById('cc-approvals').innerHTML = ccHtml;
+  } else {
+    document.getElementById('cc-approvals').innerHTML = '<div class="empty-state"><div class="empty-icon">✓</div><div class="empty-text">No pending approvals</div></div>';
+  }
+
+  // Approvals view
+  if (pendingCount > 0) {
+    document.getElementById('ap-list').innerHTML = pending.map(p => `<div class="approval-card">
+      <span style="font-size:20px">✋</span>
+      <div class="approval-body">
+        <div class="approval-title">${escHtml(p.description || p.action || p.id || 'Approval Required')}</div>
+        <div class="approval-meta">Worker: ${escHtml(p.worker || p.requestedBy || '—')} · ${escHtml(p.type || 'write')} operation · ${timeAgo(p.createdAt || p.timestamp)}</div>
+      </div>
+      <span class="status-badge pending">pending</span>
+    </div>`).join('');
+  } else {
+    document.getElementById('ap-list').innerHTML = '<div class="empty-state"><div class="empty-icon">✓</div><div class="empty-text">No pending approvals. HITL approval items will appear when workers request write operations.</div></div>';
+  }
+}
+
+// ── Render: Audit Trail ──
+function renderAudit(data) {
+  if (!data) {
+    document.getElementById('cc-audit').innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">No audit data available</div></div>';
+    return;
+  }
+
+  const entries = data.recentEntries || data.entries || data.recent || [];
+  if (entries.length === 0) {
+    document.getElementById('cc-audit').innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">No audit entries yet</div></div>';
+    return;
+  }
+
+  const html = entries.slice(0, 10).map(e => {
+    const ts = e.timestamp ? new Date(e.timestamp).toLocaleTimeString('en-US', { hour12: false }) : '--:--:--';
+    const actionColor = e.action === 'error' ? 'var(--red)' : e.action === 'warning' ? 'var(--orange)' : 'var(--text-dim)';
+    return `<div class="metric-row">
+      <span class="metric-label" style="font-size:11px"><span style="color:var(--text-muted);font-family:monospace;font-size:10px">${ts}</span> ${escHtml(e.worker || e.source || '—')}</span>
+      <span style="font-size:11px;color:${actionColor}">${escHtml(e.action || e.event || e.message || '—')}</span>
+    </div>`;
+  }).join('');
+  document.getElementById('cc-audit').innerHTML = html;
+
+  // Add latest audit entries to feed
+  if (entries.length > 0 && !firstFetch) {
+    const latest = entries[0];
+    const msg = `${latest.worker || latest.source || 'system'}: ${latest.action || latest.event || latest.message || 'activity'}`;
+    if (!feedItems.some(f => f.msg === msg)) {
+      addFeed(msg, 'audit');
+    }
+  }
+}
+
+// ── Render: Memory Store ──
+function renderMemory(data) {
+  if (!data) {
+    document.getElementById('cc-memory').innerHTML = '<div class="empty-state"><div class="empty-icon">🧠</div><div class="empty-text">No memory data available</div></div>';
+    return;
+  }
+
+  const entries = data.totalEntries ?? data.count ?? data.size ?? 0;
+  const namespaces = data.namespaces ?? data.categories ?? [];
+  const nsCount = Array.isArray(namespaces) ? namespaces.length : (typeof namespaces === 'number' ? namespaces : 0);
+
+  let html = `<div class="metric-row"><span class="metric-label">Total Entries</span><span class="metric-val" style="color:var(--blue)">${entries}</span></div>`;
+  html += `<div class="metric-row"><span class="metric-label">Namespaces</span><span class="metric-val">${nsCount}</span></div>`;
+
+  if (Array.isArray(namespaces) && namespaces.length > 0) {
+    for (const ns of namespaces.slice(0, 5)) {
+      const name = typeof ns === 'string' ? ns : (ns.name || ns.namespace || '—');
+      const count = typeof ns === 'object' ? (ns.count || ns.entries || '—') : '';
+      html += `<div class="metric-row"><span class="metric-label" style="font-size:11px;padding-left:8px">↳ ${escHtml(name)}</span><span style="font-size:11px;color:var(--text-muted)">${count}</span></div>`;
+    }
+  }
+
+  document.getElementById('cc-memory').innerHTML = html;
+}
+
+// ── Utilities ──
+function escHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function timeAgo(ts) {
+  if (!ts) return '';
+  const sec = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+  if (sec < 0) return 'just now';
+  if (sec < 60) return `${sec}s ago`;
+  if (sec < 3600) return `${Math.floor(sec/60)}m ago`;
+  if (sec < 86400) return `${Math.floor(sec/3600)}h ago`;
+  return `${Math.floor(sec/86400)}d ago`;
+}
+
+// ── Boot ──
+addFeed('Mission Control connected', 'system');
+fetchAll().catch(() => {
+  document.getElementById('health-badge').textContent = 'Offline';
+  document.getElementById('health-badge').className = 'health-badge unhealthy';
+  addFeed('Connection failed — retrying in 10s', 'system');
+});
+setInterval(() => fetchAll().catch(() => {}), 10000);
+</script>
+</body>
+</html>
