@@ -1,5 +1,8 @@
 // ITSM Operations Digital Worker — Entry point
 
+import { initTelemetry, initMetrics } from './telemetry';
+initTelemetry();
+
 import { configDotenv } from 'dotenv';
 configDotenv();
 
@@ -23,7 +26,10 @@ import { getMemoryStoreSummary } from './memory-store';
 import { startScheduledRoutines, getRoutineStatus } from './scheduled-routines';
 import { getQueueSummary } from './approval-queue';
 import { attachVoiceWebSocket } from './voice/voiceProxy';
+import { getTraces, getConversations, getReasoningStats } from './reasoning-trace';
 import { isVoiceEnabled } from './voice/voiceGate';
+import { initCosmosStore } from './cosmos-store';
+import { resolveSecrets } from './secret-resolver';
 
 console.log(`ITSM Operations Digital Worker`);
 
@@ -71,6 +77,51 @@ server.get('/voice', (_req: Request, res: Response) => {
   res.sendFile(path.join(__dirname, 'voice', 'voice.html'));
 });
 
+// Avatar configuration — returns Speech key/region and avatar settings for client-side WebRTC
+server.get('/api/voice/avatar-config', async (_req: Request, res: Response) => {
+  const speechKey = process.env.AZURE_SPEECH_KEY || '';
+  const speechRegion = process.env.AZURE_SPEECH_REGION || '';
+  const avatarCharacter = process.env.AVATAR_CHARACTER || 'lisa';
+  const avatarStyle = process.env.AVATAR_STYLE || 'casual-sitting';
+
+  if (!speechKey || !speechRegion) {
+    res.status(200).json({ enabled: false, reason: 'AZURE_SPEECH_KEY or AZURE_SPEECH_REGION not configured' });
+    return;
+  }
+
+  // Fetch ICE relay token from Azure Speech service
+  try {
+    const iceRes = await fetch(
+      `https://${speechRegion}.tts.speech.microsoft.com/cognitiveservices/avatar/relay/token/v1`,
+      { headers: { 'Ocp-Apim-Subscription-Key': speechKey } }
+    );
+    if (!iceRes.ok) {
+      res.status(200).json({ enabled: false, reason: `ICE token fetch failed: ${iceRes.status}` });
+      return;
+    }
+    const iceData = await iceRes.json();
+
+    // Also issue a short-lived auth token so the client doesn't need the key
+    const tokenRes = await fetch(
+      `https://${speechRegion}.api.cognitive.microsoft.com/sts/v1.0/issueToken`,
+      { method: 'POST', headers: { 'Ocp-Apim-Subscription-Key': speechKey, 'Content-Length': '0' } }
+    );
+    const authToken = tokenRes.ok ? await tokenRes.text() : '';
+
+    res.status(200).json({
+      enabled: true,
+      region: speechRegion,
+      authToken,
+      iceServers: iceData,
+      character: avatarCharacter,
+      style: avatarStyle,
+      voice: process.env.AVATAR_VOICE || 'en-US-AvaMultilingualNeural',
+    });
+  } catch (err) {
+    res.status(200).json({ enabled: false, reason: `Error: ${(err as Error).message}` });
+  }
+});
+
 // Scheduled briefing endpoint — protected by SCHEDULED_SECRET, not JWT
 // Used by Azure Function timer triggers for shift handover
 server.post('/api/scheduled', async (req: Request, res: Response) => {
@@ -114,6 +165,20 @@ server.get('/api/memory', (_req: Request, res: Response) => {
   res.status(200).json(getMemoryStoreSummary());
 });
 
+// Reasoning trace endpoint — agent decision-making process
+server.get('/api/reasoning', (req: Request, res: Response) => {
+  const limit = parseInt(req.query.limit as string) || 200;
+  const conversationId = req.query.conversationId as string;
+  const type = req.query.type as string;
+  const since = req.query.since as string;
+
+  res.status(200).json({
+    traces: getTraces({ limit, conversationId, type: type as any, since }),
+    conversations: getConversations(50),
+    stats: getReasoningStats(),
+  });
+});
+
 // Worker registry endpoint — lists all available ITIL 4 workers
 server.get('/api/workers', (_req: Request, res: Response) => {
   const { allWorkers } = require('./worker-definitions');
@@ -133,7 +198,7 @@ server.get('/mission-control', (_req: Request, res: Response) => {
 
 // Apply JWT auth middleware for routes below — skip public routes
 server.use((req, res, next) => {
-  const publicPaths = ['/api/health', '/api/voice/status', '/voice', '/api/scheduled', '/api/workers', '/api/approvals', '/api/routines', '/api/audit', '/api/memory', '/mission-control'];
+  const publicPaths = ['/api/health', '/api/voice/status', '/api/voice/avatar-config', '/voice', '/api/scheduled', '/api/workers', '/api/approvals', '/api/routines', '/api/audit', '/api/memory', '/api/reasoning', '/mission-control'];
   if (publicPaths.some(p => req.path === p)) {
     return next();
   }
@@ -187,6 +252,12 @@ const httpServer = http.createServer((req, res) => {
 });
 
 httpServer.listen(port, host, async () => {
+  // Resolve secrets from Key Vault (or env fallback) before anything else
+  await resolveSecrets();
+
+  // Initialize Cosmos DB persistence (falls back to in-memory if not configured)
+  await initCosmosStore();
+
   console.log(`\n  ITSM Operations Digital Worker listening on ${host}:${port}`);
   console.log(`  Health:    http://${host}:${port}/api/health`);
   console.log(`  Messages:  http://${host}:${port}/api/messages`);
@@ -201,6 +272,8 @@ httpServer.listen(port, host, async () => {
   startIncidentMonitor();
   startScheduledRoutines();
   console.log('  Scheduled worker routines started');
+  initMetrics();
+  console.log('  OpenTelemetry metrics initialized');
   console.log('\n  ITSM Operations Digital Worker is ready!\n');
 
   // Pre-warm managed identity token to avoid first-message IMDS cold-start delay (~60s)

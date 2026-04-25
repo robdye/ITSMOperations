@@ -18,6 +18,12 @@ import { OpenAIAgentsTraceInstrumentor } from '@microsoft/agents-a365-observabil
 import { tokenResolver } from './token-cache';
 import { runWorker, type PromptContext } from './agent-harness';
 import { classifyIntent } from './worker-registry';
+import {
+  startConversation, logIntent, logRouting, logThinking,
+  logOutcome, logError,
+} from './reasoning-trace';
+import { startRoutingSpan, endSpanOk, endSpanError, recordWorkerInvocation, recordResponseLatency } from './telemetry';
+import { analyzeInput, analyzeOutput } from './content-safety';
 
 configureOpenAIClient();
 
@@ -177,15 +183,79 @@ class WorkerClient implements Client {
   constructor(displayName: string) { this.displayName = displayName; }
 
   async invokeAgentWithScope(prompt: string): Promise<string> {
+    const convId = startConversation();
+    const startTime = Date.now();
+
     const classification = classifyIntent(prompt);
     console.log(`[WorkerClient] Routed to ${classification.worker.id} (${classification.confidence}): ${classification.reason}`);
+
+    // Trace: intent classification
+    logIntent(
+      convId,
+      prompt,
+      classification.worker.id,
+      classification.worker.name,
+      classification.confidence,
+      classification.reason
+    );
+
+    // Trace: routing decision
+    logRouting(
+      convId,
+      'command-center',
+      classification.worker.id,
+      `User message classified as ${classification.worker.itilPractice} domain. ` +
+      `Confidence: ${classification.confidence}. Reason: ${classification.reason}. ` +
+      `Worker has ${classification.worker.tools.length} tools available.`
+    );
+
+    // Trace: reasoning about approach
+    logThinking(
+      convId,
+      classification.worker.id,
+      `Analyzing request: "${prompt.substring(0, 200)}"\n` +
+      `Selected worker: ${classification.worker.name} (${classification.worker.itilPractice})\n` +
+      `Decision basis: ${classification.reason}\n` +
+      `Available tools: ${classification.worker.tools.map((t: any) => t.name || 'unknown').join(', ')}`
+    );
+
+    const routingSpan = startRoutingSpan(prompt, classification.worker.id, classification.confidence);
+    recordWorkerInvocation(classification.worker.id, classification.confidence);
 
     const ctx: PromptContext = {
       userMessage: prompt,
       displayName: this.displayName,
     };
 
-    const result = await runWorker(classification.worker, prompt, ctx);
-    return result.output;
+    // Content safety check on input
+    const safetyCheck = await analyzeInput(prompt);
+    if (!safetyCheck.safe) {
+      logError(convId, 'content-safety', `Input blocked: ${safetyCheck.reason}`);
+      return `⚠️ I can't process this request. ${safetyCheck.reason || 'Content policy violation detected.'}`;
+    }
+
+    try {
+      const result = await runWorker(classification.worker, prompt, ctx);
+      const durationMs = Date.now() - startTime;
+
+      // Content safety check on output
+      const outputCheck = await analyzeOutput(result.output);
+      if (!outputCheck.safe) {
+        logError(convId, 'content-safety', `Output blocked: ${outputCheck.reason}`);
+        return '⚠️ I generated a response but it was flagged by content safety. Please rephrase your request.';
+      }
+
+      // Trace: outcome
+      logOutcome(convId, classification.worker.id, result.output, durationMs);
+
+      recordResponseLatency(durationMs, classification.worker.id);
+      endSpanOk(routingSpan);
+
+      return result.output;
+    } catch (error) {
+      logError(convId, classification.worker.id, (error as Error).message || String(error));
+      endSpanError(routingSpan, error as Error);
+      throw error;
+    }
   }
 }
