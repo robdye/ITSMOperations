@@ -4,6 +4,7 @@ import { configDotenv } from 'dotenv';
 configDotenv();
 
 import OpenAI from 'openai';
+import { DefaultAzureCredential, getBearerTokenProvider } from '@azure/identity';
 
 let openaiClient: any = null;
 
@@ -29,11 +30,19 @@ export function configureOpenAIClient(): void {
           defaultHeaders: { 'api-key': process.env.AZURE_OPENAI_API_KEY },
         });
       } else {
-        // Use managed identity — lazy auth on first call
+        // Use managed identity via DefaultAzureCredential
+        const credential = new DefaultAzureCredential();
+        const tokenProvider = getBearerTokenProvider(credential, 'https://cognitiveservices.azure.com/.default');
         openaiClient = new OpenAI({
-          apiKey: 'placeholder',
+          apiKey: '',
           baseURL: `${endpoint}/openai/deployments/${getModelName()}`,
           defaultQuery: { 'api-version': apiVersion },
+          fetch: async (url: string | Request | URL, init?: RequestInit) => {
+            const token = await tokenProvider();
+            const headers = new Headers(init?.headers);
+            headers.set('Authorization', `Bearer ${token}`);
+            return fetch(url, { ...init, headers });
+          },
         });
       }
       console.log(`[OpenAI] Azure OpenAI configured: ${endpoint}, model: ${getModelName()}`);
