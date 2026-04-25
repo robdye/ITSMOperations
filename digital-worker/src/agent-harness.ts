@@ -10,8 +10,9 @@
 // 5. Returns the result
 
 import { Agent, run, OpenAIChatCompletionsModel } from '@openai/agents';
-import { getModelName, isAzureOpenAI, getOpenAIClient } from './openai-config';
+import { getModelName, isAzureOpenAI, getOpenAIClient, getModelForTask, detectTaskType } from './openai-config';
 import { classifyTool, type HitlClassification } from './hitl';
+import { getTunedModel } from './copilot-tuning';
 
 // ── Worker Definition ──
 
@@ -60,7 +61,7 @@ export interface HarnessResult {
  * Create an @openai/agents Agent configured for a specific ITIL 4 worker.
  * Does NOT run the agent — just builds it with scoped tools and instructions.
  */
-export function createWorkerAgent(worker: WorkerDefinition, ctx?: PromptContext): Agent {
+export function createWorkerAgent(worker: WorkerDefinition, ctx?: PromptContext, taskType?: string): Agent {
   let instructions = worker.instructions;
 
   // Inject context if provided
@@ -73,11 +74,13 @@ export function createWorkerAgent(worker: WorkerDefinition, ctx?: PromptContext)
     instructions,
   };
 
-  // Configure model
+  // Model routing: tuned model override > task-specific model > default
+  const tunedModel = getTunedModel(worker.id);
+  const modelName = tunedModel || (taskType ? getModelForTask(taskType) : getModelName());
   if (isAzureOpenAI()) {
-    config.model = new OpenAIChatCompletionsModel(getOpenAIClient(), getModelName());
+    config.model = new OpenAIChatCompletionsModel(getOpenAIClient(), modelName);
   } else {
-    config.model = getModelName();
+    config.model = modelName;
   }
 
   const agent = new Agent(config);
@@ -94,7 +97,9 @@ export async function runWorker(
   prompt: string,
   ctx?: PromptContext
 ): Promise<HarnessResult> {
-  const agent = createWorkerAgent(worker, ctx);
+  const taskType = detectTaskType(worker.id, prompt);
+  const agent = createWorkerAgent(worker, ctx, taskType);
+  console.log(`[Harness] Worker ${worker.id} using model: ${getModelForTask(taskType)} (task: ${taskType})`);
 
   // Build the full prompt with history if available
   let fullPrompt = prompt;

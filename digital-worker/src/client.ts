@@ -9,7 +9,7 @@ import { McpToolRegistrationService } from '@microsoft/agents-a365-tooling-exten
 import { agentTools } from './agent-tools';
 import { allTools } from './tools';
 import { AgenticTokenCacheInstance } from '@microsoft/agents-a365-observability-hosting';
-import { configureOpenAIClient, getModelName, isAzureOpenAI, getOpenAIClient } from './openai-config';
+import { configureOpenAIClient, getModelName, isAzureOpenAI, getOpenAIClient, getModelForTask, detectTaskType } from './openai-config';
 import {
   ObservabilityManager, InferenceScope, Builder, InferenceOperationType,
   AgentDetails, TenantDetails, InferenceDetails, Agent365ExporterOptions,
@@ -17,7 +17,10 @@ import {
 import { OpenAIAgentsTraceInstrumentor } from '@microsoft/agents-a365-observability-extensions-openai';
 import { tokenResolver } from './token-cache';
 import { runWorker, type PromptContext } from './agent-harness';
-import { classifyIntent } from './worker-registry';
+import { classifyIntent, getWorkerById } from './worker-registry';
+import { createRouter, type AgentRouter } from './agent-framework';
+import { allWorkers } from './worker-definitions';
+import { isFoundryPromoted, executeViaFoundry, ensureFoundryAgent } from './foundry-agents';
 import {
   startConversation, logIntent, logRouting, logThinking,
   logOutcome, logError,
@@ -180,14 +183,36 @@ class OpenAIClient implements Client {
  */
 class WorkerClient implements Client {
   private displayName: string;
-  constructor(displayName: string) { this.displayName = displayName; }
+  private router: AgentRouter | null;
+  constructor(displayName: string) {
+    this.displayName = displayName;
+    // Use hybrid router: regex fast-path + LLM fallback for ambiguous messages
+    const enableLlmRouting = process.env.ENABLE_LLM_ROUTING === 'true';
+    this.router = enableLlmRouting ? createRouter(allWorkers, 'hybrid') : null;
+  }
 
   async invokeAgentWithScope(prompt: string): Promise<string> {
     const convId = startConversation();
     const startTime = Date.now();
 
-    const classification = classifyIntent(prompt);
+    let classification = classifyIntent(prompt);
     console.log(`[WorkerClient] Routed to ${classification.worker.id} (${classification.confidence}): ${classification.reason}`);
+
+    // Enhanced routing: if LLM routing is enabled and regex confidence is low, use LLM
+    if (this.router && classification.confidence === 'low') {
+      try {
+        const llmRoute = await this.router.route(prompt);
+        if (llmRoute.confidence > 0.5) {
+          console.log(`[WorkerClient] LLM re-routed: ${classification.worker.id} → ${llmRoute.workerId} (${llmRoute.confidence})`);
+          const llmWorker = getWorkerById(llmRoute.workerId);
+          if (llmWorker) {
+            classification = { worker: llmWorker, confidence: 'medium', reason: llmRoute.reason };
+          }
+        }
+      } catch (err) {
+        console.warn('[WorkerClient] LLM routing failed, using regex result:', err);
+      }
+    }
 
     // Trace: intent classification
     logIntent(
@@ -232,6 +257,23 @@ class WorkerClient implements Client {
     if (!safetyCheck.safe) {
       logError(convId, 'content-safety', `Input blocked: ${safetyCheck.reason}`);
       return `⚠️ I can't process this request. ${safetyCheck.reason || 'Content policy violation detected.'}`;
+    }
+
+    // Foundry delegation: attempt for promoted workers before local execution
+    if (isFoundryPromoted(classification.worker.id)) {
+      try {
+        const agentId = await ensureFoundryAgent(
+          classification.worker.id,
+          classification.worker.name,
+          classification.worker.instructions,
+          getModelForTask(detectTaskType(classification.worker.id, prompt)),
+        );
+        const foundryResult = await executeViaFoundry(classification.worker.id, agentId, prompt);
+        return foundryResult.response;
+      } catch (err) {
+        console.warn(`[Foundry] Delegation failed for ${classification.worker.id}, falling back to local:`, (err as Error).message);
+        // Fall through to local execution
+      }
     }
 
     try {
