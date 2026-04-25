@@ -1,6 +1,7 @@
 // ITSM Operations Digital Worker — Incident Monitor
-// Polls ServiceNow every 5 minutes for new P1/P2 incidents, SLA breaches,
+// Polls ServiceNow for new P1/P2 incidents, SLA breaches,
 // change-incident correlations, and recurring incident patterns.
+// Can run via local setInterval (dev mode) or be called externally by Durable Functions.
 
 import { ItsmMcpClient } from './mcp-client';
 import { getStandaloneClient } from './client';
@@ -89,18 +90,41 @@ async function pollSlaBreach(): Promise<void> {
   }
 }
 
+/**
+ * Run a single incident poll cycle.
+ * Callable by Durable Functions timer triggers via /api/scheduled.
+ */
+export async function runIncidentPoll(): Promise<void> {
+  await pollIncidents();
+  await pollSlaBreach();
+}
+
+const monitorTimers: NodeJS.Timeout[] = [];
+
+/**
+ * Start local polling. Only activates if ENABLE_LOCAL_POLLING=true (dev mode).
+ */
 export function startIncidentMonitor(): void {
-  console.log(`  ✓ Incident Monitor: polling every ${POLL_INTERVAL / 1000}s for P1/P2 incidents, SLA breaches, and correlations`);
+  if (process.env.ENABLE_LOCAL_POLLING !== 'true') {
+    console.log(`  ✓ Incident Monitor: triggered externally via /api/scheduled (set ENABLE_LOCAL_POLLING=true for local polling)`);
+    return;
+  }
+
+  console.log(`  ✓ Incident Monitor: local polling every ${POLL_INTERVAL / 1000}s for P1/P2 incidents, SLA breaches, and correlations`);
 
   // Initial poll after 30s
-  setTimeout(async () => {
-    await pollIncidents();
-    await pollSlaBreach();
-  }, 30000);
+  monitorTimers.push(setTimeout(async () => {
+    await runIncidentPoll();
+  }, 30000));
 
   // Regular polling
-  setInterval(async () => {
-    await pollIncidents();
-    await pollSlaBreach();
-  }, POLL_INTERVAL);
+  monitorTimers.push(setInterval(async () => {
+    await runIncidentPoll();
+  }, POLL_INTERVAL));
+}
+
+export function stopIncidentMonitor(): void {
+  for (const timer of monitorTimers) clearInterval(timer);
+  monitorTimers.length = 0;
+  console.log('  Incident Monitor stopped');
 }

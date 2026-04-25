@@ -1,7 +1,7 @@
 // ITSM Operations Digital Worker — Shift Handover Briefing Scheduler
-// Runs at 08:00 and 20:00 daily to generate shift handover reports
+// Handover is now triggered externally by Azure Durable Functions timer triggers
+// via HTTP POST to /api/scheduled with { routineId: 'shift-handover' }.
 
-import cron from 'node-cron';
 import { ItsmMcpClient } from './mcp-client';
 import { getStandaloneClient } from './client';
 import { sendEmail } from './email-service';
@@ -21,7 +21,7 @@ const HANDOVER_PROMPT = `Generate a shift handover briefing for the incoming ITS
 
 Format as a concise executive briefing. Use real ticket numbers, CI names, and timestamps.`;
 
-async function generateHandover(): Promise<void> {
+export async function generateHandover(): Promise<void> {
   console.log('[Handover] Generating shift handover briefing...');
   try {
     // Gather data from all ITSM practices
@@ -59,8 +59,9 @@ Problems: ${typeof problemData === 'string' ? problemData.substring(0, 1500) : J
 }
 
 export function startHandoverScheduler(): void {
-  // 08:00 and 20:00 weekdays (can be adjusted for 24/7 ops)
-  cron.schedule('0 8 * * *', () => generateHandover());
-  cron.schedule('0 20 * * *', () => generateHandover());
-  console.log('  ✓ Shift Handover Scheduler: 08:00 & 20:00 daily');
+  console.log('  ✓ Shift Handover: triggered externally via /api/scheduled');
+}
+
+export function stopHandoverScheduler(): void {
+  console.log('  Shift Handover Scheduler: no in-process jobs to stop');
 }
