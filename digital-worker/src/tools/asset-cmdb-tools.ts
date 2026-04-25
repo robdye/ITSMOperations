@@ -71,7 +71,7 @@ export const assetCmdbTools = [
     name: 'create_asset',
     description: 'Create a new hardware asset in ServiceNow. WRITE OPERATION — confirm with user before executing.',
     parameters: z.object({
-      data: z.record(z.unknown()).describe('Asset fields such as display_name, asset_tag, serial_number, model, etc.'),
+      data: z.record(z.string(), z.string()).describe('Asset fields such as display_name, asset_tag, serial_number, model, etc.'),
     }),
     execute: async ({ data }) => stringify(await mcp.createAsset(data)),
   }),
@@ -81,7 +81,7 @@ export const assetCmdbTools = [
     description: 'Update an existing hardware asset in ServiceNow. WRITE OPERATION — confirm with user before executing.',
     parameters: z.object({
       sys_id: z.string().describe('sys_id of the asset to update'),
-      fields: z.record(z.unknown()).describe('Fields to update'),
+      fields: z.record(z.string(), z.string()).describe('Fields to update'),
     }),
     execute: async ({ sys_id, fields }) => stringify(await mcp.updateAsset(sys_id, fields)),
   }),
