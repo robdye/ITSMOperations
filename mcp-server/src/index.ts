@@ -6,6 +6,7 @@ import express, { type Request, type Response } from "express";
 import cors from "cors";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createChangeServer } from "./mcp-server.js";
+import { initSearchClient } from "./search-client.js";
 
 const PORT = parseInt(process.env.PORT ?? "3002", 10);
 
@@ -80,6 +81,9 @@ app.delete("/change/mcp", mcpHandler(createChangeServer));
 app.post("/mcp", mcpHandler(createChangeServer));
 app.get("/mcp", mcpHandler(createChangeServer));
 app.delete("/mcp", mcpHandler(createChangeServer));
+
+// ── Initialize Azure AI Search ──
+initSearchClient();
 
 // ── Start ──
 app.listen(PORT, () => {

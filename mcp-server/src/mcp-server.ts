@@ -20,6 +20,7 @@ import {
 import * as snow from "./snow-client.js";
 import * as eol from "./eol-client.js";
 import * as azmon from "./azure-monitor.js";
+import * as search from "./search-client.js";
 import { getPublicServerUrl } from "./index.js";
 
 // ── Widget HTML loader ──────────────────────────────────────
@@ -422,7 +423,9 @@ export function createChangeServer(): Server {
       { name: "create-service-request", description: "Create a new service request in ServiceNow.", inputSchema: { type: "object" as const, properties: { data: { type: "string" as const, description: "JSON object of service request fields" } }, required: ["data"] as const, additionalProperties: false } },
       { name: "update-service-request", description: "Update an existing service request.", inputSchema: { type: "object" as const, properties: { sys_id: { type: "string" as const }, fields: { type: "string" as const } }, required: ["sys_id", "fields"] as const, additionalProperties: false } },
       // ── Knowledge Management ──
-      { name: "search-knowledge", description: "Search the ServiceNow Knowledge Base for articles, runbooks, and procedures.", inputSchema: { type: "object" as const, properties: { query: { type: "string" as const, description: "Search query" }, limit: { type: "number" as const } }, required: ["query"] as const, additionalProperties: false }, annotations: { readOnlyHint: true } },
+      { name: "search-knowledge", description: "Search the ServiceNow Knowledge Base for articles, runbooks, and procedures. Uses Azure AI semantic search when configured, with automatic fallback to keyword search.", inputSchema: { type: "object" as const, properties: { query: { type: "string" as const, description: "Search query" }, source: { type: "string" as const, description: "Filter by source: kb_article, incident_resolution, runbook, cmdb_ci" }, category: { type: "string" as const, description: "Filter by category" }, limit: { type: "number" as const } }, required: ["query"] as const, additionalProperties: false }, annotations: { readOnlyHint: true } },
+      { name: "search-incident-resolutions", description: "Search similar past incident resolutions using semantic search. Finds close notes from previously resolved incidents to help resolve current ones.", inputSchema: { type: "object" as const, properties: { description: { type: "string" as const, description: "Incident description to find similar resolutions for" }, top: { type: "number" as const, description: "Max results (default 10)" } }, required: ["description"] as const, additionalProperties: false }, annotations: { readOnlyHint: true } },
+      { name: "search-runbooks", description: "Search operational runbooks using semantic search. Finds relevant procedures and playbooks for incident response or change implementation.", inputSchema: { type: "object" as const, properties: { query: { type: "string" as const, description: "Search query describing the operational scenario" } }, required: ["query"] as const, additionalProperties: false }, annotations: { readOnlyHint: true } },
       // ── Service Catalog ──
       { name: "get-catalog-items", description: "List available Service Catalog items.", inputSchema: { type: "object" as const, properties: { limit: { type: "number" as const } }, additionalProperties: false }, annotations: { readOnlyHint: true } },
       // ── IT Asset Management ──
@@ -1162,15 +1165,57 @@ export function createChangeServer(): Server {
           `SLA Dashboard: ${slas.length} tracked. Breached: ${breached}. Compliance: ${slas.length > 0 ? Math.round((slas.length - breached) / slas.length * 100) : 100}%`);
       }
 
-      // ── Text: Search Knowledge Base ──
+      // ── Text: Search Knowledge Base (semantic + fallback) ──
       case "search-knowledge": {
         const snowInstance = process.env.SNOW_INSTANCE || "";
+        const searchResult = await search.searchKnowledge(args?.query as string, {
+          source: args?.source as any,
+          category: args?.category as string,
+          top: (args?.limit as number) || 10,
+        });
+
+        // If semantic search returned results, use them
+        if (searchResult.searchMode !== 'fallback' && searchResult.documents.length > 0) {
+          const lines = searchResult.documents.map((d) =>
+            `**${d.sourceId}**: ${d.title}\nSource: ${d.source} | Category: ${d.category} | Score: ${d.relevanceScore?.toFixed(3) ?? "N/A"}${d.url ? ` | [Open](${d.url})` : ""}`
+          );
+          return textResponse(`${searchResult.documents.length} result(s) via ${searchResult.searchMode} search (${searchResult.searchDurationMs}ms):\n\n${lines.join("\n\n")}`);
+        }
+
+        // Fallback to ServiceNow keyword search
         const articles = await snow.searchKnowledge(args?.query as string, (args?.limit as number) || 10);
         if (articles.length === 0) return textResponse(`No knowledge articles found for "${args?.query}".`);
         const lines = articles.map((a: any) =>
           `**${a.number}**: ${a.short_description}\nTopic: ${a.topic || "N/A"} | Views: ${a.sys_view_count || 0} | [Open](${snowInstance}/nav_to.do?uri=kb_knowledge.do?sys_id=${a.sys_id})`
         );
-        return textResponse(`${articles.length} knowledge article(s) found:\n\n${lines.join("\n\n")}`);
+        return textResponse(`${articles.length} knowledge article(s) found (keyword fallback):\n\n${lines.join("\n\n")}`);
+      }
+
+      // ── Text: Search Incident Resolutions ──
+      case "search-incident-resolutions": {
+        const resolutions = await search.searchSimilarResolutions(
+          args?.description as string,
+          (args?.top as number) || 10,
+        );
+        if (resolutions.length === 0) {
+          return textResponse(`No similar incident resolutions found. Azure AI Search may not be configured.`);
+        }
+        const lines = resolutions.map((d) =>
+          `**${d.sourceId}**: ${d.title}\nResolution: ${d.content.slice(0, 300)}${d.content.length > 300 ? "…" : ""}\nScore: ${d.relevanceScore?.toFixed(3) ?? "N/A"}${d.url ? ` | [Open](${d.url})` : ""}`
+        );
+        return textResponse(`${resolutions.length} similar resolution(s) found:\n\n${lines.join("\n\n")}`);
+      }
+
+      // ── Text: Search Runbooks ──
+      case "search-runbooks": {
+        const runbooks = await search.searchRunbooks(args?.query as string);
+        if (runbooks.length === 0) {
+          return textResponse(`No runbooks found for "${args?.query}". Azure AI Search may not be configured.`);
+        }
+        const lines = runbooks.map((d) =>
+          `**${d.sourceId}**: ${d.title}\nSummary: ${d.content.slice(0, 300)}${d.content.length > 300 ? "…" : ""}\nCategory: ${d.category} | Score: ${d.relevanceScore?.toFixed(3) ?? "N/A"}${d.url ? ` | [Open](${d.url})` : ""}`
+        );
+        return textResponse(`${runbooks.length} runbook(s) found:\n\n${lines.join("\n\n")}`);
       }
 
       // ── Text: Service Catalog ──
