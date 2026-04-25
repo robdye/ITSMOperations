@@ -92,6 +92,53 @@
     .filter-tab { padding: 4px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; border: 1px solid var(--border); color: var(--text-dim); background: transparent; transition: all 0.15s; }
     .filter-tab:hover { border-color: var(--text-dim); }
     .filter-tab.active { background: rgba(88,166,255,0.15); border-color: var(--blue); color: var(--blue); }
+
+    /* ── Reasoning Chain ── */
+    .reasoning-step { position: relative; padding: 12px 16px 12px 36px; margin-bottom: 2px; border-radius: 6px; background: rgba(13,17,23,0.4); transition: background 0.2s; }
+    .reasoning-step:hover { background: rgba(13,17,23,0.7); }
+    .reasoning-step::before { content: ''; position: absolute; left: 16px; top: 0; bottom: 0; width: 2px; background: var(--border); }
+    .reasoning-step:first-child::before { top: 50%; }
+    .reasoning-step:last-child::before { bottom: 50%; }
+    .reasoning-step .step-dot { position: absolute; left: 11px; top: 14px; width: 12px; height: 12px; border-radius: 50%; z-index: 1; border: 2px solid var(--bg-card); }
+    .reasoning-step .step-dot.intent { background: var(--blue); }
+    .reasoning-step .step-dot.routing { background: var(--orange); }
+    .reasoning-step .step-dot.tool-call { background: var(--green); }
+    .reasoning-step .step-dot.tool-result { background: var(--cyan); }
+    .reasoning-step .step-dot.llm-thinking { background: var(--purple); }
+    .reasoning-step .step-dot.delegation { background: var(--pink); }
+    .reasoning-step .step-dot.escalation { background: var(--red); }
+    .reasoning-step .step-dot.outcome { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .reasoning-step .step-dot.error { background: var(--red); box-shadow: 0 0 6px var(--red); }
+    .reasoning-step .step-dot.approval { background: var(--purple); }
+    .step-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .step-type { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 6px; border-radius: 4px; }
+    .step-type.intent { background: rgba(88,166,255,0.15); color: var(--blue); }
+    .step-type.routing { background: rgba(240,136,62,0.15); color: var(--orange); }
+    .step-type.tool-call { background: rgba(63,185,80,0.15); color: var(--green); }
+    .step-type.tool-result { background: rgba(121,192,255,0.15); color: var(--cyan); }
+    .step-type.llm-thinking { background: rgba(188,140,255,0.15); color: var(--purple); }
+    .step-type.delegation { background: rgba(247,120,186,0.15); color: var(--pink); }
+    .step-type.escalation { background: rgba(248,81,73,0.15); color: var(--red); }
+    .step-type.outcome { background: rgba(63,185,80,0.15); color: var(--green); }
+    .step-type.error { background: rgba(248,81,73,0.15); color: var(--red); }
+    .step-type.approval { background: rgba(188,140,255,0.15); color: var(--purple); }
+    .step-time { font-size: 10px; color: var(--text-muted); font-family: 'SF Mono', Consolas, monospace; }
+    .step-source { font-size: 10px; color: var(--text-dim); }
+    .step-summary { font-size: 12px; color: var(--text); font-weight: 500; margin-bottom: 4px; }
+    .step-detail { font-size: 11px; color: var(--text-dim); line-height: 1.5; white-space: pre-wrap; padding: 6px 8px; background: rgba(13,17,23,0.6); border-radius: 4px; border-left: 2px solid var(--border); max-height: 120px; overflow-y: auto; display: none; }
+    .step-detail.expanded { display: block; }
+    .step-toggle { font-size: 10px; color: var(--blue); cursor: pointer; text-decoration: underline; margin-top: 2px; display: inline-block; }
+    .step-duration { font-size: 10px; color: var(--text-muted); margin-left: auto; }
+    .step-confidence { font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 3px; }
+    .step-confidence.high { background: rgba(63,185,80,0.2); color: var(--green); }
+    .step-confidence.medium { background: rgba(227,179,65,0.2); color: #e3b341; }
+    .step-confidence.low { background: rgba(248,81,73,0.2); color: var(--red); }
+    .conv-item { padding: 10px 12px; border-bottom: 1px solid rgba(48,54,61,0.3); cursor: pointer; transition: background 0.15s; border-left: 3px solid transparent; }
+    .conv-item:hover { background: rgba(255,255,255,0.04); }
+    .conv-item.active { background: rgba(88,166,255,0.08); border-left-color: var(--blue); }
+    .conv-item .conv-worker { font-size: 11px; color: var(--blue); font-weight: 600; }
+    .conv-item .conv-msg { font-size: 11px; color: var(--text-dim); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .conv-item .conv-meta { font-size: 10px; color: var(--text-muted); margin-top: 3px; display: flex; gap: 8px; }
     .event-table { width: 100%; border-collapse: collapse; }
     .event-table th { text-align: left; font-size: 11px; color: var(--text-muted); text-transform: uppercase; padding: 8px 10px; border-bottom: 1px solid var(--border); font-weight: 600; }
     .event-table td { padding: 8px 10px; font-size: 12px; border-bottom: 1px solid rgba(48,54,61,0.4); color: var(--text-dim); vertical-align: top; }
@@ -252,17 +299,24 @@
       <!-- ═══ Agent Mind View ═══ -->
       <div class="view" id="view-agent-mind">
         <div class="stats-row">
-          <div class="stat-card"><div class="stat-value blue" id="am-total">0</div><div class="stat-label">Total Events</div></div>
-          <div class="stat-card"><div class="stat-value green" id="am-audit">0</div><div class="stat-label">Audit Events</div></div>
-          <div class="stat-card"><div class="stat-value orange" id="am-workers">0</div><div class="stat-label">Worker Activity</div></div>
-          <div class="stat-card"><div class="stat-value purple" id="am-routines">0</div><div class="stat-label">Routines</div></div>
+          <div class="stat-card"><div class="stat-value blue" id="am-total">0</div><div class="stat-label">Total Traces</div></div>
+          <div class="stat-card"><div class="stat-value green" id="am-conversations">0</div><div class="stat-label">Conversations</div></div>
+          <div class="stat-card"><div class="stat-value orange" id="am-tools">0</div><div class="stat-label">Tool Calls</div></div>
+          <div class="stat-card"><div class="stat-value purple" id="am-avgtime">0ms</div><div class="stat-label">Avg Response</div></div>
         </div>
         <div class="filter-tabs" id="am-filters"></div>
-        <table class="event-table">
-          <thead><tr><th style="width:80px">Time</th><th style="width:70px">Type</th><th>Source</th><th>Details</th><th style="width:60px">Status</th></tr></thead>
-          <tbody id="am-tbody"></tbody>
-        </table>
-        <div id="am-empty" class="empty-state"><div class="empty-icon">🧠</div><div class="empty-text">No events yet. Workers will generate activity automatically.</div></div>
+        <!-- Conversation list + detail split -->
+        <div style="display:grid;grid-template-columns:280px 1fr;gap:12px;margin-top:12px;">
+          <div class="panel" style="max-height:calc(100vh - 280px);overflow-y:auto;">
+            <div class="panel-title">Recent Conversations</div>
+            <div id="am-conversations-list"></div>
+          </div>
+          <div class="panel" style="max-height:calc(100vh - 280px);overflow-y:auto;">
+            <div class="panel-title" id="am-detail-title">Reasoning Chain</div>
+            <div id="am-reasoning-chain"></div>
+            <div id="am-empty" class="empty-state"><div class="empty-icon">🧠</div><div class="empty-text">No reasoning traces yet. Send a message to the agent and the thinking process will appear here.</div></div>
+          </div>
+        </div>
       </div>
 
       <!-- ═══ Neural Core View ═══ -->
@@ -401,13 +455,14 @@ function timeAgo(ts) {
 
 // ── Data Fetching ──
 async function fetchAll() {
-  const [healthR, workersR, routinesR, approvalsR, auditR, memoryR] = await Promise.allSettled([
+  const [healthR, workersR, routinesR, approvalsR, auditR, memoryR, reasoningR] = await Promise.allSettled([
     fetch(`${BASE}/api/health`).then(r => r.json()),
     fetch(`${BASE}/api/workers`).then(r => r.json()),
     fetch(`${BASE}/api/routines`).then(r => r.json()),
     fetch(`${BASE}/api/approvals`).then(r => r.json()),
     fetch(`${BASE}/api/audit`).then(r => r.json()),
     fetch(`${BASE}/api/memory`).then(r => r.json()),
+    fetch(`${BASE}/api/reasoning`).then(r => r.json()),
   ]);
 
   const health = healthR.status === 'fulfilled' ? healthR.value : null;
@@ -416,6 +471,7 @@ async function fetchAll() {
   const approvals = approvalsR.status === 'fulfilled' ? approvalsR.value : null;
   const audit = auditR.status === 'fulfilled' ? auditR.value : null;
   const memory = memoryR.status === 'fulfilled' ? memoryR.value : null;
+  const reasoning = reasoningR.status === 'fulfilled' ? reasoningR.value : null;
 
   if (health) renderHealth(health);
   if (workers) renderWorkers(workers);
@@ -423,7 +479,7 @@ async function fetchAll() {
   if (approvals) renderApprovals(approvals);
   if (audit) renderAudit(audit);
   if (memory) renderMemory(memory);
-  renderAgentMind(workers, routines, approvals, audit);
+  renderAgentMind(reasoning);
   renderTodaysPlan(routines);
   updateGraph(workers);
 
@@ -578,104 +634,138 @@ function renderMemory(data) {
   ` : '<div class="empty-state"><div class="empty-icon">🧠</div><div class="empty-text">No memory entries</div></div>';
 }
 
-// ── Render: Agent Mind (unified event table) ──
-function renderAgentMind(workers, routines, approvals, audit) {
-  const events = [];
+// ── Render: Agent Mind (reasoning trace visualization) ──
+let selectedConvId = null;
 
-  // Audit entries
-  const auditEntries = Array.isArray(audit) ? audit : (audit && (audit.entries || audit.events)) || [];
-  for (const e of auditEntries) {
-    events.push({
-      time: e.timestamp || e.createdAt || e.time,
-      type: 'audit',
-      source: e.worker || e.source || e.user || '—',
-      detail: e.action || e.event || e.message || '—',
-      status: e.status || ''
-    });
+function renderAgentMind(reasoning) {
+  if (!reasoning) {
+    document.getElementById('am-empty').style.display = '';
+    return;
   }
 
-  // Worker activity
-  const workerList = Array.isArray(workers) ? workers : (workers && workers.workers) || [];
-  for (const w of workerList) {
-    const name = w.name || w.id || '—';
-    const toolCount = (w.tools && w.tools.length) || w.toolCount || 0;
-    events.push({
-      time: w.lastActivity || w.updatedAt || w.registeredAt,
-      type: 'worker',
-      source: name,
-      detail: `${WORKER_ICONS[name] || '⚙'} ${WORKER_TIERS[name] || 'worker'} · ${toolCount} tools`,
-      status: w.status || 'active'
-    });
-  }
-
-  // Routine data
-  const routineList = Array.isArray(routines) ? routines : (routines && routines.routines) || [];
-  for (const r of routineList) {
-    events.push({
-      time: r.lastRun || r.updatedAt || r.createdAt,
-      type: 'routine',
-      source: r.name || r.id || '—',
-      detail: `cron: ${r.cron || r.schedule || '—'} · worker: ${r.worker || '—'}`,
-      status: r.status || r.state || 'idle'
-    });
-  }
-
-  // Approval actions
-  const approvalList = Array.isArray(approvals) ? approvals : (approvals && approvals.approvals) || [];
-  for (const a of approvalList) {
-    events.push({
-      time: a.createdAt || a.timestamp,
-      type: 'approval',
-      source: a.worker || a.source || '—',
-      detail: a.title || a.description || a.action || '—',
-      status: a.status || 'pending'
-    });
-  }
-
-  events.sort((a, b) => {
-    const ta = a.time ? new Date(a.time).getTime() : 0;
-    const tb = b.time ? new Date(b.time).getTime() : 0;
-    return tb - ta;
-  });
+  const { traces, conversations, stats } = reasoning;
 
   // Stats
-  document.getElementById('am-total').textContent = events.length;
-  document.getElementById('am-audit').textContent = events.filter(e => e.type === 'audit').length;
-  document.getElementById('am-workers').textContent = events.filter(e => e.type === 'worker').length;
-  document.getElementById('am-routines').textContent = events.filter(e => e.type === 'routine').length;
+  document.getElementById('am-total').textContent = stats.totalTraces || 0;
+  document.getElementById('am-conversations').textContent = stats.totalConversations || 0;
+  document.getElementById('am-tools').textContent = (stats.byType && stats.byType['tool-call']) || 0;
+  document.getElementById('am-avgtime').textContent = stats.avgDurationMs ? `${stats.avgDurationMs}ms` : '—';
 
-  // Filters
-  const types = ['all', ...new Set(events.map(e => e.type))];
-  const counts = {};
-  for (const e of events) counts[e.type] = (counts[e.type] || 0) + 1;
-  counts.all = events.length;
-  document.getElementById('am-filters').innerHTML = types.map(t =>
-    `<button class="filter-tab${t==='all'?' active':''}" data-type="${t}">${t} (${counts[t] || 0})</button>`
-  ).join('');
+  // Type filters
+  const typeLabels = {
+    all: '🔍 All', intent: '🎯 Intent', routing: '🔀 Routing', 'tool-call': '🔧 Tool Call',
+    'tool-result': '📊 Result', 'llm-thinking': '🧠 Thinking', delegation: '📤 Delegation',
+    escalation: '🚨 Escalation', outcome: '✅ Outcome', error: '❌ Error', approval: '👤 Approval'
+  };
+  const types = ['all'];
+  if (stats.byType) {
+    for (const t of Object.keys(stats.byType)) { if (!types.includes(t)) types.push(t); }
+  }
+  document.getElementById('am-filters').innerHTML = types.map(t => {
+    const count = t === 'all' ? (stats.totalTraces || 0) : (stats.byType[t] || 0);
+    const label = typeLabels[t] || t;
+    return `<button class="filter-tab${t==='all'?' active':''}" data-rtype="${t}">${label} (${count})</button>`;
+  }).join('');
+
+  let currentFilter = 'all';
   document.querySelectorAll('#am-filters .filter-tab').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('#am-filters .filter-tab').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      const ft = btn.dataset.type;
-      document.querySelectorAll('#am-tbody tr').forEach(tr => {
-        tr.style.display = (ft === 'all' || tr.dataset.type === ft) ? '' : 'none';
-      });
+      currentFilter = btn.dataset.rtype;
+      renderChain(selectedConvId, currentFilter);
     });
   });
 
-  // Table
-  if (events.length === 0) {
-    document.getElementById('am-tbody').innerHTML = '';
-    document.getElementById('am-empty').style.display = '';
-    return;
+  // Conversations list
+  const convList = document.getElementById('am-conversations-list');
+  if (conversations && conversations.length > 0) {
+    convList.innerHTML = conversations.map((c, i) => {
+      const worker = c.worker || '—';
+      const msg = c.userMessage || 'No message captured';
+      const ts = new Date(c.lastTimestamp).toLocaleTimeString('en-US', { hour12: false });
+      const icon = WORKER_ICONS[worker] || '⚡';
+      return `<div class="conv-item${i===0?' active':''}" data-convid="${c.conversationId}">
+        <div class="conv-worker">${icon} ${escHtml(worker)}</div>
+        <div class="conv-msg">${escHtml(msg)}</div>
+        <div class="conv-meta"><span>${ts}</span><span>${c.traceCount} steps</span></div>
+      </div>`;
+    }).join('');
+
+    // Select first conversation by default
+    if (!selectedConvId && conversations.length > 0) {
+      selectedConvId = conversations[0].conversationId;
+    }
+
+    convList.querySelectorAll('.conv-item').forEach(item => {
+      item.addEventListener('click', () => {
+        convList.querySelectorAll('.conv-item').forEach(i => i.classList.remove('active'));
+        item.classList.add('active');
+        selectedConvId = item.dataset.convid;
+        renderChain(selectedConvId, currentFilter);
+      });
+    });
+  } else {
+    convList.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:12px">No conversations yet</div>';
   }
-  document.getElementById('am-empty').style.display = 'none';
-  document.getElementById('am-tbody').innerHTML = events.slice(0, 100).map(e => {
-    const ts = e.time ? new Date(e.time).toLocaleTimeString('en-US', { hour12: false }) : '--:--:--';
-    const badge = `<span class="evt-badge ${e.type}">${e.type}</span>`;
-    const statusHtml = e.status ? `<span style="font-size:10px;color:var(--text-muted)">${e.status}</span>` : '';
-    return `<tr data-type="${e.type}"><td style="font-family:monospace;font-size:11px;color:var(--text-muted)">${ts}</td><td>${badge}</td><td style="color:var(--text)">${escHtml(e.source)}</td><td>${escHtml(e.detail)}</td><td>${statusHtml}</td></tr>`;
-  }).join('');
+
+  // Render the chain for the selected conversation
+  renderChain(selectedConvId, currentFilter);
+
+  function renderChain(convId, typeFilter) {
+    const chainEl = document.getElementById('am-reasoning-chain');
+    const emptyEl = document.getElementById('am-empty');
+    const titleEl = document.getElementById('am-detail-title');
+
+    let filtered = traces || [];
+    if (convId) {
+      filtered = filtered.filter(t => t.conversationId === convId);
+    }
+    if (typeFilter && typeFilter !== 'all') {
+      filtered = filtered.filter(t => t.type === typeFilter);
+    }
+
+    // Sort chronologically for the chain view (oldest first)
+    filtered.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+    if (filtered.length === 0) {
+      chainEl.innerHTML = '';
+      emptyEl.style.display = '';
+      titleEl.textContent = 'Reasoning Chain';
+      return;
+    }
+
+    emptyEl.style.display = 'none';
+    titleEl.textContent = `Reasoning Chain — ${filtered.length} steps`;
+
+    const typeIcons = {
+      intent: '🎯', routing: '🔀', 'tool-call': '🔧', 'tool-result': '📊',
+      'llm-thinking': '🧠', delegation: '📤', escalation: '🚨', outcome: '✅',
+      error: '❌', approval: '👤'
+    };
+
+    chainEl.innerHTML = filtered.map((t, idx) => {
+      const ts = new Date(t.timestamp).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const icon = typeIcons[t.type] || '•';
+      const confHtml = t.confidence ? `<span class="step-confidence ${t.confidence}">${t.confidence}</span>` : '';
+      const durHtml = t.durationMs ? `<span class="step-duration">${t.durationMs}ms</span>` : '';
+      const sourceIcon = WORKER_ICONS[t.source] || WORKER_ICONS[t.metadata?.workerSource] || '⚙';
+      const detailId = `detail-${idx}`;
+
+      return `<div class="reasoning-step">
+        <div class="step-dot ${t.type}"></div>
+        <div class="step-header">
+          <span class="step-type ${t.type}">${icon} ${t.type}</span>
+          <span class="step-time">${ts}</span>
+          <span class="step-source">${sourceIcon} ${escHtml(t.source)}</span>
+          ${confHtml}${durHtml}
+        </div>
+        <div class="step-summary">${escHtml(t.summary)}</div>
+        ${t.detail ? `<span class="step-toggle" onclick="var d=document.getElementById('${detailId}');d.classList.toggle('expanded');this.textContent=d.classList.contains('expanded')?'collapse':'expand'">expand</span>
+        <div class="step-detail" id="${detailId}">${escHtml(t.detail)}</div>` : ''}
+      </div>`;
+    }).join('');
+  }
 }
 
 // ── Render: Today's Plan ──

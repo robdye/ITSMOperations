@@ -1,0 +1,252 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.6",
+  "fallbackText": "This card requires Adaptive Card version 1.6 or higher. Please update your client to view the Change Request form.",
+  "msTeams": {
+    "width": "full"
+  },
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "📋 Request for Change (RFC)",
+      "weight": "bolder",
+      "size": "large",
+      "style": "heading",
+      "spacing": "none"
+    },
+    {
+      "type": "TextBlock",
+      "text": "Complete the form below to submit a new change request for CAB review.",
+      "wrap": true,
+      "spacing": "small",
+      "isSubtle": true
+    },
+    {
+      "type": "TextBlock",
+      "text": "General Information",
+      "weight": "bolder",
+      "size": "medium",
+      "spacing": "large",
+      "separator": true
+    },
+    {
+      "type": "Input.Text",
+      "id": "short_description",
+      "label": "Short Description",
+      "placeholder": "Brief summary of the change",
+      "isRequired": true,
+      "errorMessage": "Short description is required",
+      "maxLength": 160,
+      "spacing": "small"
+    },
+    {
+      "type": "Input.Text",
+      "id": "description",
+      "label": "Description",
+      "placeholder": "Detailed description of the change, including scope and impact",
+      "isRequired": true,
+      "errorMessage": "Description is required",
+      "isMultiline": true,
+      "spacing": "small"
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "medium",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "Input.ChoiceSet",
+              "id": "category",
+              "label": "Category",
+              "isRequired": true,
+              "errorMessage": "Category is required",
+              "style": "compact",
+              "choices": [
+                { "title": "Hardware", "value": "hardware" },
+                { "title": "Software", "value": "software" },
+                { "title": "Network", "value": "network" },
+                { "title": "Application", "value": "application" },
+                { "title": "Other", "value": "other" }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "Input.ChoiceSet",
+              "id": "priority",
+              "label": "Priority",
+              "isRequired": true,
+              "errorMessage": "Priority is required",
+              "style": "compact",
+              "choices": [
+                { "title": "1 - Critical", "value": "1" },
+                { "title": "2 - High", "value": "2" },
+                { "title": "3 - Moderate", "value": "3" },
+                { "title": "4 - Low", "value": "4" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "small",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "Input.ChoiceSet",
+              "id": "risk",
+              "label": "Risk Level",
+              "isRequired": true,
+              "errorMessage": "Risk level is required",
+              "style": "compact",
+              "choices": [
+                { "title": "High", "value": "high" },
+                { "title": "Moderate", "value": "moderate" },
+                { "title": "Low", "value": "low" }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "Input.ChoiceSet",
+              "id": "type",
+              "label": "Change Type",
+              "isRequired": true,
+              "errorMessage": "Change type is required",
+              "style": "compact",
+              "choices": [
+                { "title": "Normal", "value": "normal" },
+                { "title": "Standard", "value": "standard" },
+                { "title": "Emergency", "value": "emergency" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Input.Text",
+      "id": "assignment_group",
+      "label": "Assignment Group",
+      "placeholder": "e.g. Network Operations, Server Team",
+      "isRequired": true,
+      "errorMessage": "Assignment group is required",
+      "spacing": "small"
+    },
+    {
+      "type": "TextBlock",
+      "text": "Planning",
+      "weight": "bolder",
+      "size": "medium",
+      "spacing": "large",
+      "separator": true
+    },
+    {
+      "type": "Input.Text",
+      "id": "justification",
+      "label": "Business Justification",
+      "placeholder": "Why is this change needed? What business value does it deliver?",
+      "isRequired": true,
+      "errorMessage": "Justification is required",
+      "isMultiline": true,
+      "spacing": "small"
+    },
+    {
+      "type": "Input.Text",
+      "id": "implementation_plan",
+      "label": "Implementation Plan",
+      "placeholder": "Step-by-step plan for implementing the change",
+      "isRequired": true,
+      "errorMessage": "Implementation plan is required",
+      "isMultiline": true,
+      "spacing": "small"
+    },
+    {
+      "type": "Input.Text",
+      "id": "rollback_plan",
+      "label": "Rollback Plan",
+      "placeholder": "Steps to revert the change if issues occur",
+      "isRequired": true,
+      "errorMessage": "Rollback plan is required",
+      "isMultiline": true,
+      "spacing": "small"
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "medium",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "Input.Date",
+              "id": "planned_start_date",
+              "label": "Planned Start Date",
+              "isRequired": true,
+              "errorMessage": "Planned start date is required"
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "Input.Date",
+              "id": "planned_end_date",
+              "label": "Planned End Date",
+              "isRequired": true,
+              "errorMessage": "Planned end date is required"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.Execute",
+      "title": "Submit Change Request",
+      "verb": "createChangeRequest",
+      "style": "positive",
+      "data": {
+        "short_description": "${short_description}",
+        "description": "${description}",
+        "category": "${category}",
+        "priority": "${priority}",
+        "risk": "${risk}",
+        "type": "${type}",
+        "assignment_group": "${assignment_group}",
+        "justification": "${justification}",
+        "implementation_plan": "${implementation_plan}",
+        "rollback_plan": "${rollback_plan}",
+        "planned_start_date": "${planned_start_date}",
+        "planned_end_date": "${planned_end_date}"
+      }
+    },
+    {
+      "type": "Action.Execute",
+      "title": "Cancel",
+      "verb": "cancelForm",
+      "style": "destructive"
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "$schema": "https://schemas.microsoft.com/agents/v1/skill.json",
+  "id": "agent-compliance-dashboard",
+  "name": "Agent Compliance Dashboard",
+  "description": "Scores all Copilot agent packages against organizational policy and NIST CM-8 requirements. Produces a compliance dashboard, audit workbook, and remediation emails.",
+  "version": "1.0.0",
+  "itilPractice": "IT Asset Management",
+  "valueChainActivity": "Improve",
+  "triggers": [
+    {
+      "type": "intent",
+      "patterns": [
+        "agent compliance",
+        "compliance dashboard",
+        "agent audit",
+        "governance score",
+        "policy compliance",
+        "AGP-001"
+      ],
+      "description": "Activates when user mentions agent compliance scoring, governance audits, or policy checks"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "0 6 * * 1",
+      "description": "weekly-compliance-scan — Runs compliance scoring every Monday at 06:00"
+    }
+  ],
+  "actions": [
+    {
+      "name": "run-compliance-scan",
+      "description": "Score all agent packages against AGP-001 and NIST CM-8 requirements",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "scope", "type": "string", "required": false, "description": "Scope: all, department, or specific agent" },
+        { "name": "policyVersion", "type": "string", "required": false, "description": "Policy version to score against (defaults to latest)" }
+      ],
+      "outputs": [
+        { "name": "complianceReport", "type": "object", "description": "Compliance scores and findings for all agents" },
+        { "name": "remediationItems", "type": "array", "description": "Required remediation actions" }
+      ]
+    },
+    {
+      "name": "generate-audit-workbook",
+      "description": "Generate an Excel audit workbook with compliance findings",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "scanId", "type": "string", "required": true, "description": "Compliance scan identifier" }
+      ],
+      "outputs": [
+        { "name": "workbookUrl", "type": "string", "description": "URL to the generated audit workbook" }
+      ]
+    }
+  ],
+  "crossPracticeIntegrations": [
+    { "practice": "IT Asset & Configuration Management", "direction": "receives", "description": "Agent inventory provides package data for compliance scoring" },
+    { "practice": "Change Enablement", "direction": "sends", "description": "Non-compliant agents may trigger remediation change requests" }
+  ],
+  "hitlControls": [
+    { "action": "Remediation enforcement", "level": "write", "reason": "Blocking non-compliant agents requires management approval" },
+    { "action": "Policy exception grant", "level": "write", "reason": "Compliance exceptions require governance board approval" }
+  ],
+  "knowledgeSources": [
+    { "source": "Tenant Agent Inventory", "type": "document", "description": "Agent packages from Package Management API" },
+    { "source": "Agent Governance Policy", "type": "document", "description": "AGP-001 compliance requirements and scoring criteria" },
+    { "source": "NIST CM-8 Controls", "type": "document", "description": "Component inventory requirements" }
+  ]
+}

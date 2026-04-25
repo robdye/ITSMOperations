@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Shift Handover Report</title>
+<style>
+:root{
+  --colorNeutralForeground1:#242424;--colorNeutralForeground2:#616161;--colorNeutralForeground3:#757575;
+  --colorNeutralBackground1:#ffffff;--colorNeutralBackground2:#fafafa;--colorNeutralBackground3:#f5f5f5;
+  --colorNeutralStroke1:#e0e0e0;--colorNeutralStroke2:#e8e8e8;--colorNeutralStroke3:#f0f0f0;
+  --colorBrandBackground:#0f6cbd;--colorBrandForeground1:#0f6cbd;
+  --colorPaletteRedForeground1:#c62828;--colorPaletteRedBackground1:#ffebee;
+  --colorPaletteYellowForeground1:#f57f17;--colorPaletteYellowBackground1:#fff8e1;
+  --colorPaletteGreenForeground1:#2e7d32;--colorPaletteGreenBackground1:#e8f5e9;
+  --colorPaletteBlueForeground1:#1565c0;--colorPaletteBlueBackground1:#e3f2fd;
+  --borderRadiusMedium:8px;--borderRadiusLarge:12px;
+  --fontFamilyBase:'Segoe UI',system-ui,-apple-system,sans-serif;
+  --fontSizeBase200:12px;--fontSizeBase300:14px;--fontSizeBase400:16px;
+  --fontWeightSemibold:600;--fontWeightBold:700;
+  --shadow4:0 2px 4px rgba(0,0,0,.04);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--fontFamilyBase);background:var(--colorNeutralBackground3);color:var(--colorNeutralForeground1);padding:20px;line-height:1.5}
+.widget{background:var(--colorNeutralBackground1);border-radius:var(--borderRadiusLarge);border:1px solid var(--colorNeutralStroke1);overflow:hidden;max-width:960px;margin:0 auto}
+.widget-header{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid var(--colorNeutralStroke3)}
+.widget-icon{width:36px;height:36px;border-radius:var(--borderRadiusMedium);background:var(--colorPaletteBlueBackground1);display:flex;align-items:center;justify-content:center;font-size:18px}
+.widget-title h2{font-size:var(--fontSizeBase400);font-weight:var(--fontWeightSemibold);color:var(--colorNeutralForeground1)}
+.widget-title p{font-size:var(--fontSizeBase200);color:var(--colorNeutralForeground2)}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--colorNeutralStroke3);border-bottom:1px solid var(--colorNeutralStroke3)}
+.kpi{background:var(--colorNeutralBackground1);padding:16px 12px;text-align:center}
+.kpi .val{font-size:24px;font-weight:var(--fontWeightBold);line-height:1.2}
+.kpi .lbl{font-size:11px;color:var(--colorNeutralForeground2);margin-top:2px;text-transform:uppercase;letter-spacing:.3px}
+.sections{padding:12px 16px;display:flex;flex-direction:column;gap:12px}
+.section{background:var(--colorNeutralBackground2);border:1px solid var(--colorNeutralStroke2);border-radius:10px;padding:14px 16px}
+.section-title{font-size:13px;font-weight:var(--fontWeightSemibold);color:var(--colorNeutralForeground1);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.section-title .ct{background:var(--colorNeutralStroke1);color:var(--colorNeutralForeground2);padding:1px 8px;border-radius:10px;font-size:10px;font-weight:var(--fontWeightSemibold)}
+.stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-bottom:10px}
+.stat{background:var(--colorNeutralBackground1);border:1px solid var(--colorNeutralStroke2);border-radius:var(--borderRadiusMedium);padding:10px 12px;text-align:center}
+.stat .stat-val{font-size:20px;font-weight:var(--fontWeightBold);line-height:1.2}
+.stat .stat-lbl{font-size:10px;color:var(--colorNeutralForeground2);text-transform:uppercase;letter-spacing:.3px;margin-top:2px}
+.item{border:1px solid var(--colorNeutralStroke2);border-radius:var(--borderRadiusMedium);padding:10px 12px;margin-bottom:6px;background:var(--colorNeutralBackground1);font-size:var(--fontSizeBase200);transition:border-color .15s,box-shadow .15s}
+.item:last-child{margin-bottom:0}
+.item:hover,.item:focus-visible{border-color:var(--colorBrandForeground1);box-shadow:var(--shadow4);outline:none}
+.item strong{display:block;font-size:13px;margin-bottom:2px}
+.item p{color:var(--colorNeutralForeground3);font-size:11px}
+.badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:var(--fontWeightSemibold);margin-left:6px}
+.badge-p1{background:var(--colorPaletteRedBackground1);color:var(--colorPaletteRedForeground1)}
+.badge-p2{background:var(--colorPaletteYellowBackground1);color:var(--colorPaletteYellowForeground1)}
+.badge-p3,.badge-p4,.badge-p5{background:var(--colorPaletteBlueBackground1);color:var(--colorPaletteBlueForeground1)}
+.badge-open{background:var(--colorPaletteYellowBackground1);color:var(--colorPaletteYellowForeground1)}
+.badge-resolved,.badge-closed,.badge-implemented{background:var(--colorPaletteGreenBackground1);color:var(--colorPaletteGreenForeground1)}
+.sla-bar{display:flex;height:24px;border-radius:var(--borderRadiusMedium);overflow:hidden;margin-bottom:8px;border:1px solid var(--colorNeutralStroke2)}
+.sla-bar div{display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:var(--fontWeightSemibold);color:#fff;min-width:28px;transition:width .4s ease}
+.sla-met{background:var(--colorPaletteGreenForeground1)}
+.sla-risk{background:var(--colorPaletteYellowForeground1)}
+.sla-breached{background:var(--colorPaletteRedForeground1)}
+.sla-legend{display:flex;gap:16px;font-size:11px;color:var(--colorNeutralForeground2);flex-wrap:wrap}
+.sla-legend span::before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:middle}
+.sla-legend .leg-met::before{background:var(--colorPaletteGreenForeground1)}
+.sla-legend .leg-risk::before{background:var(--colorPaletteYellowForeground1)}
+.sla-legend .leg-breached::before{background:var(--colorPaletteRedForeground1)}
+.list-item{display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid var(--colorNeutralStroke3);font-size:var(--fontSizeBase200);color:var(--colorNeutralForeground1)}
+.list-item:last-child{border-bottom:none}
+.list-bullet{flex-shrink:0;margin-top:5px;width:6px;height:6px;border-radius:50%;background:var(--colorBrandForeground1)}
+.timeline-item{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--colorNeutralStroke3);font-size:var(--fontSizeBase200)}
+.timeline-item:last-child{border-bottom:none}
+.tl-time{flex-shrink:0;width:48px;font-weight:var(--fontWeightSemibold);color:var(--colorNeutralForeground2);font-size:11px;padding-top:2px}
+.tl-dot{flex-shrink:0;width:10px;height:10px;border-radius:50%;margin-top:4px}
+.tl-dot-critical{background:var(--colorPaletteRedForeground1)}
+.tl-dot-warning{background:var(--colorPaletteYellowForeground1)}
+.tl-dot-info{background:var(--colorBrandForeground1)}
+.tl-dot-normal{background:var(--colorPaletteGreenForeground1)}
+.tl-text{flex:1;color:var(--colorNeutralForeground1)}
+.footer{padding:10px 16px;border-top:1px solid var(--colorNeutralStroke3);text-align:right;font-size:10px;color:#bdbdbd}
+@media(max-width:640px){
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .stat-row{grid-template-columns:repeat(2,1fr)}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:0.01ms!important;animation-iteration-count:1!important;transition-duration:0.01ms!important}
+}
+</style>
+</head>
+<body>
+<div class="widget" role="main" aria-label="Shift Handover Report">
+  <div class="widget-header">
+    <div class="widget-icon" aria-hidden="true">🔄</div>
+    <div class="widget-title"><h2>Shift Handover Report</h2><p id="subtitle">Loading…</p></div>
+  </div>
+  <div class="kpis" id="kpis" role="list" aria-label="Key metrics"></div>
+  <div class="sections" id="sections"></div>
+  <div class="footer" id="footer"></div>
+</div>
+<script>
+(function(){
+  var d=window.__TOOL_DATA__||(window.openai&&window.openai.toolOutput)||{};
+  var sp=d.shiftPeriod||{};
+  var inc=d.incidents||{};
+  var chg=d.changes||{};
+  var prb=d.problems||{};
+  var sla=d.slaStatus||{};
+  var ts=d.generatedAt?new Date(d.generatedAt).toLocaleString('en-GB',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+  var sub=(sp.team||'Shift Handover')+(sp.from?' · '+sp.from:'')+(sp.to?' – '+sp.to:'');
+  document.getElementById('subtitle').textContent=sub;
+
+  /* KPIs */
+  var totalInc=(inc.opened||0)+(inc.closed||0);
+  var totalChg=(chg.approved||0)+(chg.rejected||0)+(chg.implemented||0);
+  var totalProb=(prb.new||0)+(prb.updated||0);
+  var slaTotal=(sla.met||0)+(sla.atRisk||0)+(sla.breached||0);
+  document.getElementById('kpis').innerHTML=
+    '<div class="kpi" role="listitem"><div class="val" style="color:var(--colorBrandForeground1)">'+(inc.opened||0)+'</div><div class="lbl">Incidents Opened</div></div>'+
+    '<div class="kpi" role="listitem"><div class="val" style="color:var(--colorPaletteGreenForeground1)">'+(inc.closed||0)+'</div><div class="lbl">Incidents Closed</div></div>'+
+    '<div class="kpi" role="listitem"><div class="val" style="color:var(--colorPaletteRedForeground1)">'+(inc.escalated||0)+'</div><div class="lbl">Escalated</div></div>'+
+    '<div class="kpi" role="listitem"><div class="val" style="color:var(--colorPaletteYellowForeground1)">'+(sla.breached||0)+'</div><div class="lbl">SLA Breached</div></div>';
+
+  /* helper: escape html */
+  function esc(s){var el=document.createElement('span');el.textContent=s||'';return el.innerHTML;}
+  function badgeFor(s){var lc=(s||'').toLowerCase().replace(/\s+/g,'');return '<span class="badge badge-'+lc+'">'+esc(s)+'</span>';}
+  function priBadge(p){var lc=(p||'').toLowerCase().replace(/\s+/g,'');return '<span class="badge badge-'+lc+'">'+esc(p)+'</span>';}
+
+  var html='';
+
+  /* Incidents section */
+  html+='<div class="section" role="region" aria-label="Incidents">';
+  html+='<div class="section-title">🔥 Incidents <span class="ct">'+totalInc+'</span></div>';
+  html+='<div class="stat-row" role="list" aria-label="Incident statistics">';
+  html+='<div class="stat" role="listitem"><div class="stat-val" style="color:var(--colorBrandForeground1)">'+(inc.opened||0)+'</div><div class="stat-lbl">Opened</div></div>';
+  html+='<div class="stat" role="listitem"><div class="stat-val" style="color:var(--colorPaletteGreenForeground1)">'+(inc.closed||0)+'</div><div class="stat-lbl">Closed</div></div>';
+  html+='<div class="stat" role="listitem"><div class="stat-val" style="color:var(--colorPaletteRedForeground1)">'+(inc.escalated||0)+'</div><div class="stat-lbl">Escalated</div></div>';
+  html+='</div>';
+  var items=inc.items||[];
+  for(var i=0;i<items.length;i++){
+    html+='<div class="item" tabindex="0" role="article" aria-label="'+esc(items[i].number)+'">';
+    html+='<strong>'+esc(items[i].number)+priBadge(items[i].priority)+badgeFor(items[i].status)+'</strong>';
+    html+='<p>'+esc(items[i].description)+'</p></div>';
+  }
+  html+='</div>';
+
+  /* Changes section */
+  html+='<div class="section" role="region" aria-label="Changes">';
+  html+='<div class="section-title">📋 Changes <span class="ct">'+totalChg+'</span></div>';
+  html+='<div class="stat-row" role="list" aria-label="Change statistics">';
+  html+='<div class="stat" role="listitem"><div class="stat-val" style="color:var(--colorPaletteGreenForeground1)">'+(chg.approved||0)+'</div><div class="stat-lbl">Approved</div></div>';
+  html+='<div class="stat" role="listitem"><div class="stat-val" style="color:var(--colorPaletteRedForeground1)">'+(chg.rejected||0)+'</div><div class="stat-lbl">Rejected</div></div>';
+  html+='<div class="stat" role="listitem"><div class="stat-val" style="color:var(--colorBrandForeground1)">'+(chg.implemented||0)+'</div><div class="stat-lbl">Implemented</div></div>';
+  html+='</div>';
+  var citems=chg.items||[];
+  for(var i=0;i<citems.length;i++){
+    html+='<div class="item" tabindex="0" role="article" aria-label="'+esc(citems[i].number)+'">';
+    html+='<strong>'+esc(citems[i].number)+badgeFor(citems[i].status)+'</strong>';
+    html+='<p>'+esc(citems[i].description)+'</p></div>';
+  }
+  html+='</div>';
+
+  /* Problems section */
+  html+='<div class="section" role="region" aria-label="Problems">';
+  html+='<div class="section-title">🔍 Problems <span class="ct">'+totalProb+'</span></div>';
+  html+='<div class="stat-row" role="list" aria-label="Problem statistics">';
+  html+='<div class="stat" role="listitem"><div class="stat-val" style="color:var(--colorPaletteYellowForeground1)">'+(prb.new||0)+'</div><div class="stat-lbl">New</div></div>';
+  html+='<div class="stat" role="listitem"><div class="stat-val" style="color:var(--colorBrandForeground1)">'+(prb.updated||0)+'</div><div class="stat-lbl">Updated</div></div>';
+  html+='</div>';
+  var pitems=prb.items||[];
+  for(var i=0;i<pitems.length;i++){
+    html+='<div class="item" tabindex="0" role="article" aria-label="'+esc(pitems[i].number)+'">';
+    html+='<strong>'+esc(pitems[i].number)+badgeFor(pitems[i].status)+'</strong>';
+    html+='<p>'+esc(pitems[i].description)+'</p></div>';
+  }
+  html+='</div>';
+
+  /* SLA Status */
+  html+='<div class="section" role="region" aria-label="SLA Status">';
+  html+='<div class="section-title">📊 SLA Status</div>';
+  if(slaTotal>0){
+    var pMet=Math.round((sla.met||0)/slaTotal*100);
+    var pRisk=Math.round((sla.atRisk||0)/slaTotal*100);
+    var pBreach=Math.round((sla.breached||0)/slaTotal*100);
+    html+='<div class="sla-bar" role="img" aria-label="SLA: '+pMet+'% met, '+pRisk+'% at risk, '+pBreach+'% breached">';
+    if(sla.met)html+='<div class="sla-met" style="width:'+pMet+'%">'+(sla.met)+'</div>';
+    if(sla.atRisk)html+='<div class="sla-risk" style="width:'+pRisk+'%">'+(sla.atRisk)+'</div>';
+    if(sla.breached)html+='<div class="sla-breached" style="width:'+pBreach+'%">'+(sla.breached)+'</div>';
+    html+='</div>';
+    html+='<div class="sla-legend"><span class="leg-met">Met ('+( sla.met||0)+')</span><span class="leg-risk">At Risk ('+(sla.atRisk||0)+')</span><span class="leg-breached">Breached ('+(sla.breached||0)+')</span></div>';
+  } else {
+    html+='<p style="color:var(--colorNeutralForeground3);font-size:12px">No SLA data available.</p>';
+  }
+  html+='</div>';
+
+  /* Key Decisions */
+  var decisions=d.keyDecisions||[];
+  if(decisions.length){
+    html+='<div class="section" role="region" aria-label="Key Decisions">';
+    html+='<div class="section-title">✅ Key Decisions <span class="ct">'+decisions.length+'</span></div>';
+    for(var i=0;i<decisions.length;i++){
+      html+='<div class="list-item" role="listitem"><div class="list-bullet" style="background:var(--colorPaletteGreenForeground1)" aria-hidden="true"></div><div>'+esc(decisions[i])+'</div></div>';
+    }
+    html+='</div>';
+  }
+
+  /* Outstanding Items */
+  var outstanding=d.outstandingItems||[];
+  if(outstanding.length){
+    html+='<div class="section" role="region" aria-label="Outstanding Items">';
+    html+='<div class="section-title">⏳ Outstanding Items <span class="ct">'+outstanding.length+'</span></div>';
+    for(var i=0;i<outstanding.length;i++){
+      html+='<div class="list-item" role="listitem"><div class="list-bullet" style="background:var(--colorPaletteYellowForeground1)" aria-hidden="true"></div><div>'+esc(outstanding[i])+'</div></div>';
+    }
+    html+='</div>';
+  }
+
+  /* Timeline */
+  var tl=d.timeline||[];
+  if(tl.length){
+    html+='<div class="section" role="region" aria-label="Shift Timeline">';
+    html+='<div class="section-title">🕐 Shift Timeline <span class="ct">'+tl.length+'</span></div>';
+    for(var i=0;i<tl.length;i++){
+      var sev=tl[i].severity||'info';
+      html+='<div class="timeline-item" role="listitem">';
+      html+='<div class="tl-time">'+esc(tl[i].time)+'</div>';
+      html+='<div class="tl-dot tl-dot-'+esc(sev)+'" aria-label="Severity: '+esc(sev)+'" role="img"></div>';
+      html+='<div class="tl-text">'+esc(tl[i].event)+'</div>';
+      html+='</div>';
+    }
+    html+='</div>';
+  }
+
+  document.getElementById('sections').innerHTML=html;
+  document.getElementById('footer').textContent='Generated '+ts+' · Shift Handover Report';
+})();
+</script>
+</body>
+</html>

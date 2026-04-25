@@ -1,0 +1,155 @@
+{
+  "$schema": "https://schemas.microsoft.com/agents/v1/skill.json",
+  "id": "monitoring-manager",
+  "name": "Monitoring Manager",
+  "description": "Systematically observes services and service components, identifies and prioritizes infrastructure events, and establishes appropriate responses.",
+  "version": "1.0.0",
+  "itilPractice": "Monitoring and Event Management",
+  "valueChainActivity": "Deliver and Support, Improve",
+  "triggers": [
+    {
+      "type": "intent",
+      "patterns": [
+        "monitor",
+        "alert",
+        "event",
+        "threshold",
+        "availability",
+        "uptime",
+        "health check"
+      ],
+      "description": "Activates when user mentions monitoring, alerts, events, thresholds, availability, or health checks"
+    }
+  ],
+  "actions": [
+    {
+      "name": "query-monitoring-platform",
+      "description": "Interface with monitoring tools (APM, infrastructure, synthetic)",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "platform", "type": "string", "required": false, "description": "Monitoring platform: APM, infrastructure, synthetic" },
+        { "name": "query", "type": "string", "required": false, "description": "Monitoring query or filter" }
+      ],
+      "outputs": [
+        { "name": "monitoringData", "type": "object", "description": "Monitoring data and metrics" }
+      ]
+    },
+    {
+      "name": "process-events",
+      "description": "Filter, correlate, deduplicate, and classify events in real time",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "timeWindow", "type": "string", "required": false, "description": "Event processing time window" },
+        { "name": "severityFilter", "type": "string", "required": false, "description": "Filter by severity level" }
+      ],
+      "outputs": [
+        { "name": "processedEvents", "type": "array", "description": "Filtered and classified events" },
+        { "name": "correlations", "type": "array", "description": "Correlated event groups" }
+      ]
+    },
+    {
+      "name": "manage-alert-rules",
+      "description": "Manage alerting rules, thresholds, and notification routing",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: query, create, update, disable" },
+        { "name": "ruleId", "type": "string", "required": false, "description": "Alert rule identifier" },
+        { "name": "details", "type": "object", "required": false, "description": "Rule configuration (thresholds, recipients, conditions)" }
+      ],
+      "outputs": [
+        { "name": "alertRule", "type": "object", "description": "Alert rule configuration" }
+      ]
+    },
+    {
+      "name": "enrich-event-context",
+      "description": "Resolve CIs, service maps, and business context for event enrichment via CMDB",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "eventId", "type": "string", "required": true, "description": "Event to enrich" }
+      ],
+      "outputs": [
+        { "name": "enrichedEvent", "type": "object", "description": "Event with CI and service context" }
+      ]
+    },
+    {
+      "name": "check-change-schedule",
+      "description": "Cross-reference events with planned changes and maintenance windows",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "eventTime", "type": "string", "required": true, "description": "Event timestamp to check" },
+        { "name": "affectedCi", "type": "string", "required": false, "description": "CI generating the event" }
+      ],
+      "outputs": [
+        { "name": "relatedChanges", "type": "array", "description": "Planned changes that may explain the event" }
+      ]
+    },
+    {
+      "name": "create-incident-from-event",
+      "description": "Automatically create and enrich incident records from exception events",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "eventId", "type": "string", "required": true, "description": "Exception event triggering incident creation" },
+        { "name": "details", "type": "object", "required": false, "description": "Additional incident details" }
+      ],
+      "outputs": [
+        { "name": "incidentId", "type": "string", "description": "Created incident identifier" }
+      ]
+    },
+    {
+      "name": "execute-runbook",
+      "description": "Execute approved automated remediation actions",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "runbookId", "type": "string", "required": true, "description": "Runbook to execute" },
+        { "name": "targetCi", "type": "string", "required": true, "description": "Target CI for remediation" }
+      ],
+      "outputs": [
+        { "name": "executionResult", "type": "object", "description": "Runbook execution outcome" }
+      ]
+    },
+    {
+      "name": "manage-dashboards",
+      "description": "Maintain and publish operational health dashboards",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: view, update, publish" },
+        { "name": "dashboardId", "type": "string", "required": false, "description": "Dashboard identifier" }
+      ],
+      "outputs": [
+        { "name": "dashboard", "type": "object", "description": "Dashboard data and configuration" }
+      ]
+    }
+  ],
+  "crossPracticeIntegrations": [
+    { "practice": "Incident Management", "direction": "sends", "description": "Exception events create incidents; monitoring validates incident resolution" },
+    { "practice": "Change Enablement", "direction": "bidirectional", "description": "Events correlated with changes to detect failures; monitoring validates change success" },
+    { "practice": "Problem Management", "direction": "sends", "description": "Recurring event patterns trigger proactive problem investigation" },
+    { "practice": "Service Level Management", "direction": "sends", "description": "Monitoring data feeds SLA compliance calculations and availability reporting" },
+    { "practice": "IT Asset & Configuration Management", "direction": "receives", "description": "CMDB provides service maps for event correlation and impact assessment" },
+    { "practice": "Capacity and Performance Management", "direction": "sends", "description": "Monitoring provides performance data and trending for capacity planning" },
+    { "practice": "Information Security Management", "direction": "sends", "description": "Security-relevant events routed to security management for investigation" }
+  ],
+  "hitlControls": [
+    { "action": "Alerting rule modifications", "level": "write", "reason": "Changes to thresholds or alerting rules require human review" },
+    { "action": "Auto-remediation approval", "level": "write", "reason": "New automated remediation runbooks require human approval before activation" },
+    { "action": "Major event escalation", "level": "notify", "reason": "Declaring a widespread service-affecting event requires human confirmation" },
+    { "action": "Monitoring suppression", "level": "write", "reason": "Suppressing alerts for extended periods requires human authorization" },
+    { "action": "Event classification overrides", "level": "write", "reason": "Reclassifying event severity levels requires human review" },
+    { "action": "Monitoring coverage changes", "level": "write", "reason": "Adding or removing monitoring for critical services requires human approval" }
+  ],
+  "knowledgeSources": [
+    { "source": "Monitoring Platforms", "type": "api", "description": "APM, infrastructure, and synthetic monitoring data" },
+    { "source": "Event Processing Engine", "type": "api", "description": "Correlated and classified event streams" },
+    { "source": "CMDB", "type": "api", "description": "Service maps and CI context for event enrichment" },
+    { "source": "Change Calendar", "type": "api", "description": "Planned changes and maintenance windows" },
+    { "source": "Runbook Library", "type": "document", "description": "Approved automated remediation procedures" }
+  ]
+}

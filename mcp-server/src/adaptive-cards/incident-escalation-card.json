@@ -1,0 +1,164 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.6",
+  "fallbackText": "This card requires Adaptive Card version 1.6 or higher. Please update your client to view the Incident Escalation form.",
+  "msTeams": {
+    "width": "full"
+  },
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "🚨 Incident Escalation",
+      "weight": "bolder",
+      "size": "large",
+      "style": "heading",
+      "spacing": "none"
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "medium",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "${incident_number}",
+              "weight": "bolder",
+              "size": "medium",
+              "spacing": "none"
+            },
+            {
+              "type": "TextBlock",
+              "text": "${incident_title}",
+              "wrap": true,
+              "spacing": "none"
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "Priority",
+              "isSubtle": true,
+              "horizontalAlignment": "right",
+              "spacing": "none"
+            },
+            {
+              "type": "TextBlock",
+              "text": "${current_priority}",
+              "weight": "bolder",
+              "size": "large",
+              "color": "${priority_color}",
+              "horizontalAlignment": "right",
+              "spacing": "none"
+            },
+            {
+              "type": "TextBlock",
+              "text": "Age: ${age}",
+              "isSubtle": true,
+              "horizontalAlignment": "right",
+              "spacing": "none"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "FactSet",
+      "spacing": "medium",
+      "separator": true,
+      "facts": [
+        { "title": "Assigned To", "value": "${assigned_to}" },
+        { "title": "Assignment Group", "value": "${assignment_group}" },
+        { "title": "SLA Status", "value": "${sla_status}" },
+        { "title": "SLA Breach In", "value": "${sla_breach_in}" },
+        { "title": "Impact", "value": "${impact}" },
+        { "title": "Urgency", "value": "${urgency}" }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "Escalation Details",
+      "weight": "bolder",
+      "size": "medium",
+      "spacing": "large",
+      "separator": true
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "small",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "Input.ChoiceSet",
+              "id": "escalation_type",
+              "label": "Escalation Type",
+              "isRequired": true,
+              "errorMessage": "Escalation type is required",
+              "style": "compact",
+              "choices": [
+                { "title": "Functional", "value": "functional" },
+                { "title": "Hierarchical", "value": "hierarchical" },
+                { "title": "Major Incident", "value": "major_incident" }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "Input.ChoiceSet",
+              "id": "target_priority",
+              "label": "Target Priority",
+              "isRequired": true,
+              "errorMessage": "Target priority is required",
+              "style": "compact",
+              "choices": [
+                { "title": "P1 - Critical", "value": "1" },
+                { "title": "P2 - High", "value": "2" },
+                { "title": "P3 - Medium", "value": "3" },
+                { "title": "P4 - Low", "value": "4" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Input.Text",
+      "id": "escalation_reason",
+      "label": "Escalation Reason",
+      "placeholder": "Explain why this incident requires escalation, including business impact and urgency",
+      "isRequired": true,
+      "errorMessage": "Escalation reason is required",
+      "isMultiline": true,
+      "spacing": "small"
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.Execute",
+      "title": "Escalate Incident",
+      "verb": "escalateIncident",
+      "style": "positive",
+      "data": {
+        "incident_number": "${incident_number}",
+        "incident_sys_id": "${incident_sys_id}",
+        "escalation_type": "${escalation_type}",
+        "target_priority": "${target_priority}",
+        "escalation_reason": "${escalation_reason}"
+      }
+    }
+  ]
+}

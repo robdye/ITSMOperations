@@ -1,0 +1,114 @@
+{
+  "$schema": "https://schemas.microsoft.com/agents/v1/skill.json",
+  "id": "shift-handover",
+  "name": "Shift Handover",
+  "description": "Generates structured shift handover reports covering all ITSM activity during a shift period, ensuring continuity of operations across team rotations.",
+  "version": "1.0.0",
+  "itilPractice": "Workforce and Talent Management",
+  "valueChainActivity": "Deliver and Support",
+  "triggers": [
+    {
+      "type": "intent",
+      "patterns": [
+        "handover",
+        "shift",
+        "end of shift",
+        "handoff",
+        "shift report",
+        "shift summary",
+        "shift change",
+        "passing the baton",
+        "outgoing shift",
+        "incoming shift",
+        "shift brief"
+      ],
+      "description": "Activates when user mentions shift handover, end of shift, or team handoff"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "0 6,14,22 * * *",
+      "description": "shift-auto-handover — Generates handover reports at standard shift boundaries (06:00, 14:00, 22:00)"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "0 */8 * * *",
+      "description": "shift-activity-digest — Compiles ITSM activity digest every 8 hours"
+    }
+  ],
+  "actions": [
+    {
+      "name": "generate-handover-report",
+      "description": "Generate a comprehensive shift handover report covering incidents, changes, problems, and outstanding actions",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "shiftPeriod", "type": "string", "required": false, "description": "Shift period to cover (e.g., 'last 8 hours', 'since 06:00')" },
+        { "name": "team", "type": "string", "required": false, "description": "Team or assignment group for the handover" },
+        { "name": "includeCategories", "type": "array", "required": false, "description": "ITSM categories to include (incidents, changes, problems, SLAs)" }
+      ],
+      "outputs": [
+        { "name": "handoverReport", "type": "object", "description": "Structured handover report with all activity summaries" },
+        { "name": "outstandingActions", "type": "array", "description": "List of actions requiring follow-up by incoming shift" }
+      ]
+    },
+    {
+      "name": "get-shift-activity",
+      "description": "Query all ITSM activity within a specified time window",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "startTime", "type": "string", "required": true, "description": "Start of the activity window (ISO 8601)" },
+        { "name": "endTime", "type": "string", "required": false, "description": "End of the activity window (defaults to now)" }
+      ],
+      "outputs": [
+        { "name": "incidents", "type": "array", "description": "Incidents created, updated, or resolved during the window" },
+        { "name": "changes", "type": "array", "description": "Changes submitted, approved, or implemented during the window" },
+        { "name": "problems", "type": "array", "description": "Problems created or updated during the window" }
+      ]
+    },
+    {
+      "name": "flag-handover-item",
+      "description": "Flag a specific item as requiring attention from the incoming shift",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "recordType", "type": "string", "required": true, "description": "Type of record (incident, change, problem)" },
+        { "name": "recordId", "type": "string", "required": true, "description": "Record identifier" },
+        { "name": "notes", "type": "string", "required": true, "description": "Handover notes for the incoming team" }
+      ],
+      "outputs": [
+        { "name": "flagId", "type": "string", "description": "Handover flag tracking identifier" }
+      ]
+    },
+    {
+      "name": "acknowledge-handover",
+      "description": "Incoming shift acknowledges receipt of the handover report",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "handoverId", "type": "string", "required": true, "description": "Handover report identifier" },
+        { "name": "acknowledgedBy", "type": "string", "required": true, "description": "Name or ID of the person acknowledging" }
+      ],
+      "outputs": [
+        { "name": "acknowledgement", "type": "object", "description": "Acknowledgement record with timestamp" }
+      ]
+    }
+  ],
+  "crossPracticeIntegrations": [
+    { "practice": "Incident Management", "direction": "receives", "description": "Collects incident activity for handover summaries" },
+    { "practice": "Change Enablement", "direction": "receives", "description": "Collects change activity and pending approvals for handover" },
+    { "practice": "Problem Management", "direction": "receives", "description": "Collects problem investigation updates for handover" },
+    { "practice": "Service Level Management", "direction": "receives", "description": "Reports SLA breaches and at-risk items in handover" },
+    { "practice": "Monitoring and Event Management", "direction": "receives", "description": "Summarizes monitoring alerts and events during shift" }
+  ],
+  "hitlControls": [
+    { "action": "Handover acknowledgement", "level": "write", "reason": "Incoming shift must formally acknowledge receipt of handover" },
+    { "action": "Escalation carry-forward", "level": "notify", "reason": "Active escalations must be explicitly accepted by incoming team" }
+  ],
+  "knowledgeSources": [
+    { "source": "ServiceNow Activity Log", "type": "api", "description": "All ITSM record changes within the shift period" },
+    { "source": "Monitoring Platform", "type": "api", "description": "Alert and event data for the shift period" },
+    { "source": "Shift Schedule", "type": "api", "description": "On-call rosters and shift rotation data" },
+    { "source": "Teams Channel Activity", "type": "api", "description": "IT Operations channel messages during shift" }
+  ]
+}

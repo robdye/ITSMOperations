@@ -30,11 +30,20 @@ import { getTraces, getConversations, getReasoningStats } from './reasoning-trac
 import { isVoiceEnabled } from './voice/voiceGate';
 import { initCosmosStore } from './cosmos-store';
 import { resolveSecrets } from './secret-resolver';
-import { initServiceBus, closeServiceBus } from './service-bus';
+import { initServiceBus, closeServiceBus, getServiceBusStatus } from './service-bus';
 import { createA2AHandler, getDiscoveryManifest } from './connected-agents';
-import { initRedis, closeRedis } from './redis-store';
+import { initRedis, closeRedis, getRedisStatus } from './redis-store';
 import { handleApprovalCallback, cancelAllPendingApprovals } from './teams-approvals';
-import { handleFlowCallback } from './power-automate';
+import { handleFlowCallback, getPowerAutomateStatus } from './power-automate';
+import { trackEvent, trackWorkerRouting, getKqlTemplates } from './log-analytics';
+import { setupConnection as setupGraphConnector, getConnectorStatus } from './graph-connector';
+import { getGraphMailStatus } from './graph-mail';
+import { getPlannerStatus } from './planner-tasks';
+import { getSharePointStatus } from './sharepoint-docs';
+import { isApimEnabled, getApimStatus, getProxiedEndpoint } from './apim-gateway';
+import { getComputerUseStatus } from './computer-use';
+import { getTuningStatus, createTuningDataset, extractResolvedIncidents, extractResolvedProblems } from './copilot-tuning';
+import { isFoundryEnabled, getFoundryStatus } from './foundry-agents';
 
 console.log(`ITSM Operations Digital Worker`);
 
@@ -82,41 +91,83 @@ server.get('/api/health', (_req: Request, res: Response) => {
   });
 });
 
+// Comprehensive platform status — all integrated services
+server.get('/api/platform-status', (_req: Request, res: Response) => {
+  res.json({
+    timestamp: new Date().toISOString(),
+    services: {
+      foundry: getFoundryStatus(),
+      serviceBus: getServiceBusStatus(),
+      redis: getRedisStatus(),
+      graphMail: getGraphMailStatus(),
+      planner: getPlannerStatus(),
+      sharepoint: getSharePointStatus(),
+      graphConnector: getConnectorStatus(),
+      powerAutomate: getPowerAutomateStatus(),
+      apim: getApimStatus(),
+      computerUse: getComputerUseStatus(),
+      copilotTuning: getTuningStatus(),
+    },
+    kqlTemplates: Object.keys(getKqlTemplates()),
+  });
+});
+
 // Voice page
 server.get('/voice', (_req: Request, res: Response) => {
   res.sendFile(path.join(__dirname, 'voice', 'voice.html'));
 });
 
-// Avatar configuration — returns Speech key/region and avatar settings for client-side WebRTC
+// Avatar configuration — returns Entra auth token and avatar settings for client-side WebRTC
+// Uses custom subdomain + Managed Identity (production) or az login (dev) — no subscription key needed
 server.get('/api/voice/avatar-config', async (_req: Request, res: Response) => {
-  const speechKey = process.env.AZURE_SPEECH_KEY || '';
   const speechRegion = process.env.AZURE_SPEECH_REGION || '';
+  const speechEndpoint = process.env.AZURE_SPEECH_ENDPOINT || '';
   const avatarCharacter = process.env.AVATAR_CHARACTER || 'lisa';
   const avatarStyle = process.env.AVATAR_STYLE || 'casual-sitting';
 
-  if (!speechKey || !speechRegion) {
-    res.status(200).json({ enabled: false, reason: 'AZURE_SPEECH_KEY or AZURE_SPEECH_REGION not configured' });
+  if (!speechRegion) {
+    res.status(200).json({ enabled: false, reason: 'AZURE_SPEECH_REGION not configured' });
     return;
   }
 
-  // Fetch ICE relay token from Azure Speech service
   try {
-    const iceRes = await fetch(
-      `https://${speechRegion}.tts.speech.microsoft.com/cognitiveservices/avatar/relay/token/v1`,
-      { headers: { 'Ocp-Apim-Subscription-Key': speechKey } }
-    );
+    // Get Entra token for Cognitive Services via Managed Identity (no key required)
+    const tokenResponse = await credential.getToken('https://cognitiveservices.azure.com/.default');
+    if (!tokenResponse?.token) {
+      res.status(200).json({ enabled: false, reason: 'Failed to acquire Entra token for Speech service' });
+      return;
+    }
+    const entraToken = tokenResponse.token;
+
+    // Use custom subdomain endpoint (required when disableLocalAuth=true)
+    // Falls back to regional endpoint if no custom domain configured
+    const baseUrl = speechEndpoint
+      ? speechEndpoint.replace(/\/$/, '')
+      : `https://${speechRegion}.api.cognitive.microsoft.com`;
+
+    // Fetch ICE relay token using Entra Bearer token via custom domain
+    const iceUrl = speechEndpoint
+      ? `${baseUrl}/tts/cognitiveservices/avatar/relay/token/v1`
+      : `https://${speechRegion}.tts.speech.microsoft.com/cognitiveservices/avatar/relay/token/v1`;
+    const iceRes = await fetch(iceUrl, { headers: { Authorization: `Bearer ${entraToken}` } });
     if (!iceRes.ok) {
-      res.status(200).json({ enabled: false, reason: `ICE token fetch failed: ${iceRes.status}` });
+      const body = await iceRes.text();
+      res.status(200).json({ enabled: false, reason: `ICE token fetch failed (${iceRes.status}): ${body.slice(0, 100)}` });
       return;
     }
     const iceData = await iceRes.json();
 
-    // Also issue a short-lived auth token so the client doesn't need the key
+    // Issue a short-lived Speech auth token using Entra Bearer token
     const tokenRes = await fetch(
-      `https://${speechRegion}.api.cognitive.microsoft.com/sts/v1.0/issueToken`,
-      { method: 'POST', headers: { 'Ocp-Apim-Subscription-Key': speechKey, 'Content-Length': '0' } }
+      `${baseUrl}/sts/v1.0/issueToken`,
+      { method: 'POST', headers: { Authorization: `Bearer ${entraToken}`, 'Content-Length': '0' } }
     );
     const authToken = tokenRes.ok ? await tokenRes.text() : '';
+
+    if (!authToken) {
+      res.status(200).json({ enabled: false, reason: 'Failed to issue Speech auth token via Entra' });
+      return;
+    }
 
     res.status(200).json({
       enabled: true,
@@ -245,9 +296,34 @@ server.get('/mission-control', (_req: Request, res: Response) => {
   res.sendFile(path.join(__dirname, 'mission-control.html'));
 });
 
+// Tuning pipeline endpoints
+server.post('/api/tuning/extract', async (req: Request, res: Response) => {
+  try {
+    const months = req.body?.months || 12;
+    const [incidents, problems] = await Promise.all([
+      extractResolvedIncidents(months),
+      extractResolvedProblems(months),
+    ]);
+    const allExamples = [...incidents, ...problems];
+    const dataset = await createTuningDataset();
+    res.status(200).json({
+      dataset,
+      preview: allExamples.slice(0, 3),
+      totalExamples: allExamples.length,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Tuning extraction failed', message: err.message });
+  }
+});
+
+server.get('/api/tuning/status', (_req: Request, res: Response) => {
+  const status = getTuningStatus();
+  res.status(200).json(status);
+});
+
 // Apply JWT auth middleware for routes below — skip public routes
 server.use((req, res, next) => {
-  const publicPaths = ['/api/health', '/api/voice/status', '/api/voice/avatar-config', '/voice', '/api/scheduled', '/api/workers', '/api/approvals', '/api/approvals/callback', '/api/routines', '/api/audit', '/api/memory', '/api/reasoning', '/mission-control', '/api/a2a/message', '/api/a2a/discover', '/api/flows/callback'];
+  const publicPaths = ['/api/health', '/api/platform-status', '/api/voice/status', '/api/voice/avatar-config', '/voice', '/api/scheduled', '/api/workers', '/api/approvals', '/api/approvals/callback', '/api/routines', '/api/audit', '/api/memory', '/api/reasoning', '/mission-control', '/api/a2a/message', '/api/a2a/discover', '/api/flows/callback', '/api/tuning/extract', '/api/tuning/status'];
   if (publicPaths.some(p => req.path === p)) {
     return next();
   }
@@ -312,6 +388,12 @@ httpServer.listen(port, host, async () => {
 
   // Initialize Azure Service Bus pub/sub messaging (falls back to local dispatch if not configured)
   await initServiceBus();
+
+  // Initialize Graph Connector for M365 search indexing (non-blocking)
+  setupGraphConnector().then(ok => {
+    if (ok) console.log('  ✓ Microsoft Graph Connector initialized');
+    else console.log('  ⚠ Graph Connector not configured (M365 search indexing disabled)');
+  }).catch(err => console.warn('  ⚠ Graph Connector init failed:', (err as Error).message));
 
   console.log(`\n  ITSM Operations Digital Worker listening on ${host}:${port}`);
   console.log(`  Health:    http://${host}:${port}/api/health`);

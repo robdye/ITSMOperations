@@ -1,0 +1,122 @@
+{
+    "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
+    "schema_version": "v2.4",
+    "name_for_human": "ITSM Incident Management",
+    "name_for_model": "itsm_incident",
+    "description_for_human": "Incident management: create, update, and track incidents with priority dashboards.",
+    "description_for_model": "Use for ServiceNow incident management: creating, updating, querying incidents, viewing incident dashboards, and checking incidents for configuration items.",
+    "logo_url": "https://itsm-digital-worker.graycoast-8df9ee76.eastus.azurecontainerapps.io/assets/itsm-logo.png",
+    "contact_email": "itops@absx68251802.onmicrosoft.com",
+    "legal_info_url": "https://absx68251802.sharepoint.com/sites/itsm-operations/legal",
+    "namespace": "itsm_incident",
+    "functions": [
+        { "name": "show-incident-dashboard", "description": "Display the Incident Dashboard with all active incidents by priority, with clickable ServiceNow links." },
+        { "name": "get-incidents", "description": "Query ServiceNow incidents by state, priority, category, or assignment group." },
+        { "name": "create-incident", "description": "Create a new incident in ServiceNow." },
+        { "name": "update-incident", "description": "Update an existing incident in ServiceNow." },
+        { "name": "get-incidents-for-ci", "description": "Get active incidents for a Configuration Item to assess impact on planned changes." }
+    ],
+    "runtimes": [
+        {
+            "type": "RemoteMCPServer",
+            "run_for_functions": [
+                "show-incident-dashboard", "get-incidents", "create-incident",
+                "update-incident", "get-incidents-for-ci"
+            ],
+            "spec": {
+                "url": "${{CHANGE_MCP_ENDPOINT}}",
+                "headers": {
+                    "x-api-key": "${{MCP_API_KEY}}"
+                },
+                "mcp_tool_description": {
+                    "tools": [
+                        {
+                            "name": "show-incident-dashboard",
+                            "description": "Display the Incident Dashboard with all active incidents by priority, with clickable ServiceNow links.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "state": { "type": "string", "description": "Filter by state" },
+                                    "priority": { "type": "string", "description": "Filter by priority: 1-Critical, 2-High, 3-Moderate, 4-Low" },
+                                    "category": { "type": "string", "description": "Filter by category" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/incident-dashboard.html",
+                                "openai/toolInvocation/invoking": "Loading incident dashboard…",
+                                "openai/toolInvocation/invoked": "Incidents ready.",
+                                "openai/widgetAccessible": true
+                            }
+                        },
+                        {
+                            "name": "get-incidents",
+                            "description": "Query ServiceNow incidents by state, priority, category, or assignment group.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "state": { "type": "string", "description": "Filter by state" },
+                                    "priority": { "type": "string", "description": "Filter by priority" },
+                                    "category": { "type": "string", "description": "Filter by category" },
+                                    "assignment_group": { "type": "string", "description": "Filter by assignment group" },
+                                    "limit": { "type": "number", "description": "Max results (default 20)" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "create-incident",
+                            "description": "Create a new incident in ServiceNow.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "data": { "type": "string", "description": "JSON object of incident fields" }
+                                },
+                                "required": ["data"],
+                                "additionalProperties": false
+                            }
+                        },
+                        {
+                            "name": "update-incident",
+                            "description": "Update an existing incident in ServiceNow.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "sys_id": { "type": "string", "description": "Incident sys_id" },
+                                    "fields": { "type": "string", "description": "JSON object of fields to update" }
+                                },
+                                "required": ["sys_id", "fields"],
+                                "additionalProperties": false
+                            }
+                        },
+                        {
+                            "name": "get-incidents-for-ci",
+                            "description": "Get active incidents for a Configuration Item. Use this to check if incidents on a CI could impact a planned change.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "ci_name": { "type": "string", "description": "Configuration Item name" },
+                                    "ci_sys_id": { "type": "string", "description": "CI sys_id" },
+                                    "limit": { "type": "number", "description": "Max incidents to return (default 10)" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        }
+                    ]
+                }
+            },
+            "mcp_resource_description": {
+                "resources": [
+                    { "uri": "ui://widget/incident-dashboard.html", "mimeType": "text/html+skybridge", "description": "Incident Dashboard with active incidents by priority and status" }
+                ]
+            }
+        }
+    ],
+    "auth": {
+        "type": "OAuthPluginVault",
+        "reference_id": "${{SERVICENOW_OAUTH_REGISTRATION_ID}}"
+    }
+}

@@ -11,6 +11,16 @@
 - Recommended: full-screen browser for widget impact
 - Voice demo: have headset ready, open /voice page in separate tab
 
+### Enhancement Demos (optional, see Acts 10–14)
+- **Mission Control** open in second tab to show the Magentic-One *Task Ledger* + *Progress Ledger* live during the Major Incident scenario
+- **Avatar NOC operator** (Azure Speech avatar + Voice Live) projected on a wall screen if available
+- **Loop component** for CAB-as-an-agent ready in Teams + Outlook
+- **Purview portal** (Agent DLP, Communication Compliance) and **Entra Admin Center → Agent IDs** open for the governance act
+- **Microsoft Fabric** workspace open with the Eventstream → KQL → Activator pipeline pre-built
+- **Copilot Tuning** workspace in the Copilot Control System, fine-tune job already trained on runbooks/KEDB
+
+> *"Acts 1–9 are what runs today. Acts 10–14 are the next-wave enhancements built on the latest Microsoft platform — Agent Framework, Magentic-One, Computer Use, Copilot Tuning, Purview Agent DLP, Entra Agent ID, Loop, and Fabric Real-Time Intelligence. Pick the acts that fit your audience and time budget."*
+
 ---
 
 ## Act 1: The ITSM Operations Briefing (2 min)
@@ -238,12 +248,167 @@ Run a post-implementation review for CHG0000020. Did it cause any incidents?
 
 > *"The voice interface calls the same ServiceNow MCP tools server-side. Audio in, intelligence out. 19 voice-enabled ITSM tools."*
 
+**[ENHANCEMENT — Avatar NOC Operator]**
+> *"And in the next release we're upgrading the voice channel to a full **Azure Speech photoreal avatar** running on **Voice Live** — full-duplex, interruptible, with barge-in. Picture this on a NOC wall screen: an always-on AI ops engineer the team can just talk to. Same toolset under the hood, dramatically more natural interaction."*
+
+---
+
+## Act 10: Multi-Agent Major Incident Command (3 min)  *[ENHANCEMENT]*
+### *"A P1 just hit. Watch a team of agents take command."*
+
+**[NARRATIVE]**
+> "Today the Command Center orchestrates 13 ITIL workers sequentially. The next-generation pattern is **Magentic-One** — a research orchestration model from Microsoft Research where an Orchestrator agent maintains a **Task Ledger** (facts, plan) and a **Progress Ledger** (what's done, what's stuck, what to re-plan) and routes work to specialist agents in parallel. We've re-platformed the Command Center on the **Microsoft Agent Framework** (the GA merger of Semantic Kernel + AutoGen) and adopted Magentic-One for Sev1/Sev2 incidents."
+
+**[PROMPT 10 — Major Incident Command]**
+```
+A new P1 has been raised: "Online banking login failures spiking, 30% of users affected." Spin up Major Incident Command.
+```
+
+**[SHOW IN MISSION CONTROL]**
+- **Task Ledger** — facts gathered (affected service, dependent CIs, recent changes, error budget remaining), the plan, the unknowns
+- **Progress Ledger** — live updates as agents report back; Orchestrator re-plans on the fly
+- **Parallel agent activity:**
+  - **Incident Manager** — opens MIM record, declares Sev1, spins up Teams **incident bridge** with Stream recording
+  - **Monitoring Agent** — pulls Sentinel/Defender/Datadog signals via Fabric KQL
+  - **Change Agent** — checks the last 48h of changes on dependent CIs
+  - **SecOps Agent** — rules out a security incident
+  - **Comms Agent** — drafts exec update + customer status page entry every 30 min
+  - **Knowledge Agent** — surfaces the matching KEDB workaround
+- **Magentic-UI plan approval gate** — Duty Manager sees the Orchestrator's plan and clicks **Approve** before any write actions execute
+- **Post-incident** — Reasoning model (o-series) drafts a full RCA with chain-of-thought visible in the ServiceNow Problem record
+
+> *"This is the difference between agents-as-a-checklist and agents-as-a-team. Magentic-One under the bonnet, Microsoft Agent Framework as the runtime, Magentic-UI as the human-in-the-loop. The duty manager stays in command — the agents do the running around."*
+
+---
+
+## Act 11: Computer Use Agent — The Legacy Console (2 min)  *[ENHANCEMENT]*
+### *"Half our Ops tools have no API. Watch an agent drive them anyway."*
+
+**[NARRATIVE]**
+> "Every FS Ops shop has the same problem: vSphere consoles, on-prem firewall UIs, mainframe green-screens, vendor portals (BT, Cisco, ServiceNow itself for some flows). No API, no MCP server, just a browser and a human. We've added a **Computer Use Agent (CUA)** worker — Anthropic-style computer-use, governed by Purview, every session video-recorded for audit."
+
+**[PROMPT 11 — Computer Use Agent]**
+```
+The Glasgow print queue is stuck. Restart it on the Citrix admin console.
+```
+
+**[SHOW]**
+- Side-by-side: chat panel + a **live VNC view** of the agent driving the Citrix admin console
+- Agent narrates each step ("I'm opening the print spooler service, stopping it, clearing the queue, restarting…")
+- **Purview policy check** before any destructive action
+- **Stream recording** of the entire session attached to the incident record
+
+**[PROMPT 11b — Vendor Portal]**
+```
+Raise a P1 with BT in their portal for the Edinburgh circuit outage. Reference INC0012345.
+```
+
+> *"Same pattern, different tool. The agent logs into the BT portal, raises the ticket, captures the reference number, posts it back to ServiceNow. Every keystroke audited. This unlocks **every legacy console in the estate** — no more 'we can't automate it because there's no API'."*
+
+---
+
+## Act 12: Copilot Tuning + Reasoning RCA (2 min)  *[ENHANCEMENT]*
+### *"The agent now writes in your house style — and reasons like a senior engineer."*
+
+**[NARRATIVE]**
+> "Two enhancements that change the *quality* of every output. **Copilot Tuning** — fine-tunes a small model on 12 months of resolved tickets, runbooks, KEDB articles, and CAB minutes, so resolutions are written in *your* voice with *your* patterns. **Reasoning models** — for Problem Management and RCA, we route to o-series via Azure OpenAI and *render the chain-of-thought*."
+
+**[PROMPT 12a — House-Style Resolution]**
+```
+Write the resolution notes for INC0012345 — Oracle FLX failover triggered 03:42, secondary took over, root cause TBC.
+```
+
+> *"Notice the tone, the structure, the references to internal runbook IDs (RB-ORA-014), the KEDB lookup (KE0000231) — that's not GPT-4o out of the box, that's a fine-tune on the firm's own corpus. Copilot Tuning, deployed in Copilot Control System, governed by Purview."*
+
+**[PROMPT 12b — Reasoning RCA]**
+```
+Run a full root cause analysis on Problem PRB0001022 — recurring CMS App FLX latency spikes. Show your reasoning.
+```
+
+**[SHOW]**
+- **Reasoning panel** in Mission Control — visible chain-of-thought: hypotheses, evidence, eliminations, conclusion
+- **Five Whys** auto-generated and embedded in the Problem record
+- **Linked artefacts** — incidents, changes, telemetry queries, KEDB candidates, recommended permanent fix
+
+> *"That's audit-grade RCA, not the one-paragraph hand-wave most Problem records become. Reasoning visible, sources cited, every claim traceable."*
+
+---
+
+## Act 13: CAB-as-an-Agent + Loop + Fabric (2 min)  *[ENHANCEMENT]*
+### *"The CAB meeting runs itself. The data spine feeds it live."*
+
+**[NARRATIVE]**
+> "Two more shifts. **CAB-as-an-agent** — the Change Manager *runs* the CAB asynchronously inside a **Loop component** that flows through Teams *and* Outlook. **Fabric Real-Time Intelligence** — every monitoring event, change record, and incident lands in **Eventstream → KQL → Activator**, and the agents query Fabric directly."
+
+**[PROMPT 13a — Loop CAB]**
+```
+Open the CAB for this week. Table all RFCs, score risk, collect votes by Thursday 17:00.
+```
+
+**[SHOW]**
+- A **Loop component** rendered in Teams: each RFC as a row with risk score, blast radius, rollback plan, vote tally
+- Same component opened in **Outlook** — a CAB member edits their vote inline; updates flow back instantly
+- **Adaptive Card Universal Actions** — *Approve / Defer / Request Info* buttons posting decisions to ServiceNow
+- Change Manager agent **tallies votes**, **drafts minutes**, posts to SharePoint, **updates each RFC in ServiceNow** with the CAB outcome
+
+**[PROMPT 13b — Fabric KQL]**
+```
+Show me every disk-full event correlated with last night's deployment window.
+```
+
+> *"That query runs against a **Fabric KQL database** fed by Eventstream — ServiceNow events, Azure Monitor, Defender XDR, all in one spine. Activator triggers create incidents automatically when patterns hit. The agents query it as just another tool."*
+
+---
+
+## Act 14: Governance — Purview Agent DLP + Entra Agent ID (2 min)  *[ENHANCEMENT]*
+### *"For FS, governance is the demo."*
+
+**[NARRATIVE]**
+> "Everything you've seen runs under enterprise-grade governance. Three pillars: **Entra Agent ID** for identity, **Conditional Access** for access control, **Purview** for data protection and compliance."
+
+**[SHOW — Entra Admin Center]**
+- Each of the 13+ workers has its own **Entra Agent ID** (GA)
+- **Conditional Access policies:**
+  - *Security Manager* — only acts from a managed device
+  - *Change Manager* — blocked outside published change windows
+  - *Computer Use Agent* — requires step-up MFA from the duty manager for destructive actions
+- One-click revoke per worker
+
+**[SHOW — Purview Portal]**
+- **Agent DLP** policy preventing customer PII from leaving the agent boundary
+- **Communication Compliance** — every outbound vendor email scanned before send
+- **Insider Risk** — anomalous worker behaviour (e.g., Change Manager raising 50 RFCs at 02:00) auto-flagged
+- **Sensitivity labels** auto-applied to KB articles the agent generates
+- **Audit log** — every agent action queryable by user, worker, tool, CI
+
+**[TALK TRACK]**
+> *"This is the only enterprise-grade governance story in the market for agents. Identity per worker, conditional access per worker, DLP per worker, audit per worker. For FS regulators — FCA, PRA, DORA — this is the evidence pack written for you."*
+
+---
+
+## Act 15: Closing the ITIL 4 Gaps (2 min)  *[ENHANCEMENT]*
+### *"Five new workers that close the ITIL 4 gaps."*
+
+**[TALK TRACK]**
+> "Beyond the platform-level enhancements, we've added five new workers to round out ITIL 4 and modern Ops practice."
+
+| New Worker | What It Does | Demo Prompt |
+|---|---|---|
+| **Request Fulfilment Manager** | Catalogue items, standard changes, JML automation via Entra/HR | *"Onboard Sarah Chen as a new Risk Analyst — full JML."* |
+| **Major Incident Commander** | Bridge, war-room Loop, exec comms every 30 min, 1h post-mortem draft | *(Act 10 above)* |
+| **Knowledge Harvester** | Every resolved incident → draft KB article → Knowledge Manager review → publish + index | *"Harvest yesterday's resolved incidents into draft KB articles."* |
+| **FinOps Manager** | Links ServiceNow CIs to Azure Cost Management, surfaces waste, recommends right-sizing as standard changes | *"Show me top 10 cost-waste CIs this month and draft the right-sizing RFCs."* |
+| **SRE / Error Budget Manager** | SLO/SLI tracking per service; when budget burns, auto-creates Problems and pauses non-critical Releases | *"What's the error budget on the Online Banking service this quarter?"* |
+
+> *"That's 18 workers now, fully ITIL 4 aligned, with FinOps and SRE built in — not bolted on."*
+
 ---
 
 ## Closing (30 sec)
 
 > "What you've seen today is a **full ITSM Operations platform** built on M365 Copilot:
 >
+> **Shipping today**
 > - **12 interactive UI widgets** covering incidents, problems, changes, SLAs, assets, knowledge, and blast radius
 > - **35+ tools** across 8 ITIL V4 practices with NIST 800-53 governance
 > - **Autonomous Digital Worker** with shift handover, incident monitoring, and proactive alerting
@@ -251,9 +416,19 @@ Run a post-implementation review for CHG0000020. Did it cause any incidents?
 > - **Live ServiceNow data** across 7 tables: incidents, problems, changes, CMDB, SLAs, knowledge, assets
 > - **Every item clickable** — deep links from every widget directly into ServiceNow
 >
-> Three layers: **Declarative Agent** (ask and answer) + **Digital Worker** (autonomous monitoring) + **Voice** (hands-free operations).
+> **Next-wave enhancements (Acts 10–15)**
+> - **Microsoft Agent Framework + Magentic-One** orchestration with Magentic-UI plan approval
+> - **Computer Use Agent** for legacy consoles and vendor portals — Purview-governed, video-audited
+> - **Copilot Tuning** on runbooks + KEDB for house-style resolutions
+> - **Reasoning models** (o-series) for audit-grade RCA with visible chain-of-thought
+> - **Loop CAB** in Teams + Outlook with Adaptive Card Universal Actions
+> - **Microsoft Fabric Real-Time Intelligence** as the event spine
+> - **Entra Agent ID + Conditional Access + Purview Agent DLP** governance
+> - **Five new ITIL 4 workers** — Request Fulfilment, Major Incident Command, Knowledge Harvester, FinOps, SRE/Error Budget
 >
-> This transforms IT Operations from a reactive, multi-tool process into a **unified, proactive, AI-powered operations centre**."
+> Three layers, now four: **Declarative Agent** + **Multi-Agent Digital Workforce** (Magentic-One on Agent Framework) + **Voice & Avatar** + **Governance Spine** (Entra + Purview + Fabric).
+>
+> This transforms IT Operations from a reactive, multi-tool process into a **unified, proactive, frontier-AI operations centre — with FS-grade governance baked in**."
 
 ---
 
@@ -277,41 +452,52 @@ Run a post-implementation review for CHG0000020. Did it cause any incidents?
 ## Architecture Slide
 
 ```
-+-----------------------------------------------------------+
-|              M365 Copilot (Frontend)                       |
-|  Declarative Agent + OpenAI Apps SDK                       |
-|  12 Interactive UI Widgets                                 |
-+-----------------------------------------------------------+
-| ITSM Operations MCP        | EOL Lifecycle Intelligence   |
-| 32 tools                   | 3 tools                      |
-+----------------------------+------------------------------+
-| ServiceNow Table API                                       |
-| Incidents       | Problems       | Changes    | SLAs       |
-| CMDB + CIs      | Knowledge Base | Assets     | Catalog    |
-| Blast Radius    | Collision Det. | PIR        | Metrics    |
-+-----------------------------+-----------------------------+
-| endoflife.date API          | Azure Monitor (optional)    |
-| Product Lifecycles          | Infrastructure Alerts       |
-+-----------------------------------------------------------+
-| ITSM Digital Worker (Agent 365)                            |
-| Shift Handover (08:00/20:00) | Incident Monitor (5min)    |
-| Change-Incident Correlation  | SLA Breach Prediction      |
-| Recurring Pattern Detection  | Voice Live (19 tools)      |
-+-----------------------------------------------------------+
-         Azure Container Apps
++-------------------------------------------------------------------+
+|   M365 Copilot Frontend     |   Voice + Avatar (Speech / Live)    |
+|   Declarative Agent         |   NOC wall-screen photoreal avatar  |
+|   12 Interactive UI Widgets |   Full-duplex, interruptible        |
++-------------------------------------------------------------------+
+|        Microsoft Agent Framework  +  Magentic-One Orchestrator    |
+|   Task Ledger | Progress Ledger | Magentic-UI plan approval gate  |
++-------------------------------------------------------------------+
+|             18 ITIL 4 Specialist Workers (per-worker Entra ID)    |
+|   Incident | Problem | Change | Release | Deployment | Knowledge  |
+|   Service Desk | Asset/CMDB | Catalogue | Service Validation      |
+|   Major Incident Cmdr | Request Fulfilment | Knowledge Harvester  |
+|   FinOps | SRE/Error Budget | SecOps | SecGov | Vendor | Capacity |
+|   + Computer Use Agent (legacy consoles, vendor portals)          |
++-------------------------------------------------------------------+
+|   ITSM Ops MCP (35+ tools) | EOL MCP | NLWeb Runbook MCP          |
++-------------------------------------------------------------------+
+|   ServiceNow Table API | Azure OpenAI (incl. o-series reasoning)  |
+|   Copilot Tuning (house-style fine-tune on runbooks + KEDB)       |
+|   Microsoft Fabric Real-Time Intelligence                         |
+|     Eventstream -> KQL DB -> Activator -> Real-Time Dashboard     |
+|   Defender XDR | Sentinel | Azure Monitor | endoflife.date        |
++-------------------------------------------------------------------+
+|   GOVERNANCE SPINE                                                |
+|   Entra Agent ID + Conditional Access (per worker)                |
+|   Purview: Agent DLP | Comms Compliance | Insider Risk | Audit    |
+|   Stream recording of every Computer Use session                  |
++-------------------------------------------------------------------+
+|   Surfaces: Teams + Outlook Loop CAB | Adaptive Card Universal     |
+|   Actions | SharePoint minutes | Status page | Email digests       |
++-------------------------------------------------------------------+
+         Azure Container Apps  +  Azure AI Foundry
          portfolioagentacr.azurecr.io
-         change-mgmt-mcp:v6 + itsm-worker:v4
+         change-mgmt-mcp:v6 + itsm-worker:v4 + maf-orchestrator:v1
 ```
 
 ---
 
-## Three Layers of Intelligence
+## Four Layers of Intelligence
 
 | Layer | What It Does | How It Works |
 |-------|-------------|--------------|
 | **Declarative Agent** | Ask and answer — interactive ITSM operations | M365 Copilot + MCP Server + 12 widgets |
-| **Digital Worker** | Autonomous monitoring — runs 24/7 without prompts | Agent 365 + node-cron + Teams/Email alerts |
-| **Voice Interface** | Hands-free operations for NOC analysts | Azure Voice Live + WebSocket proxy + 19 tools |
+| **Multi-Agent Digital Workforce** | 18 ITIL 4 workers + CUA, orchestrated by Magentic-One on Microsoft Agent Framework, with Magentic-UI human-in-the-loop | MAF + AutoGen patterns + Azure AI Foundry + per-worker Entra Agent ID |
+| **Voice & Avatar** | Hands-free NOC operations + photoreal wall-screen avatar | Azure Voice Live + Speech Avatar + WebSocket proxy + 19 tools |
+| **Governance Spine** | Identity, access, DLP, compliance, audit — per worker | Entra Agent ID + Conditional Access + Purview (Agent DLP, Comms Compliance, Insider Risk) + Fabric audit telemetry |
 
 ---
 
@@ -340,3 +526,25 @@ Run a post-implementation review for CHG0000020. Did it cause any incidents?
 > **20:00 — Shift Ends** → Digital Worker sends handover briefing to night team
 >
 > **All Night** → Incident Monitor watches for P1s, SLA breaches, and posts to Teams
+
+---
+
+## The Workflow Story — Enhanced Edition  *[ENHANCEMENT]*
+
+> **08:00 — Shift Starts** → Digital Worker sends handover briefing; **avatar greets the duty manager** on the NOC wall screen
+>
+> **09:30 — P1 Hits** → "Online banking login failures." → **Magentic-One Major Incident Command** spins up: Task Ledger built, Teams bridge live, Stream recording on, Comms agent drafting exec update — Duty Manager **approves the plan in Magentic-UI**
+>
+> **09:45 — Legacy Console** → Network agent delegates to **Computer Use Agent** to clear the F5 LTM pool member — Purview-governed, session video-recorded
+>
+> **10:30 — RCA** → Reasoning model (o-series) drafts **chain-of-thought RCA** into Problem record; Knowledge Harvester drafts the new KEDB article
+>
+> **11:00 — CAB** → **Loop CAB component** opens in Teams + Outlook; agent tables 12 RFCs, scores risk from **Fabric KQL** telemetry, collects votes via Adaptive Card Universal Actions
+>
+> **14:00 — FinOps** → FinOps worker surfaces top-10 cost-waste CIs, drafts right-sizing RFCs as standard changes
+>
+> **16:00 — JML** → Request Fulfilment worker onboards a new joiner end-to-end via Entra + HR + ServiceNow catalogue
+>
+> **17:00 — Error Budget Check** → SRE worker reports Online Banking has 38% budget left this quarter; non-critical Releases auto-paused if it drops below 10%
+>
+> **All Day — Governance** → Every action logged through **Entra Agent ID + Purview Agent DLP**; Insider Risk auto-flags anomalies; FCA/PRA/DORA evidence pack assembled automatically

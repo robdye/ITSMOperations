@@ -1,0 +1,85 @@
+{
+  "$schema": "https://schemas.microsoft.com/agents/v1/skill.json",
+  "id": "shadow-agent-discovery",
+  "name": "Shadow Agent Discovery",
+  "description": "Detects unauthorized or unregistered Copilot agents by comparing the tenant inventory against an approved registry. Produces a shadow IT risk report, dashboard, and notification emails.",
+  "version": "1.0.0",
+  "itilPractice": "Information Security Management",
+  "valueChainActivity": "Improve",
+  "triggers": [
+    {
+      "type": "intent",
+      "patterns": [
+        "shadow agent",
+        "unauthorized agent",
+        "unregistered agent",
+        "shadow IT",
+        "rogue agent",
+        "unapproved agent",
+        "agent sweep"
+      ],
+      "description": "Activates when user mentions shadow agents, unauthorized deployments, or agent discovery sweeps"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "0 3 * * *",
+      "description": "daily-shadow-scan — Scans for shadow agents every day at 03:00"
+    }
+  ],
+  "actions": [
+    {
+      "name": "run-discovery-sweep",
+      "description": "Compare tenant agent inventory against the approved registry to identify shadow agents",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "scope", "type": "string", "required": false, "description": "Scope: tenant-wide, department, or specific user" },
+        { "name": "includeStoreApps", "type": "boolean", "required": false, "description": "Include store-published apps in the sweep" }
+      ],
+      "outputs": [
+        { "name": "shadowAgents", "type": "array", "description": "List of agents not in the approved registry" },
+        { "name": "riskReport", "type": "object", "description": "Risk assessment for each shadow agent" }
+      ]
+    },
+    {
+      "name": "generate-shadow-report",
+      "description": "Generate a shadow IT risk report with findings and remediation recommendations",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "sweepId", "type": "string", "required": true, "description": "Discovery sweep identifier" }
+      ],
+      "outputs": [
+        { "name": "reportUrl", "type": "string", "description": "URL to the generated shadow IT report" },
+        { "name": "notificationEmails", "type": "array", "description": "Draft notification emails for agent owners" }
+      ]
+    },
+    {
+      "name": "quarantine-agent",
+      "description": "Quarantine a shadow agent pending governance review",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "agentId", "type": "string", "required": true, "description": "Shadow agent to quarantine" },
+        { "name": "reason", "type": "string", "required": true, "description": "Quarantine justification" }
+      ],
+      "outputs": [
+        { "name": "quarantineResult", "type": "object", "description": "Quarantine action result and audit record" }
+      ]
+    }
+  ],
+  "crossPracticeIntegrations": [
+    { "practice": "Information Security Management", "direction": "sends", "description": "Shadow agents flagged as security findings" },
+    { "practice": "Change Enablement", "direction": "sends", "description": "Shadow agents may require retroactive change requests" },
+    { "practice": "IT Asset & Configuration Management", "direction": "receives", "description": "Agent inventory provides discovery data" }
+  ],
+  "hitlControls": [
+    { "action": "Quarantine agent", "level": "write", "reason": "Blocking an agent requires security team approval" },
+    { "action": "Bulk quarantine", "level": "write", "reason": "Quarantining multiple agents requires CISO approval" }
+  ],
+  "knowledgeSources": [
+    { "source": "Tenant Agent Inventory", "type": "document", "description": "All agent packages from Package Management API" },
+    { "source": "Approved Agent Registry", "type": "document", "description": "Organization's list of approved and registered agents" },
+    { "source": "Security Policies", "type": "document", "description": "Shadow IT detection and remediation policies" }
+  ]
+}

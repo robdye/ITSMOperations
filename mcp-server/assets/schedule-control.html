@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Schedule Control</title>
+<style>
+  :root {
+    --colorNeutralBackground1: #ffffff;
+    --colorNeutralBackground3: #f5f5f5;
+    --colorNeutralForeground1: #242424;
+    --colorNeutralForeground2: #616161;
+    --colorNeutralForeground3: #9e9e9e;
+    --colorNeutralStroke1: #d1d1d1;
+    --colorNeutralStroke2: #e0e0e0;
+    --colorBrandBackground: #0f6cbd;
+    --colorBrandBackgroundHover: #115ea3;
+    --colorBrandForegroundOnLight: #0f6cbd;
+    --colorPaletteGreenBackground2: #9fd89f;
+    --colorPaletteGreenForeground1: #0e7a0e;
+    --colorPaletteRedBackground2: #f1bbbb;
+    --colorPaletteRedForeground1: #c4314b;
+    --colorPaletteYellowBackground2: #f9e2ae;
+    --colorPaletteYellowForeground1: #8a7000;
+    --colorNeutralBackground1Hover: #f0f0f0;
+    --colorNeutralShadowAmbient: rgba(0,0,0,0.12);
+    --colorNeutralShadowKey: rgba(0,0,0,0.14);
+    --borderRadiusMedium: 4px;
+    --borderRadiusLarge: 8px;
+    --fontFamilyBase: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+    --fontSizeBase200: 12px;
+    --fontSizeBase300: 14px;
+    --fontSizeBase400: 16px;
+    --fontSizeBase500: 20px;
+    --fontWeightRegular: 400;
+    --fontWeightSemibold: 600;
+    --spacingHorizontalS: 8px;
+    --spacingHorizontalM: 12px;
+    --spacingHorizontalL: 16px;
+    --spacingVerticalS: 8px;
+    --spacingVerticalM: 12px;
+    --spacingVerticalL: 16px;
+    --spacingVerticalXL: 20px;
+    --durationNormal: 0.2s;
+    --curveEasyEase: cubic-bezier(0.33,0,0.67,1);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--fontFamilyBase);
+    font-size: var(--fontSizeBase300);
+    color: var(--colorNeutralForeground1);
+    background: var(--colorNeutralBackground1);
+    padding: var(--spacingVerticalL) var(--spacingHorizontalL);
+    line-height: 1.5;
+  }
+
+  .sc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--spacingHorizontalS);
+    margin-bottom: var(--spacingVerticalL);
+  }
+
+  .sc-header h1 {
+    font-size: var(--fontSizeBase500);
+    font-weight: var(--fontWeightSemibold);
+  }
+
+  .sc-timestamp {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+  }
+
+  .sc-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--spacingVerticalM);
+  }
+
+  .sc-card {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    gap: var(--spacingVerticalS) var(--spacingHorizontalM);
+    padding: var(--spacingVerticalM) var(--spacingHorizontalL);
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusLarge);
+    background: var(--colorNeutralBackground1);
+    box-shadow: 0 1px 2px var(--colorNeutralShadowAmbient), 0 1px 1px var(--colorNeutralShadowKey);
+    transition: box-shadow var(--durationNormal) var(--curveEasyEase);
+  }
+
+  .sc-card:hover {
+    box-shadow: 0 2px 8px var(--colorNeutralShadowAmbient), 0 2px 4px var(--colorNeutralShadowKey);
+  }
+
+  .sc-card:focus-within {
+    outline: 2px solid var(--colorBrandBackground);
+    outline-offset: 2px;
+  }
+
+  .sc-card-main {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .sc-job-name {
+    font-size: var(--fontSizeBase400);
+    font-weight: var(--fontWeightSemibold);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sc-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacingHorizontalS) var(--spacingHorizontalL);
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground2);
+  }
+
+  .sc-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .sc-meta-label {
+    color: var(--colorNeutralForeground3);
+  }
+
+  .sc-cron {
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: var(--fontSizeBase200);
+    background: var(--colorNeutralBackground3);
+    padding: 1px 6px;
+    border-radius: var(--borderRadiusMedium);
+  }
+
+  /* Status badges */
+  .sc-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: var(--fontSizeBase200);
+    font-weight: var(--fontWeightSemibold);
+    line-height: 1.4;
+  }
+
+  .sc-badge--active {
+    background: var(--colorPaletteGreenBackground2);
+    color: var(--colorPaletteGreenForeground1);
+  }
+
+  .sc-badge--paused {
+    background: var(--colorPaletteYellowBackground2);
+    color: var(--colorPaletteYellowForeground1);
+  }
+
+  .sc-badge--error {
+    background: var(--colorPaletteRedBackground2);
+    color: var(--colorPaletteRedForeground1);
+  }
+
+  .sc-badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  /* Card actions column */
+  .sc-card-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: space-between;
+    grid-row: 1 / -1;
+    grid-column: 2;
+    gap: var(--spacingVerticalS);
+  }
+
+  /* Toggle button */
+  .sc-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: var(--borderRadiusMedium);
+    background: var(--colorNeutralBackground1);
+    color: var(--colorNeutralForeground1);
+    font-family: var(--fontFamilyBase);
+    font-size: var(--fontSizeBase200);
+    font-weight: var(--fontWeightSemibold);
+    cursor: pointer;
+    transition: background var(--durationNormal) var(--curveEasyEase),
+                border-color var(--durationNormal) var(--curveEasyEase);
+    white-space: nowrap;
+  }
+
+  .sc-toggle:hover {
+    background: var(--colorNeutralBackground1Hover);
+  }
+
+  .sc-toggle:focus-visible {
+    outline: 2px solid var(--colorBrandBackground);
+    outline-offset: 2px;
+  }
+
+  .sc-toggle[aria-pressed="true"] {
+    background: var(--colorBrandBackground);
+    color: #fff;
+    border-color: var(--colorBrandBackground);
+  }
+
+  .sc-toggle[aria-pressed="true"]:hover {
+    background: var(--colorBrandBackgroundHover);
+    border-color: var(--colorBrandBackgroundHover);
+  }
+
+  .sc-toggle-icon {
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  /* Run history mini-chart */
+  .sc-history {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 24px;
+    padding: 2px 0;
+  }
+
+  .sc-history-bar {
+    width: 6px;
+    min-height: 4px;
+    border-radius: 2px 2px 0 0;
+    transition: height var(--durationNormal) var(--curveEasyEase);
+  }
+
+  .sc-history-bar--success {
+    background: var(--colorPaletteGreenForeground1);
+    height: 100%;
+  }
+
+  .sc-history-bar--failure {
+    background: var(--colorPaletteRedForeground1);
+    height: 60%;
+  }
+
+  .sc-history-bar--unknown {
+    background: var(--colorNeutralStroke1);
+    height: 40%;
+  }
+
+  /* Second row spans both columns on the card */
+  .sc-card-footer {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--spacingHorizontalS);
+    border-top: 1px solid var(--colorNeutralStroke2);
+    padding-top: var(--spacingVerticalS);
+  }
+
+  .sc-history-label {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+    margin-right: var(--spacingHorizontalS);
+  }
+
+  .sc-result-label {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground2);
+  }
+
+  .sc-result--success { color: var(--colorPaletteGreenForeground1); }
+  .sc-result--failure { color: var(--colorPaletteRedForeground1); }
+
+  /* Empty state */
+  .sc-empty {
+    text-align: center;
+    padding: var(--spacingVerticalXL);
+    color: var(--colorNeutralForeground3);
+    font-size: var(--fontSizeBase400);
+  }
+
+  /* Responsive: side-by-side on wider screens */
+  @media (min-width: 800px) {
+    .sc-grid {
+      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    }
+  }
+
+  /* Reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      transition-duration: 0s !important;
+      animation-duration: 0s !important;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="app" role="main" aria-label="Schedule Control"></div>
+
+<script>
+(function () {
+  const data = window.__TOOL_DATA__ || { jobs: [], generatedAt: '' };
+  const root = document.getElementById('app');
+
+  function esc(str) {
+    const d = document.createElement('div');
+    d.textContent = str ?? '';
+    return d.innerHTML;
+  }
+
+  function fmtTime(iso) {
+    if (!iso) return '—';
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+    } catch { return esc(iso); }
+  }
+
+  function badgeClass(status) {
+    if (status === 'active') return 'sc-badge--active';
+    if (status === 'paused') return 'sc-badge--paused';
+    return 'sc-badge--error';
+  }
+
+  function statusLabel(status) {
+    return status.charAt(0).toUpperCase() + status.slice(1);
+  }
+
+  function buildHistoryBars(history) {
+    if (!history || !history.length) return '';
+    const last10 = history.slice(-10);
+    return last10.map(function (h, i) {
+      var cls = 'sc-history-bar sc-history-bar--' + (h.result === 'success' ? 'success' : h.result === 'failure' ? 'failure' : 'unknown');
+      return '<div class="' + cls + '" role="img" aria-label="Run ' + (i + 1) + ': ' + esc(h.result) + '" title="' + fmtTime(h.time) + ' – ' + esc(h.result) + '"></div>';
+    }).join('');
+  }
+
+  function renderCard(job) {
+    var isActive = job.status === 'active';
+    var toggleLabel = isActive ? 'Pause' : 'Resume';
+    var toggleIcon = isActive ? '⏸' : '▶';
+    var pressed = isActive ? 'true' : 'false';
+
+    return '<article class="sc-card" aria-label="Job: ' + esc(job.name) + '">' +
+      '<div class="sc-card-main">' +
+        '<div class="sc-job-name">' + esc(job.name) + '</div>' +
+        '<div class="sc-meta">' +
+          '<span class="sc-meta-item"><span class="sc-meta-label">Schedule</span> <code class="sc-cron">' + esc(job.schedule) + '</code></span>' +
+          '<span class="sc-meta-item"><span class="sc-meta-label">Last</span> ' + fmtTime(job.lastRun) + '</span>' +
+          '<span class="sc-meta-item"><span class="sc-meta-label">Next</span> ' + fmtTime(job.nextRun) + '</span>' +
+          '<span class="sc-badge ' + badgeClass(job.status) + '"><span class="sc-badge-dot" aria-hidden="true"></span>' + statusLabel(job.status) + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="sc-card-actions">' +
+        '<button class="sc-toggle" role="button" aria-pressed="' + pressed + '" data-job-id="' + esc(job.id) + '" title="' + toggleLabel + ' job ' + esc(job.name) + '">' +
+          '<span class="sc-toggle-icon" aria-hidden="true">' + toggleIcon + '</span>' + toggleLabel +
+        '</button>' +
+      '</div>' +
+      '<div class="sc-card-footer">' +
+        '<div style="display:flex;align-items:center;">' +
+          '<span class="sc-history-label">History</span>' +
+          '<div class="sc-history" role="img" aria-label="Run history for ' + esc(job.name) + '">' + buildHistoryBars(job.runHistory) + '</div>' +
+        '</div>' +
+        '<span class="sc-result-label">Last result: <strong class="sc-result--' + (job.lastResult === 'success' ? 'success' : 'failure') + '">' + esc(job.lastResult || '—') + '</strong></span>' +
+      '</div>' +
+    '</article>';
+  }
+
+  function render() {
+    var html = '<header class="sc-header">' +
+      '<h1>Schedule Control</h1>' +
+      '<span class="sc-timestamp">Generated ' + fmtTime(data.generatedAt) + '</span>' +
+    '</header>';
+
+    if (!data.jobs || data.jobs.length === 0) {
+      html += '<div class="sc-empty" role="status">No scheduled jobs found.</div>';
+    } else {
+      html += '<div class="sc-grid" role="list">';
+      data.jobs.forEach(function (job) {
+        html += '<div role="listitem">' + renderCard(job) + '</div>';
+      });
+      html += '</div>';
+    }
+
+    root.innerHTML = html;
+    bindToggleButtons();
+  }
+
+  function bindToggleButtons() {
+    var buttons = root.querySelectorAll('.sc-toggle');
+    buttons.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var pressed = btn.getAttribute('aria-pressed') === 'true';
+        var newPressed = !pressed;
+        btn.setAttribute('aria-pressed', String(newPressed));
+        btn.querySelector('.sc-toggle-icon').textContent = newPressed ? '⏸' : '▶';
+        btn.childNodes[1].textContent = newPressed ? 'Pause' : 'Resume';
+
+        // Update card badge
+        var card = btn.closest('.sc-card');
+        var badge = card.querySelector('.sc-badge');
+        if (badge) {
+          badge.className = 'sc-badge ' + (newPressed ? 'sc-badge--active' : 'sc-badge--paused');
+          badge.querySelector('.sc-badge-dot').nextSibling.textContent = newPressed ? 'Active' : 'Paused';
+        }
+      });
+
+      btn.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          btn.click();
+        }
+      });
+    });
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>

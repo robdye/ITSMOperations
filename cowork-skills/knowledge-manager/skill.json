@@ -1,0 +1,150 @@
+{
+  "$schema": "https://schemas.microsoft.com/agents/v1/skill.json",
+  "id": "knowledge-manager",
+  "name": "Knowledge Manager",
+  "description": "Maintains and improves the effective, efficient, convenient use of information and knowledge across the organization.",
+  "version": "1.0.0",
+  "itilPractice": "Knowledge Management",
+  "valueChainActivity": "All value chain activities",
+  "triggers": [
+    {
+      "type": "intent",
+      "patterns": [
+        "knowledge\\s*(base|article)",
+        "runbook",
+        "KB",
+        "self.service",
+        "deflection",
+        "article",
+        "procedure",
+        "documentation"
+      ],
+      "description": "Activates when user mentions knowledge base, articles, runbooks, documentation, or self-service content"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "0 7 * * 5",
+      "description": "knowledge-gap-analysis — Analyzes knowledge gaps and zero-result searches every Friday at 07:00"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "0 * * * *",
+      "description": "post-incident-kb-capture — Captures post-incident resolutions for KB articles every hour"
+    }
+  ],
+  "actions": [
+    {
+      "name": "manage-article",
+      "description": "Create, update, query, publish, or retire knowledge articles",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: create, update, query, publish, retire" },
+        { "name": "articleId", "type": "string", "required": false, "description": "Knowledge article ID" },
+        { "name": "details", "type": "object", "required": false, "description": "Article content, metadata, and categorization" }
+      ],
+      "outputs": [
+        { "name": "article", "type": "object", "description": "Knowledge article record" },
+        { "name": "articleId", "type": "string", "description": "Article identifier" }
+      ]
+    },
+    {
+      "name": "manage-article-workflow",
+      "description": "Manage review, approval, and publication workflows",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "articleId", "type": "string", "required": true, "description": "Article to manage workflow for" },
+        { "name": "workflowAction", "type": "string", "required": true, "description": "Action: submit-review, approve, reject, publish, unpublish" }
+      ],
+      "outputs": [
+        { "name": "workflowStatus", "type": "object", "description": "Current workflow state and history" }
+      ]
+    },
+    {
+      "name": "manage-taxonomy",
+      "description": "Maintain category structures, tags, and metadata schemas",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: query, create-category, update-tags, restructure" },
+        { "name": "details", "type": "object", "required": false, "description": "Taxonomy changes" }
+      ],
+      "outputs": [
+        { "name": "taxonomy", "type": "object", "description": "Current taxonomy structure" }
+      ]
+    },
+    {
+      "name": "analyze-search-patterns",
+      "description": "Analyze search patterns, zero-result queries, and discoverability metrics",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "period", "type": "string", "required": false, "description": "Analysis period" }
+      ],
+      "outputs": [
+        { "name": "searchAnalytics", "type": "object", "description": "Search pattern analysis and gap identification" }
+      ]
+    },
+    {
+      "name": "check-content-quality",
+      "description": "Validate article completeness, format compliance, and freshness",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "scope", "type": "string", "required": false, "description": "Scope: all, category, specific-article" },
+        { "name": "articleId", "type": "string", "required": false, "description": "Specific article to check" }
+      ],
+      "outputs": [
+        { "name": "qualityReport", "type": "object", "description": "Content quality assessment results" }
+      ]
+    },
+    {
+      "name": "view-knowledge-dashboard",
+      "description": "Visualize knowledge base health, usage metrics, and gap analysis",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "dashboardType", "type": "string", "required": false, "description": "Type: health, usage, gaps, deflection-rate" }
+      ],
+      "outputs": [
+        { "name": "dashboardData", "type": "object", "description": "Knowledge base metrics and visualizations" }
+      ]
+    },
+    {
+      "name": "import-knowledge",
+      "description": "Import knowledge from ITSM processes (incidents, problems, changes)",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "sourceType", "type": "string", "required": true, "description": "Source: incident-resolution, problem-rca, change-pir" },
+        { "name": "sourceId", "type": "string", "required": true, "description": "Source record ID" }
+      ],
+      "outputs": [
+        { "name": "draftArticle", "type": "object", "description": "Draft knowledge article created from source" }
+      ]
+    }
+  ],
+  "crossPracticeIntegrations": [
+    { "practice": "Incident Management", "direction": "bidirectional", "description": "Incident resolutions feed knowledge articles; KEDB provides workarounds" },
+    { "practice": "Problem Management", "direction": "receives", "description": "RCA findings and workarounds captured as knowledge articles" },
+    { "practice": "Change Enablement", "direction": "receives", "description": "Change models, PIR outcomes, implementation guides become knowledge articles" },
+    { "practice": "Service Level Management", "direction": "receives", "description": "SLA documentation and service descriptions managed as knowledge content" },
+    { "practice": "IT Asset & Configuration Management", "direction": "receives", "description": "CI documentation and configuration guides maintained in knowledge base" },
+    { "practice": "Supplier Management", "direction": "receives", "description": "Vendor technical documentation and support procedures captured as knowledge" },
+    { "practice": "Service Desk", "direction": "sends", "description": "Knowledge articles support first-contact resolution and self-service" }
+  ],
+  "hitlControls": [
+    { "action": "Article publication", "level": "write", "reason": "Knowledge articles require SME review and approval before publishing" },
+    { "action": "Article retirement", "level": "write", "reason": "Removing published articles requires human confirmation to avoid knowledge loss" },
+    { "action": "Taxonomy restructuring", "level": "write", "reason": "Major changes to category structures require human architectural review" },
+    { "action": "Access level changes", "level": "write", "reason": "Modifying article visibility and access restrictions requires human authorization" },
+    { "action": "Bulk operations", "level": "write", "reason": "Mass updates, re-categorization, archival require human review" },
+    { "action": "External knowledge import", "level": "write", "reason": "Importing content from external sources requires human validation of accuracy" }
+  ],
+  "knowledgeSources": [
+    { "source": "ServiceNow Knowledge Base", "type": "api", "description": "Knowledge articles, categories, and metadata" },
+    { "source": "Search Analytics", "type": "api", "description": "User search patterns and zero-result query data" },
+    { "source": "ITSM Process Records", "type": "api", "description": "Incident resolutions, RCA findings, and change PIRs for knowledge capture" }
+  ]
+}

@@ -1,0 +1,157 @@
+{
+  "$schema": "https://schemas.microsoft.com/agents/v1/skill.json",
+  "id": "continuity-manager",
+  "name": "Continuity Manager",
+  "description": "Ensures services can be maintained at acceptable levels following a disaster, provides framework for organizational resilience with effective response.",
+  "version": "1.0.0",
+  "itilPractice": "Service Continuity Management",
+  "valueChainActivity": "Plan, Design and Transition",
+  "triggers": [
+    {
+      "type": "intent",
+      "patterns": [
+        "continuity",
+        "disaster",
+        "recovery",
+        "BCP",
+        "DR",
+        "failover",
+        "RTO",
+        "RPO",
+        "backup"
+      ],
+      "description": "Activates when user mentions continuity, disaster recovery, BCP, DR, failover, RTO/RPO, or backups"
+    }
+  ],
+  "actions": [
+    {
+      "name": "manage-continuity-plan",
+      "description": "Store, version, and manage BCP/DR plan documents",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: create, update, query, version" },
+        { "name": "planId", "type": "string", "required": false, "description": "Continuity plan identifier" },
+        { "name": "details", "type": "object", "required": false, "description": "Plan content and metadata" }
+      ],
+      "outputs": [
+        { "name": "plan", "type": "object", "description": "Continuity plan record" }
+      ]
+    },
+    {
+      "name": "conduct-bia",
+      "description": "Conduct and document business impact analyses",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "serviceName", "type": "string", "required": true, "description": "Service to assess" },
+        { "name": "parameters", "type": "object", "required": false, "description": "BIA parameters and assumptions" }
+      ],
+      "outputs": [
+        { "name": "biaResult", "type": "object", "description": "Business impact analysis findings" }
+      ]
+    },
+    {
+      "name": "query-critical-services",
+      "description": "Query critical service maps, CI dependencies, and infrastructure topology from CMDB",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "criticality", "type": "string", "required": false, "description": "Filter by criticality level" }
+      ],
+      "outputs": [
+        { "name": "criticalServices", "type": "array", "description": "Critical services with dependencies" }
+      ]
+    },
+    {
+      "name": "manage-continuity-tests",
+      "description": "Plan, schedule, execute, and report on continuity tests",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: plan, schedule, execute, report" },
+        { "name": "testId", "type": "string", "required": false, "description": "Test identifier" },
+        { "name": "testType", "type": "string", "required": false, "description": "Type: tabletop, walkthrough, simulation, full-failover" }
+      ],
+      "outputs": [
+        { "name": "testResult", "type": "object", "description": "Test execution results and findings" }
+      ]
+    },
+    {
+      "name": "manage-crisis-communications",
+      "description": "Manage stakeholder notifications and crisis status updates",
+      "sideEffects": "notify",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: send-notification, update-status, close-crisis" },
+        { "name": "recipients", "type": "array", "required": false, "description": "Stakeholder recipients" },
+        { "name": "message", "type": "string", "required": false, "description": "Crisis communication content" }
+      ],
+      "outputs": [
+        { "name": "communicationId", "type": "string", "description": "Communication tracking identifier" }
+      ]
+    },
+    {
+      "name": "orchestrate-recovery",
+      "description": "Coordinate and track failover/failback procedure execution",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: initiate-failover, initiate-failback, track-progress" },
+        { "name": "planId", "type": "string", "required": true, "description": "Continuity plan to execute" },
+        { "name": "targetEnvironment", "type": "string", "required": false, "description": "Target DR environment" }
+      ],
+      "outputs": [
+        { "name": "recoveryStatus", "type": "object", "description": "Recovery progress and status" }
+      ]
+    },
+    {
+      "name": "track-compliance",
+      "description": "Track regulatory continuity requirements and audit readiness",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "framework", "type": "string", "required": false, "description": "Compliance framework filter" }
+      ],
+      "outputs": [
+        { "name": "complianceStatus", "type": "object", "description": "Compliance readiness and gaps" }
+      ]
+    },
+    {
+      "name": "generate-continuity-report",
+      "description": "Generate continuity readiness reports, test results, and gap analyses",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "reportType", "type": "string", "required": true, "description": "Type: readiness, test-results, gap-analysis" }
+      ],
+      "outputs": [
+        { "name": "report", "type": "object", "description": "Continuity report data" }
+      ]
+    }
+  ],
+  "crossPracticeIntegrations": [
+    { "practice": "Incident Management", "direction": "receives", "description": "Major incidents may trigger continuity plans; continuity coordinates disaster-scale response" },
+    { "practice": "IT Asset & Configuration Management", "direction": "receives", "description": "CMDB provides critical service maps; asset data informs BIA and recovery planning" },
+    { "practice": "Capacity and Performance Management", "direction": "bidirectional", "description": "DR capacity sizing informed by capacity plans; performance targets for DR environments" },
+    { "practice": "Change Enablement", "direction": "bidirectional", "description": "Continuity improvements follow change process; changes assessed for continuity impact" },
+    { "practice": "Service Level Management", "direction": "receives", "description": "Continuity targets (RTO/RPO) aligned with SLA commitments" },
+    { "practice": "Information Security Management", "direction": "bidirectional", "description": "Security controls maintained in DR environments; security incidents may trigger continuity" },
+    { "practice": "Supplier Management", "direction": "receives", "description": "Vendor continuity capabilities assessed; third-party DR contracts managed" }
+  ],
+  "hitlControls": [
+    { "action": "Disaster declaration", "level": "write", "reason": "Activating continuity plans requires authorized human declaration" },
+    { "action": "Failover initiation", "level": "write", "reason": "Executing failover to DR environments requires human authorization" },
+    { "action": "Failback initiation", "level": "write", "reason": "Returning to primary environments after disaster requires human approval" },
+    { "action": "Crisis communication distribution", "level": "notify", "reason": "External communications during disasters require human review" },
+    { "action": "Continuity plan approval", "level": "write", "reason": "New or updated continuity plans require management sign-off" },
+    { "action": "Test scope approval", "level": "write", "reason": "Full failover tests that impact live services require human authorization" },
+    { "action": "Third-party activation", "level": "write", "reason": "Invoking vendor DR contracts or cloud provider failover requires human decision" }
+  ],
+  "knowledgeSources": [
+    { "source": "Continuity Plan Repository", "type": "document", "description": "BCP/DR plan documents and procedures" },
+    { "source": "BIA Database", "type": "api", "description": "Business impact analysis records and RTO/RPO targets" },
+    { "source": "CMDB", "type": "api", "description": "Critical service maps and CI dependencies" },
+    { "source": "Test Management System", "type": "api", "description": "Continuity test results and findings" }
+  ]
+}

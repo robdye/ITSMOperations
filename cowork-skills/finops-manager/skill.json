@@ -1,0 +1,124 @@
+{
+  "$schema": "https://schemas.microsoft.com/agents/v1/skill.json",
+  "id": "finops-manager",
+  "name": "FinOps Manager",
+  "description": "Manages cloud financial operations including cost anomaly detection, right-sizing recommendations, budget forecasting, and optimization across Azure subscriptions aligned with FinOps Framework.",
+  "version": "1.0.0",
+  "itilPractice": "Financial Management of IT Services",
+  "valueChainActivity": "Plan",
+  "triggers": [
+    {
+      "type": "intent",
+      "patterns": [
+        "cost",
+        "finops",
+        "spending",
+        "right-size",
+        "right.?size",
+        "optimize cost",
+        "budget",
+        "cloud spend",
+        "cost anomal",
+        "waste",
+        "reserved instance",
+        "savings plan",
+        "chargeback",
+        "showback",
+        "cost allocation"
+      ],
+      "description": "Activates when user mentions cost management, FinOps, budgets, right-sizing, or cloud spending optimization"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "0 7 * * 1-5",
+      "description": "daily-cost-anomaly — Scans for cost anomalies every weekday at 07:00"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "0 8 1 * *",
+      "description": "monthly-finops-report — Generates monthly FinOps report on the 1st of each month"
+    },
+    {
+      "type": "event",
+      "source": "azure-cost-alerts",
+      "description": "Triggered when Azure budget alerts or cost anomaly alerts fire"
+    }
+  ],
+  "actions": [
+    {
+      "name": "get-cost-summary",
+      "description": "Retrieve cost summary across Azure subscriptions with breakdowns by service, resource group, or tag",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "scope", "type": "string", "required": false, "description": "Scope: subscription, resource group, or management group" },
+        { "name": "timeRange", "type": "string", "required": false, "description": "Time range for cost data (e.g., 'last 30 days', 'this month')" },
+        { "name": "groupBy", "type": "string", "required": false, "description": "Group costs by: service, resourceGroup, tag, location" }
+      ],
+      "outputs": [
+        { "name": "costSummary", "type": "object", "description": "Cost breakdown with totals and trends" },
+        { "name": "anomalies", "type": "array", "description": "Detected cost anomalies if any" }
+      ]
+    },
+    {
+      "name": "get-rightsizing-recommendations",
+      "description": "Analyze resources for right-sizing opportunities and generate recommendations",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "resourceType", "type": "string", "required": false, "description": "Filter by resource type (VMs, SQL, Storage, AKS)" },
+        { "name": "subscriptionId", "type": "string", "required": false, "description": "Target subscription" }
+      ],
+      "outputs": [
+        { "name": "recommendations", "type": "array", "description": "Right-sizing recommendations with projected savings" },
+        { "name": "totalPotentialSavings", "type": "number", "description": "Total monthly savings potential" }
+      ]
+    },
+    {
+      "name": "get-budget-forecast",
+      "description": "Generate budget forecast based on current spending trends",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "budgetName", "type": "string", "required": false, "description": "Specific budget to forecast against" },
+        { "name": "forecastPeriod", "type": "string", "required": false, "description": "Forecast horizon (e.g., '3 months', 'end of quarter')" }
+      ],
+      "outputs": [
+        { "name": "forecast", "type": "object", "description": "Projected spending vs. budget with confidence intervals" },
+        { "name": "alerts", "type": "array", "description": "Budget overrun warnings" }
+      ]
+    },
+    {
+      "name": "implement-optimization",
+      "description": "Execute an approved cost optimization action (e.g., resize VM, delete orphaned resource)",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "optimizationId", "type": "string", "required": true, "description": "Recommendation ID to implement" },
+        { "name": "changeRequestId", "type": "string", "required": false, "description": "Associated change request for audit trail" }
+      ],
+      "outputs": [
+        { "name": "result", "type": "object", "description": "Optimization execution result" },
+        { "name": "projectedSavings", "type": "number", "description": "Confirmed monthly savings from this action" }
+      ]
+    }
+  ],
+  "crossPracticeIntegrations": [
+    { "practice": "Change Enablement", "direction": "sends", "description": "Cost optimizations requiring infrastructure changes create change requests" },
+    { "practice": "IT Asset & Configuration Management", "direction": "receives", "description": "CMDB provides resource inventory and ownership for cost allocation" },
+    { "practice": "Capacity Management", "direction": "bidirectional", "description": "Right-sizing aligns with capacity planning; capacity requests impact costs" },
+    { "practice": "Service Level Management", "direction": "receives", "description": "SLA requirements constrain optimization options" },
+    { "practice": "Monitoring and Event Management", "direction": "receives", "description": "Utilization metrics drive right-sizing recommendations" }
+  ],
+  "hitlControls": [
+    { "action": "Implement optimization", "level": "write", "reason": "Resource modifications require human approval and change request" },
+    { "action": "Reserved instance purchase", "level": "write", "reason": "Financial commitments require management approval" },
+    { "action": "Budget threshold change", "level": "write", "reason": "Budget modifications require financial controller approval" }
+  ],
+  "knowledgeSources": [
+    { "source": "Azure Cost Management API", "type": "api", "description": "Cost data, budgets, and recommendations from Azure" },
+    { "source": "Azure Advisor", "type": "api", "description": "Right-sizing and optimization recommendations" },
+    { "source": "CMDB", "type": "api", "description": "Resource ownership and service mapping for chargeback" },
+    { "source": "FinOps Playbooks", "type": "document", "description": "Organizational FinOps policies and optimization procedures" }
+  ]
+}

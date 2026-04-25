@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Shadow Agent Discovery</title>
+<style>
+:root {
+  --colorNeutralBackground1: #ffffff;
+  --colorNeutralBackground3: #f5f5f5;
+  --colorNeutralForeground1: #242424;
+  --colorNeutralForeground2: #616161;
+  --colorNeutralForeground3: #757575;
+  --colorNeutralForeground4: #9e9e9e;
+  --colorNeutralStroke1: #e0e0e0;
+  --colorNeutralStroke2: #f0f0f0;
+  --colorBrandBackground: #0f6cbd;
+  --colorPaletteRedBackground1: #fde7e9;
+  --colorPaletteRedForeground1: #c4314b;
+  --colorPaletteRedBorder1: #f3b8be;
+  --colorPaletteYellowBackground1: #fff9e6;
+  --colorPaletteYellowForeground1: #835b00;
+  --colorPaletteYellowBorder1: #ffe5a0;
+  --colorPaletteOrangeBackground1: #fff3e0;
+  --colorPaletteOrangeForeground1: #e65100;
+  --colorPaletteOrangeBorder1: #ffc97a;
+  --colorPaletteGreenBackground1: #e8f5e9;
+  --colorPaletteGreenForeground1: #2e7d32;
+  --colorPaletteGreenBorder1: #a5d6a7;
+  --colorNeutralShadowAmbient: rgba(0,0,0,0.12);
+  --colorNeutralShadowKey: rgba(0,0,0,0.14);
+  --borderRadiusMedium: 8px;
+  --borderRadiusLarge: 12px;
+  --fontFamilyBase: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --fontSizeBase200: 11px;
+  --fontSizeBase300: 13px;
+  --fontSizeBase400: 16px;
+  --fontWeightSemibold: 600;
+  --fontWeightBold: 700;
+  --spacingHorizontalS: 8px;
+  --spacingHorizontalM: 12px;
+  --spacingHorizontalL: 16px;
+  --spacingVerticalS: 8px;
+  --spacingVerticalM: 12px;
+  --spacingVerticalL: 16px;
+  --durationNormal: 0.15s;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--fontFamilyBase);background:var(--colorNeutralBackground3);color:var(--colorNeutralForeground1);padding:20px;line-height:1.5}
+.widget{background:var(--colorNeutralBackground1);border-radius:var(--borderRadiusLarge);border:1px solid var(--colorNeutralStroke1);overflow:hidden;max-width:960px;margin:0 auto}
+.widget-header{display:flex;align-items:center;gap:10px;padding:var(--spacingVerticalL) 20px;border-bottom:1px solid var(--colorNeutralStroke2)}
+.widget-icon{width:36px;height:36px;border-radius:var(--borderRadiusMedium);background:var(--colorPaletteRedBackground1);display:flex;align-items:center;justify-content:center;font-size:18px}
+.widget-title h2{font-size:var(--fontSizeBase400);font-weight:var(--fontWeightSemibold);color:var(--colorNeutralForeground1)}
+.widget-title p{font-size:12px;color:var(--colorNeutralForeground2)}
+
+/* Summary cards */
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:1px;background:var(--colorNeutralStroke2);border-bottom:1px solid var(--colorNeutralStroke2)}
+.summary-card{background:var(--colorNeutralBackground1);padding:var(--spacingVerticalL) var(--spacingHorizontalM);text-align:center;transition:background var(--durationNormal)}
+.summary-card:hover{background:var(--colorNeutralBackground3)}
+.summary-card .val{font-size:26px;font-weight:var(--fontWeightBold);line-height:1.2}
+.summary-card .lbl{font-size:var(--fontSizeBase200);color:var(--colorNeutralForeground2);margin-top:2px;text-transform:uppercase;letter-spacing:.3px}
+.val-red{color:var(--colorPaletteRedForeground1)}
+.val-amber{color:var(--colorPaletteYellowForeground1)}
+.val-orange{color:var(--colorPaletteOrangeForeground1)}
+.val-green{color:var(--colorPaletteGreenForeground1)}
+.val-total{color:var(--colorBrandBackground)}
+
+/* Agent list */
+.agent-list{padding:var(--spacingVerticalM) var(--spacingHorizontalL);display:flex;flex-direction:column;gap:var(--spacingVerticalS)}
+.agent-card{display:grid;grid-template-columns:5px 1fr auto;background:var(--colorNeutralBackground3);border:1px solid var(--colorNeutralStroke1);border-radius:10px;overflow:hidden;transition:border-color var(--durationNormal),box-shadow var(--durationNormal)}
+.agent-card:hover,.agent-card:focus-within{border-color:var(--colorBrandBackground);box-shadow:0 2px 8px var(--colorNeutralShadowAmbient)}
+.risk-bar{border-radius:0}
+.risk-high{background:var(--colorPaletteRedForeground1)}
+.risk-medium{background:#f59e0b}
+.risk-low{background:var(--colorPaletteOrangeForeground1)}
+.risk-none{background:var(--colorPaletteGreenForeground1)}
+.agent-body{padding:var(--spacingVerticalM);display:flex;flex-direction:column;gap:3px;min-width:0}
+.agent-body h3{font-size:var(--fontSizeBase300);font-weight:var(--fontWeightSemibold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.agent-meta{font-size:var(--fontSizeBase200);color:var(--colorNeutralForeground3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.agent-right{padding:var(--spacingVerticalM) var(--spacingHorizontalL);display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:6px}
+.compliance-tag{padding:3px 10px;border-radius:20px;font-size:10px;font-weight:var(--fontWeightSemibold);white-space:nowrap;border:1px solid transparent}
+.ct-unauthorized{background:var(--colorPaletteRedBackground1);color:var(--colorPaletteRedForeground1);border-color:var(--colorPaletteRedBorder1)}
+.ct-unmonitored{background:var(--colorPaletteYellowBackground1);color:var(--colorPaletteYellowForeground1);border-color:var(--colorPaletteYellowBorder1)}
+.ct-non-compliant{background:var(--colorPaletteOrangeBackground1);color:var(--colorPaletteOrangeForeground1);border-color:var(--colorPaletteOrangeBorder1)}
+.ct-compliant{background:var(--colorPaletteGreenBackground1);color:var(--colorPaletteGreenForeground1);border-color:var(--colorPaletteGreenBorder1)}
+.actions{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.btn{padding:3px 10px;border-radius:6px;font-size:10px;font-weight:var(--fontWeightSemibold);border:1px solid var(--colorNeutralStroke1);background:var(--colorNeutralBackground1);color:var(--colorNeutralForeground1);cursor:pointer;transition:background var(--durationNormal),border-color var(--durationNormal);white-space:nowrap}
+.btn:hover,.btn:focus-visible{background:var(--colorNeutralBackground3);border-color:var(--colorBrandBackground);outline:2px solid transparent}
+.btn:focus-visible{outline:2px solid var(--colorBrandBackground);outline-offset:1px}
+.btn-danger{color:var(--colorPaletteRedForeground1);border-color:var(--colorPaletteRedBorder1)}
+.btn-danger:hover,.btn-danger:focus-visible{background:var(--colorPaletteRedBackground1)}
+.empty{text-align:center;color:var(--colorNeutralForeground4);padding:48px 20px;font-size:14px}
+.footer{padding:10px var(--spacingHorizontalL);border-top:1px solid var(--colorNeutralStroke2);text-align:right;font-size:10px;color:#bdbdbd}
+
+@media (max-width:600px){
+  .summary{grid-template-columns:repeat(2,1fr)}
+  .agent-card{grid-template-columns:4px 1fr}
+  .agent-right{flex-direction:row;align-items:center;padding:0 12px 10px 12px;grid-column:2}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:0.01ms!important;animation-iteration-count:1!important;transition-duration:0.01ms!important;scroll-behavior:auto!important}
+}
+</style>
+</head>
+<body>
+<div class="widget" role="region" aria-label="Shadow Agent Discovery">
+  <div class="widget-header">
+    <div class="widget-icon" aria-hidden="true">🕵️</div>
+    <div class="widget-title"><h2>Shadow Agent Discovery</h2><p id="sub">Scanning for unregistered AI agents</p></div>
+  </div>
+  <div class="summary" role="list" aria-label="Summary" id="summary"></div>
+  <div class="agent-list" role="list" aria-label="Discovered agents" id="agent-list"></div>
+  <div class="footer" id="footer"></div>
+</div>
+<script>
+(function(){
+  var data = window.__TOOL_DATA__ || (window.openai && window.openai.toolOutput) || {};
+  var agents = data.agents || [];
+  var summary = data.summary || {};
+  var generatedAt = data.generatedAt || '';
+
+  function esc(s){ var d=document.createElement('div'); d.textContent=s||''; return d.innerHTML; }
+
+  function riskClass(level){
+    switch((level||'').toLowerCase()){
+      case 'high': case 'critical': return 'risk-high';
+      case 'medium': return 'risk-medium';
+      case 'low': return 'risk-low';
+      default: return 'risk-none';
+    }
+  }
+
+  function complianceClass(status){
+    switch((status||'').toLowerCase()){
+      case 'unauthorized': return 'ct-unauthorized';
+      case 'unmonitored': return 'ct-unmonitored';
+      case 'non-compliant': case 'noncompliant': case 'non_compliant': return 'ct-non-compliant';
+      case 'compliant': return 'ct-compliant';
+      default: return 'ct-unmonitored';
+    }
+  }
+
+  function complianceLabel(status){
+    switch((status||'').toLowerCase()){
+      case 'unauthorized': return 'Unauthorized';
+      case 'unmonitored': return 'Unmonitored';
+      case 'non-compliant': case 'noncompliant': case 'non_compliant': return 'Non-Compliant';
+      case 'compliant': return 'Compliant';
+      default: return esc(status) || 'Unknown';
+    }
+  }
+
+  // Summary cards
+  var cards = [
+    { lbl:'Total', val:summary.total||agents.length, cls:'val-total' },
+    { lbl:'Unauthorized', val:summary.unauthorized||0, cls:'val-red' },
+    { lbl:'Unmonitored', val:summary.unmonitored||0, cls:'val-amber' },
+    { lbl:'Non-Compliant', val:summary.nonCompliant||0, cls:'val-orange' },
+    { lbl:'Compliant', val:summary.compliant||0, cls:'val-green' }
+  ];
+  var sh = '';
+  for(var c=0;c<cards.length;c++){
+    sh += '<div class="summary-card" role="listitem"><div class="val '+cards[c].cls+'">'+cards[c].val+'</div><div class="lbl">'+cards[c].lbl+'</div></div>';
+  }
+  document.getElementById('summary').innerHTML = sh;
+
+  // Agent list
+  var html = '';
+  for(var i=0;i<agents.length;i++){
+    var a = agents[i];
+    var rc = riskClass(a.riskLevel);
+    var cc = complianceClass(a.complianceStatus);
+    var cl = complianceLabel(a.complianceStatus);
+    var ls = a.lastSeen ? esc(a.lastSeen) : '—';
+
+    html += '<div class="agent-card" role="listitem">'
+      + '<div class="risk-bar '+rc+'" title="Risk: '+(esc(a.riskLevel)||'unknown')+'"></div>'
+      + '<div class="agent-body">'
+      +   '<h3>'+esc(a.name)+'</h3>'
+      +   '<div class="agent-meta">'
+      +     esc(a.type||'—')+' · '+esc(a.platform||'—')+' · Owner: '+esc(a.owner||'—')
+      +   '</div>'
+      +   '<div class="agent-meta">Last seen: '+ls+'</div>'
+      + '</div>'
+      + '<div class="agent-right">'
+      +   '<span class="compliance-tag '+cc+'">'+cl+'</span>'
+      +   '<div class="actions" role="group" aria-label="Actions for '+esc(a.name)+'">'
+      +     '<button class="btn" type="button" aria-label="Investigate '+esc(a.name)+'">Investigate</button>'
+      +     '<button class="btn" type="button" aria-label="Register '+esc(a.name)+'">Register</button>'
+      +     '<button class="btn btn-danger" type="button" aria-label="Block '+esc(a.name)+'">Block</button>'
+      +   '</div>'
+      + '</div>'
+      + '</div>';
+  }
+  document.getElementById('agent-list').innerHTML = html || '<div class="empty">No shadow agents discovered.</div>';
+
+  // Footer
+  var footer = agents.length + ' agent' + (agents.length !== 1 ? 's' : '') + ' discovered';
+  if(generatedAt) footer += ' · Generated ' + esc(generatedAt);
+  document.getElementById('footer').textContent = footer;
+  document.getElementById('sub').textContent = 'Discovered ' + agents.length + ' agent' + (agents.length !== 1 ? 's' : '') + ' across platforms';
+})();
+</script>
+</body>
+</html>

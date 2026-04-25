@@ -1,0 +1,2081 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "languageVersion": "2.0",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.41.2.15936",
+      "templateHash": "42568029002362136"
+    }
+  },
+  "parameters": {
+    "environmentName": {
+      "type": "string",
+      "metadata": {
+        "description": "Environment name (used as suffix for all resource names)"
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region for resource deployment"
+      }
+    },
+    "snowInstanceUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "ServiceNow instance URL for MCP Server integration"
+      }
+    },
+    "agentAppId": {
+      "type": "string",
+      "defaultValue": "871592dc-ffa9-42d0-aa31-46a679817d26",
+      "metadata": {
+        "description": "Agent Blueprint App ID (Microsoft Entra application)"
+      }
+    },
+    "snowClientSecret": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "ServiceNow client secret (stored in Key Vault)"
+      }
+    },
+    "snowPassword": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "ServiceNow basic auth password (stored in Key Vault)"
+      }
+    }
+  },
+  "variables": {
+    "tags": {
+      "project": "itsm-operations",
+      "environment": "[parameters('environmentName')]"
+    },
+    "logAnalyticsName": "[format('itsm-ops-{0}-law', parameters('environmentName'))]",
+    "storageAccountName": "[format('itsmops{0}st', parameters('environmentName'))]",
+    "acrPullRoleId": "7f951dda-4ed3-4680-a7ca-43fe172d538d"
+  },
+  "resources": {
+    "acr": {
+      "type": "Microsoft.ContainerRegistry/registries",
+      "apiVersion": "2023-11-01-preview",
+      "name": "[format('itsmops{0}acr', parameters('environmentName'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "sku": {
+        "name": "Basic"
+      },
+      "properties": {
+        "adminUserEnabled": false
+      }
+    },
+    "keyVault": {
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "2023-07-01",
+      "name": "[format('itsm-ops-{0}-kv', parameters('environmentName'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "properties": {
+        "tenantId": "[subscription().tenantId]",
+        "sku": {
+          "name": "standard",
+          "family": "A"
+        },
+        "enableRbacAuthorization": true,
+        "enableSoftDelete": true,
+        "softDeleteRetentionInDays": 90,
+        "enabledForDeployment": false,
+        "enabledForDiskEncryption": false,
+        "enabledForTemplateDeployment": true
+      }
+    },
+    "secretSnowClientSecret": {
+      "condition": "[not(empty(parameters('snowClientSecret')))]",
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2023-07-01",
+      "name": "[format('{0}/{1}', format('itsm-ops-{0}-kv', parameters('environmentName')), 'snow-client-secret')]",
+      "properties": {
+        "value": "[parameters('snowClientSecret')]"
+      },
+      "dependsOn": [
+        "keyVault"
+      ]
+    },
+    "secretSnowPassword": {
+      "condition": "[not(empty(parameters('snowPassword')))]",
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2023-07-01",
+      "name": "[format('{0}/{1}', format('itsm-ops-{0}-kv', parameters('environmentName')), 'snow-password')]",
+      "properties": {
+        "value": "[parameters('snowPassword')]"
+      },
+      "dependsOn": [
+        "keyVault"
+      ]
+    },
+    "logAnalyticsWorkspace": {
+      "existing": true,
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('logAnalyticsName')]",
+      "dependsOn": [
+        "monitoring"
+      ]
+    },
+    "storageAccountRef": {
+      "existing": true,
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-05-01",
+      "name": "[variables('storageAccountName')]",
+      "dependsOn": [
+        "dataServices"
+      ]
+    },
+    "functionAppPlan": {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2023-12-01",
+      "name": "[format('itsm-ops-{0}-plan', parameters('environmentName'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "kind": "functionapp",
+      "sku": {
+        "name": "Y1",
+        "tier": "Dynamic"
+      },
+      "properties": {
+        "reserved": true
+      }
+    },
+    "functionApp": {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2023-12-01",
+      "name": "[format('itsm-ops-{0}-func', parameters('environmentName'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]",
+      "kind": "functionapp,linux",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('itsm-ops-{0}-plan', parameters('environmentName')))]",
+        "httpsOnly": true,
+        "siteConfig": {
+          "linuxFxVersion": "Node|20",
+          "appSettings": [
+            {
+              "name": "AzureWebJobsStorage",
+              "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};EndpointSuffix={1};AccountKey={2}', variables('storageAccountName'), environment().suffixes.storage, listKeys('storageAccountRef', '2023-05-01').keys[0].value)]"
+            },
+            {
+              "name": "FUNCTIONS_EXTENSION_VERSION",
+              "value": "~4"
+            },
+            {
+              "name": "FUNCTIONS_WORKER_RUNTIME",
+              "value": "node"
+            },
+            {
+              "name": "WEBSITE_NODE_DEFAULT_VERSION",
+              "value": "~20"
+            },
+            {
+              "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+              "value": "[reference('monitoring').outputs.appInsightsConnectionString.value]"
+            },
+            {
+              "name": "COSMOS_ENDPOINT",
+              "value": "[reference('dataServices').outputs.cosmosEndpoint.value]"
+            },
+            {
+              "name": "SERVICE_BUS_ENDPOINT",
+              "value": "[reference('dataServices').outputs.serviceBusEndpoint.value]"
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "dataServices",
+        "functionAppPlan",
+        "monitoring"
+      ]
+    },
+    "acrPullWorker": {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.ContainerRegistry/registries', format('itsmops{0}acr', parameters('environmentName')))]",
+      "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', format('itsmops{0}acr', parameters('environmentName'))), 'digital-worker', variables('acrPullRoleId'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('acrPullRoleId'))]",
+        "principalId": "[reference('containerApps').outputs.digitalWorkerPrincipalId.value]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "acr",
+        "containerApps"
+      ]
+    },
+    "acrPullMcp": {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.ContainerRegistry/registries', format('itsmops{0}acr', parameters('environmentName')))]",
+      "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', format('itsmops{0}acr', parameters('environmentName'))), 'mcp-server', variables('acrPullRoleId'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('acrPullRoleId'))]",
+        "principalId": "[reference('containerApps').outputs.mcpServerPrincipalId.value]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "acr",
+        "containerApps"
+      ]
+    },
+    "monitoring": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "monitoring-deployment",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "environmentName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "13287117928737472516"
+            }
+          },
+          "parameters": {
+            "environmentName": {
+              "type": "string",
+              "metadata": {
+                "description": "Environment name used in resource naming"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for all resources"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "metadata": {
+                "description": "Tags applied to every resource"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.OperationalInsights/workspaces",
+              "apiVersion": "2023-09-01",
+              "name": "[format('itsm-ops-{0}-law', parameters('environmentName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "sku": {
+                  "name": "PerGB2018"
+                },
+                "retentionInDays": 90,
+                "publicNetworkAccessForIngestion": "Enabled",
+                "publicNetworkAccessForQuery": "Enabled"
+              }
+            },
+            {
+              "type": "Microsoft.Insights/components",
+              "apiVersion": "2020-02-02",
+              "name": "[format('itsm-ops-{0}-ai', parameters('environmentName'))]",
+              "location": "[parameters('location')]",
+              "kind": "web",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "Application_Type": "web",
+                "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', format('itsm-ops-{0}-law', parameters('environmentName')))]",
+                "IngestionMode": "LogAnalytics",
+                "publicNetworkAccessForIngestion": "Enabled",
+                "publicNetworkAccessForQuery": "Enabled"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.OperationalInsights/workspaces', format('itsm-ops-{0}-law', parameters('environmentName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Insights/actionGroups",
+              "apiVersion": "2023-01-01",
+              "name": "[format('itsm-ops-{0}-ag', parameters('environmentName'))]",
+              "location": "global",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "groupShortName": "ITSMAlerts",
+                "enabled": true,
+                "emailReceivers": []
+              }
+            },
+            {
+              "type": "Microsoft.Insights/scheduledQueryRules",
+              "apiVersion": "2023-03-15-preview",
+              "name": "ITSM-DigitalWorker-AgentErrorRate-Critical",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "displayName": "ITSM Agent Error Rate > 5% (Critical)",
+                "description": "Fires when the ITSM digital worker error rate exceeds 5% over the last hour.",
+                "severity": 0,
+                "enabled": true,
+                "evaluationFrequency": "PT5M",
+                "windowSize": "PT1H",
+                "scopes": [
+                  "[resourceId('Microsoft.OperationalInsights/workspaces', format('itsm-ops-{0}-law', parameters('environmentName')))]"
+                ],
+                "criteria": {
+                  "allOf": [
+                    {
+                      "query": "let total = toscalar(customEvents | where timestamp > ago(1h) and name startswith 'itsm.' | count); exceptions | where timestamp > ago(1h) | where customDimensions has 'itsm' | summarize errorCount = count() | extend errorRate = round(todouble(errorCount) / todouble(total) * 100, 2) | where errorRate > 5",
+                      "timeAggregation": "Count",
+                      "operator": "GreaterThan",
+                      "threshold": 0,
+                      "failingPeriods": {
+                        "numberOfEvaluationPeriods": 1,
+                        "minFailingPeriodsToAlert": 1
+                      }
+                    }
+                  ]
+                },
+                "actions": {
+                  "actionGroups": [
+                    "[resourceId('Microsoft.Insights/actionGroups', format('itsm-ops-{0}-ag', parameters('environmentName')))]"
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Insights/actionGroups', format('itsm-ops-{0}-ag', parameters('environmentName')))]",
+                "[resourceId('Microsoft.OperationalInsights/workspaces', format('itsm-ops-{0}-law', parameters('environmentName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Insights/scheduledQueryRules",
+              "apiVersion": "2023-03-15-preview",
+              "name": "ITSM-DigitalWorker-ToolLatencyP95-Warning",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "displayName": "ITSM Tool Call P95 Latency > 10s (Warning)",
+                "description": "Fires when the P95 tool call latency exceeds 10 seconds.",
+                "severity": 2,
+                "enabled": true,
+                "evaluationFrequency": "PT5M",
+                "windowSize": "PT15M",
+                "scopes": [
+                  "[resourceId('Microsoft.OperationalInsights/workspaces', format('itsm-ops-{0}-law', parameters('environmentName')))]"
+                ],
+                "criteria": {
+                  "allOf": [
+                    {
+                      "query": "customEvents | where name == 'itsm.tool.call.completed' | where timestamp > ago(15m) | extend durationMs = todouble(customDimensions.durationMs) | summarize p95 = percentile(durationMs, 95) by bin(timestamp, 5m) | where p95 > 10000",
+                      "timeAggregation": "Count",
+                      "operator": "GreaterThan",
+                      "threshold": 0,
+                      "failingPeriods": {
+                        "numberOfEvaluationPeriods": 1,
+                        "minFailingPeriodsToAlert": 1
+                      }
+                    }
+                  ]
+                },
+                "actions": {
+                  "actionGroups": [
+                    "[resourceId('Microsoft.Insights/actionGroups', format('itsm-ops-{0}-ag', parameters('environmentName')))]"
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Insights/actionGroups', format('itsm-ops-{0}-ag', parameters('environmentName')))]",
+                "[resourceId('Microsoft.OperationalInsights/workspaces', format('itsm-ops-{0}-law', parameters('environmentName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Insights/scheduledQueryRules",
+              "apiVersion": "2023-03-15-preview",
+              "name": "ITSM-DigitalWorker-ServiceNowFailures-Critical",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "displayName": "ServiceNow API Failures > 10 in 5 min (Critical)",
+                "description": "Fires when ServiceNow API failures exceed 10 within a 5-minute window.",
+                "severity": 0,
+                "enabled": true,
+                "evaluationFrequency": "PT1M",
+                "windowSize": "PT5M",
+                "scopes": [
+                  "[resourceId('Microsoft.OperationalInsights/workspaces', format('itsm-ops-{0}-law', parameters('environmentName')))]"
+                ],
+                "criteria": {
+                  "allOf": [
+                    {
+                      "query": "dependencies | where type == 'HTTP' and target contains 'service-now.com' | where timestamp > ago(5m) | where success == false | summarize failureCount = count() | where failureCount > 10",
+                      "timeAggregation": "Count",
+                      "operator": "GreaterThan",
+                      "threshold": 0,
+                      "failingPeriods": {
+                        "numberOfEvaluationPeriods": 1,
+                        "minFailingPeriodsToAlert": 1
+                      }
+                    }
+                  ]
+                },
+                "actions": {
+                  "actionGroups": [
+                    "[resourceId('Microsoft.Insights/actionGroups', format('itsm-ops-{0}-ag', parameters('environmentName')))]"
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Insights/actionGroups', format('itsm-ops-{0}-ag', parameters('environmentName')))]",
+                "[resourceId('Microsoft.OperationalInsights/workspaces', format('itsm-ops-{0}-law', parameters('environmentName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Insights/scheduledQueryRules",
+              "apiVersion": "2023-03-15-preview",
+              "name": "ITSM-DigitalWorker-TokenUsageSpike-Warning",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "displayName": "Token Usage Spike > 2x Baseline (Warning)",
+                "description": "Fires when current token usage exceeds 2x the 7-day rolling baseline average.",
+                "severity": 2,
+                "enabled": true,
+                "evaluationFrequency": "PT15M",
+                "windowSize": "PT1H",
+                "scopes": [
+                  "[resourceId('Microsoft.OperationalInsights/workspaces', format('itsm-ops-{0}-law', parameters('environmentName')))]"
+                ],
+                "criteria": {
+                  "allOf": [
+                    {
+                      "query": "let baseline = toscalar(customMetrics | where name == 'gen_ai.client.token.usage' | where timestamp between (ago(7d) .. ago(1d)) | summarize avg(value)); customMetrics | where name == 'gen_ai.client.token.usage' | where timestamp > ago(1h) | summarize currentAvg = avg(value) | where currentAvg > baseline * 2",
+                      "timeAggregation": "Count",
+                      "operator": "GreaterThan",
+                      "threshold": 0,
+                      "failingPeriods": {
+                        "numberOfEvaluationPeriods": 1,
+                        "minFailingPeriodsToAlert": 1
+                      }
+                    }
+                  ]
+                },
+                "actions": {
+                  "actionGroups": [
+                    "[resourceId('Microsoft.Insights/actionGroups', format('itsm-ops-{0}-ag', parameters('environmentName')))]"
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Insights/actionGroups', format('itsm-ops-{0}-ag', parameters('environmentName')))]",
+                "[resourceId('Microsoft.OperationalInsights/workspaces', format('itsm-ops-{0}-law', parameters('environmentName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Insights/scheduledQueryRules",
+              "apiVersion": "2023-03-15-preview",
+              "name": "ITSM-DigitalWorker-HitlPendingApprovals-Info",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "displayName": "HITL Approvals Pending > 30 min (Info)",
+                "description": "Fires when human-in-the-loop approvals have been pending for more than 30 minutes.",
+                "severity": 3,
+                "enabled": true,
+                "evaluationFrequency": "PT5M",
+                "windowSize": "PT1H",
+                "scopes": [
+                  "[resourceId('Microsoft.OperationalInsights/workspaces', format('itsm-ops-{0}-law', parameters('environmentName')))]"
+                ],
+                "criteria": {
+                  "allOf": [
+                    {
+                      "query": "customEvents | where name == 'itsm.hitl.requested' | where timestamp > ago(24h) | extend approvalId = tostring(customDimensions.approvalId) | join kind=leftanti (customEvents | where name == 'itsm.hitl.completed' | where timestamp > ago(24h) | extend approvalId = tostring(customDimensions.approvalId)) on approvalId | where timestamp < ago(30m) | summarize pendingCount = count() | where pendingCount > 0",
+                      "timeAggregation": "Count",
+                      "operator": "GreaterThan",
+                      "threshold": 0,
+                      "failingPeriods": {
+                        "numberOfEvaluationPeriods": 1,
+                        "minFailingPeriodsToAlert": 1
+                      }
+                    }
+                  ]
+                },
+                "actions": {
+                  "actionGroups": [
+                    "[resourceId('Microsoft.Insights/actionGroups', format('itsm-ops-{0}-ag', parameters('environmentName')))]"
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Insights/actionGroups', format('itsm-ops-{0}-ag', parameters('environmentName')))]",
+                "[resourceId('Microsoft.OperationalInsights/workspaces', format('itsm-ops-{0}-law', parameters('environmentName')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "logAnalyticsWorkspaceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.OperationalInsights/workspaces', format('itsm-ops-{0}-law', parameters('environmentName')))]"
+            },
+            "logAnalyticsWorkspaceName": {
+              "type": "string",
+              "value": "[format('itsm-ops-{0}-law', parameters('environmentName'))]"
+            },
+            "logAnalyticsCustomerId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', format('itsm-ops-{0}-law', parameters('environmentName'))), '2023-09-01').customerId]"
+            },
+            "appInsightsId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Insights/components', format('itsm-ops-{0}-ai', parameters('environmentName')))]"
+            },
+            "appInsightsName": {
+              "type": "string",
+              "value": "[format('itsm-ops-{0}-ai', parameters('environmentName'))]"
+            },
+            "appInsightsConnectionString": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Insights/components', format('itsm-ops-{0}-ai', parameters('environmentName'))), '2020-02-02').ConnectionString]"
+            },
+            "appInsightsInstrumentationKey": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Insights/components', format('itsm-ops-{0}-ai', parameters('environmentName'))), '2020-02-02').InstrumentationKey]"
+            }
+          }
+        }
+      }
+    },
+    "cognitiveServices": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "cognitive-services-deployment",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "environmentName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "6812361695125278473"
+            }
+          },
+          "parameters": {
+            "environmentName": {
+              "type": "string",
+              "metadata": {
+                "description": "Environment name used in resource naming"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for OpenAI and Content Safety"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "metadata": {
+                "description": "Tags applied to every resource"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.CognitiveServices/accounts",
+              "apiVersion": "2024-10-01",
+              "name": "[format('itsm-ops-{0}-openai', parameters('environmentName'))]",
+              "location": "[parameters('location')]",
+              "kind": "OpenAI",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "S0"
+              },
+              "properties": {
+                "customSubDomainName": "[format('itsm-ops-{0}-openai', parameters('environmentName'))]",
+                "publicNetworkAccess": "Enabled",
+                "disableLocalAuth": true
+              }
+            },
+            {
+              "type": "Microsoft.CognitiveServices/accounts/deployments",
+              "apiVersion": "2024-10-01",
+              "name": "[format('{0}/{1}', format('itsm-ops-{0}-openai', parameters('environmentName')), 'gpt-4o')]",
+              "sku": {
+                "name": "Standard",
+                "capacity": 30
+              },
+              "properties": {
+                "model": {
+                  "format": "OpenAI",
+                  "name": "gpt-4o",
+                  "version": "2024-11-20"
+                },
+                "raiPolicyName": "Microsoft.DefaultV2"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts', format('itsm-ops-{0}-openai', parameters('environmentName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.CognitiveServices/accounts/deployments",
+              "apiVersion": "2024-10-01",
+              "name": "[format('{0}/{1}', format('itsm-ops-{0}-openai', parameters('environmentName')), 'o4-mini')]",
+              "sku": {
+                "name": "Standard",
+                "capacity": 30
+              },
+              "properties": {
+                "model": {
+                  "format": "OpenAI",
+                  "name": "o4-mini",
+                  "version": "2025-04-16"
+                },
+                "raiPolicyName": "Microsoft.DefaultV2"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts/deployments', format('itsm-ops-{0}-openai', parameters('environmentName')), 'gpt-4o')]",
+                "[resourceId('Microsoft.CognitiveServices/accounts', format('itsm-ops-{0}-openai', parameters('environmentName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.CognitiveServices/accounts",
+              "apiVersion": "2024-10-01",
+              "name": "[format('itsm-ops-{0}-safety', parameters('environmentName'))]",
+              "location": "[parameters('location')]",
+              "kind": "ContentSafety",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "S0"
+              },
+              "properties": {
+                "customSubDomainName": "[format('itsm-ops-{0}-safety', parameters('environmentName'))]",
+                "publicNetworkAccess": "Enabled",
+                "disableLocalAuth": true
+              }
+            },
+            {
+              "type": "Microsoft.CognitiveServices/accounts",
+              "apiVersion": "2024-10-01",
+              "name": "[format('itsm-ops-{0}-speech', parameters('environmentName'))]",
+              "location": "westus2",
+              "kind": "SpeechServices",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "S0"
+              },
+              "properties": {
+                "customSubDomainName": "[format('itsm-ops-{0}-speech', parameters('environmentName'))]",
+                "publicNetworkAccess": "Enabled",
+                "disableLocalAuth": true
+              }
+            }
+          ],
+          "outputs": {
+            "openaiId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.CognitiveServices/accounts', format('itsm-ops-{0}-openai', parameters('environmentName')))]"
+            },
+            "openaiName": {
+              "type": "string",
+              "value": "[format('itsm-ops-{0}-openai', parameters('environmentName'))]"
+            },
+            "openaiEndpoint": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', format('itsm-ops-{0}-openai', parameters('environmentName'))), '2024-10-01').endpoint]"
+            },
+            "contentSafetyId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.CognitiveServices/accounts', format('itsm-ops-{0}-safety', parameters('environmentName')))]"
+            },
+            "contentSafetyName": {
+              "type": "string",
+              "value": "[format('itsm-ops-{0}-safety', parameters('environmentName'))]"
+            },
+            "contentSafetyEndpoint": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', format('itsm-ops-{0}-safety', parameters('environmentName'))), '2024-10-01').endpoint]"
+            },
+            "speechId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.CognitiveServices/accounts', format('itsm-ops-{0}-speech', parameters('environmentName')))]"
+            },
+            "speechName": {
+              "type": "string",
+              "value": "[format('itsm-ops-{0}-speech', parameters('environmentName'))]"
+            },
+            "speechEndpoint": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', format('itsm-ops-{0}-speech', parameters('environmentName'))), '2024-10-01').endpoint]"
+            },
+            "speechRegion": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', format('itsm-ops-{0}-speech', parameters('environmentName'))), '2024-10-01', 'full').location]"
+            }
+          }
+        }
+      }
+    },
+    "dataServices": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "data-services-deployment",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "environmentName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "9884157789413575139"
+            }
+          },
+          "parameters": {
+            "environmentName": {
+              "type": "string",
+              "metadata": {
+                "description": "Environment name used in resource naming"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for all resources"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "metadata": {
+                "description": "Tags applied to every resource"
+              }
+            }
+          },
+          "variables": {
+            "topics": [
+              "incident-events",
+              "change-events",
+              "problem-events",
+              "sla-events",
+              "notification-events"
+            ]
+          },
+          "resources": [
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts",
+              "apiVersion": "2024-05-15",
+              "name": "[format('itsm-ops-{0}-cosmos', parameters('environmentName'))]",
+              "location": "[parameters('location')]",
+              "kind": "GlobalDocumentDB",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "databaseAccountOfferType": "Standard",
+                "locations": [
+                  {
+                    "locationName": "[parameters('location')]",
+                    "failoverPriority": 0,
+                    "isZoneRedundant": false
+                  }
+                ],
+                "capabilities": [
+                  {
+                    "name": "EnableServerless"
+                  }
+                ],
+                "consistencyPolicy": {
+                  "defaultConsistencyLevel": "Session"
+                },
+                "disableLocalAuth": true
+              }
+            },
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
+              "apiVersion": "2024-05-15",
+              "name": "[format('{0}/{1}', format('itsm-ops-{0}-cosmos', parameters('environmentName')), 'itsm-db')]",
+              "properties": {
+                "resource": {
+                  "id": "itsm-db"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts', format('itsm-ops-{0}-cosmos', parameters('environmentName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+              "apiVersion": "2024-05-15",
+              "name": "[format('{0}/{1}/{2}', format('itsm-ops-{0}-cosmos', parameters('environmentName')), 'itsm-db', 'conversations')]",
+              "properties": {
+                "resource": {
+                  "id": "conversations",
+                  "partitionKey": {
+                    "paths": [
+                      "/conversationId"
+                    ],
+                    "kind": "Hash"
+                  },
+                  "indexingPolicy": {
+                    "automatic": true,
+                    "indexingMode": "consistent"
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', format('itsm-ops-{0}-cosmos', parameters('environmentName')), 'itsm-db')]"
+              ]
+            },
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+              "apiVersion": "2024-05-15",
+              "name": "[format('{0}/{1}/{2}', format('itsm-ops-{0}-cosmos', parameters('environmentName')), 'itsm-db', 'audit-trail')]",
+              "properties": {
+                "resource": {
+                  "id": "audit-trail",
+                  "partitionKey": {
+                    "paths": [
+                      "/agentId"
+                    ],
+                    "kind": "Hash"
+                  },
+                  "indexingPolicy": {
+                    "automatic": true,
+                    "indexingMode": "consistent"
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', format('itsm-ops-{0}-cosmos', parameters('environmentName')), 'itsm-db')]"
+              ]
+            },
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+              "apiVersion": "2024-05-15",
+              "name": "[format('{0}/{1}/{2}', format('itsm-ops-{0}-cosmos', parameters('environmentName')), 'itsm-db', 'reasoning-traces')]",
+              "properties": {
+                "resource": {
+                  "id": "reasoning-traces",
+                  "partitionKey": {
+                    "paths": [
+                      "/traceId"
+                    ],
+                    "kind": "Hash"
+                  },
+                  "indexingPolicy": {
+                    "automatic": true,
+                    "indexingMode": "consistent"
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.DocumentDB/databaseAccounts/sqlDatabases', format('itsm-ops-{0}-cosmos', parameters('environmentName')), 'itsm-db')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Cache/redis",
+              "apiVersion": "2024-03-01",
+              "name": "[format('itsm-ops-{0}-redis', parameters('environmentName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "sku": {
+                  "name": "Basic",
+                  "family": "C",
+                  "capacity": 0
+                },
+                "enableNonSslPort": false,
+                "minimumTlsVersion": "1.2",
+                "publicNetworkAccess": "Enabled"
+              }
+            },
+            {
+              "type": "Microsoft.ServiceBus/namespaces",
+              "apiVersion": "2022-10-01-preview",
+              "name": "[format('itsm-ops-{0}-sb', parameters('environmentName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Standard",
+                "tier": "Standard"
+              }
+            },
+            {
+              "copy": {
+                "name": "serviceBusTopics",
+                "count": "[length(variables('topics'))]"
+              },
+              "type": "Microsoft.ServiceBus/namespaces/topics",
+              "apiVersion": "2022-10-01-preview",
+              "name": "[format('{0}/{1}', format('itsm-ops-{0}-sb', parameters('environmentName')), variables('topics')[copyIndex()])]",
+              "properties": {
+                "maxSizeInMegabytes": 1024,
+                "defaultMessageTimeToLive": "P14D"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ServiceBus/namespaces', format('itsm-ops-{0}-sb', parameters('environmentName')))]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "serviceBusSubscriptions",
+                "count": "[length(variables('topics'))]"
+              },
+              "type": "Microsoft.ServiceBus/namespaces/topics/subscriptions",
+              "apiVersion": "2022-10-01-preview",
+              "name": "[format('{0}/{1}/{2}', format('itsm-ops-{0}-sb', parameters('environmentName')), variables('topics')[copyIndex()], format('{0}-sub', variables('topics')[copyIndex()]))]",
+              "properties": {
+                "maxDeliveryCount": 10,
+                "lockDuration": "PT1M",
+                "defaultMessageTimeToLive": "P14D"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ServiceBus/namespaces/topics', format('itsm-ops-{0}-sb', parameters('environmentName')), variables('topics')[copyIndex()])]"
+              ]
+            },
+            {
+              "type": "Microsoft.Search/searchServices",
+              "apiVersion": "2024-03-01-preview",
+              "name": "[format('itsm-ops-{0}-search', parameters('environmentName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "free"
+              },
+              "properties": {
+                "replicaCount": 1,
+                "partitionCount": 1,
+                "hostingMode": "default",
+                "publicNetworkAccess": "enabled"
+              }
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2023-05-01",
+              "name": "[format('itsmops{0}st', parameters('environmentName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "StorageV2",
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "properties": {
+                "supportsHttpsTrafficOnly": true,
+                "minimumTlsVersion": "TLS1_2",
+                "allowBlobPublicAccess": false,
+                "defaultToOAuthAuthentication": true
+              }
+            }
+          ],
+          "outputs": {
+            "cosmosAccountId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.DocumentDB/databaseAccounts', format('itsm-ops-{0}-cosmos', parameters('environmentName')))]"
+            },
+            "cosmosAccountName": {
+              "type": "string",
+              "value": "[format('itsm-ops-{0}-cosmos', parameters('environmentName'))]"
+            },
+            "cosmosEndpoint": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.DocumentDB/databaseAccounts', format('itsm-ops-{0}-cosmos', parameters('environmentName'))), '2024-05-15').documentEndpoint]"
+            },
+            "redisId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Cache/redis', format('itsm-ops-{0}-redis', parameters('environmentName')))]"
+            },
+            "redisName": {
+              "type": "string",
+              "value": "[format('itsm-ops-{0}-redis', parameters('environmentName'))]"
+            },
+            "redisHostName": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Cache/redis', format('itsm-ops-{0}-redis', parameters('environmentName'))), '2024-03-01').hostName]"
+            },
+            "serviceBusId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.ServiceBus/namespaces', format('itsm-ops-{0}-sb', parameters('environmentName')))]"
+            },
+            "serviceBusName": {
+              "type": "string",
+              "value": "[format('itsm-ops-{0}-sb', parameters('environmentName'))]"
+            },
+            "serviceBusEndpoint": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ServiceBus/namespaces', format('itsm-ops-{0}-sb', parameters('environmentName'))), '2022-10-01-preview').serviceBusEndpoint]"
+            },
+            "aiSearchId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Search/searchServices', format('itsm-ops-{0}-search', parameters('environmentName')))]"
+            },
+            "aiSearchName": {
+              "type": "string",
+              "value": "[format('itsm-ops-{0}-search', parameters('environmentName'))]"
+            },
+            "aiSearchEndpoint": {
+              "type": "string",
+              "value": "[format('https://{0}.search.windows.net', format('itsm-ops-{0}-search', parameters('environmentName')))]"
+            },
+            "storageAccountId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Storage/storageAccounts', format('itsmops{0}st', parameters('environmentName')))]"
+            },
+            "storageAccountName": {
+              "type": "string",
+              "value": "[format('itsmops{0}st', parameters('environmentName'))]"
+            }
+          }
+        }
+      }
+    },
+    "containerApps": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "container-apps-deployment",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "environmentName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          },
+          "logAnalyticsCustomerId": {
+            "value": "[reference('monitoring').outputs.logAnalyticsCustomerId.value]"
+          },
+          "logAnalyticsSharedKey": {
+            "value": "[listKeys('logAnalyticsWorkspace', '2023-09-01').primarySharedKey]"
+          },
+          "acrLoginServer": {
+            "value": "[reference('acr').loginServer]"
+          },
+          "appInsightsConnectionString": {
+            "value": "[reference('monitoring').outputs.appInsightsConnectionString.value]"
+          },
+          "openaiEndpoint": {
+            "value": "[reference('cognitiveServices').outputs.openaiEndpoint.value]"
+          },
+          "cosmosEndpoint": {
+            "value": "[reference('dataServices').outputs.cosmosEndpoint.value]"
+          },
+          "redisHostName": {
+            "value": "[reference('dataServices').outputs.redisHostName.value]"
+          },
+          "serviceBusEndpoint": {
+            "value": "[reference('dataServices').outputs.serviceBusEndpoint.value]"
+          },
+          "keyVaultName": {
+            "value": "[format('itsm-ops-{0}-kv', parameters('environmentName'))]"
+          },
+          "contentSafetyEndpoint": {
+            "value": "[reference('cognitiveServices').outputs.contentSafetyEndpoint.value]"
+          },
+          "speechEndpoint": {
+            "value": "[reference('cognitiveServices').outputs.speechEndpoint.value]"
+          },
+          "speechRegion": {
+            "value": "[reference('cognitiveServices').outputs.speechRegion.value]"
+          },
+          "snowInstanceUrl": {
+            "value": "[parameters('snowInstanceUrl')]"
+          },
+          "aiSearchEndpoint": {
+            "value": "[reference('dataServices').outputs.aiSearchEndpoint.value]"
+          },
+          "agentAppId": {
+            "value": "[parameters('agentAppId')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "14883100644758057601"
+            }
+          },
+          "parameters": {
+            "environmentName": {
+              "type": "string",
+              "metadata": {
+                "description": "Environment name used in resource naming"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "metadata": {
+                "description": "Tags applied to every resource"
+              }
+            },
+            "logAnalyticsCustomerId": {
+              "type": "string",
+              "metadata": {
+                "description": "Log Analytics workspace customer ID for Container Apps environment"
+              }
+            },
+            "logAnalyticsSharedKey": {
+              "type": "securestring",
+              "metadata": {
+                "description": "Log Analytics workspace shared key"
+              }
+            },
+            "acrLoginServer": {
+              "type": "string",
+              "metadata": {
+                "description": "ACR login server (e.g. myacr.azurecr.io)"
+              }
+            },
+            "appInsightsConnectionString": {
+              "type": "string",
+              "metadata": {
+                "description": "Application Insights connection string"
+              }
+            },
+            "openaiEndpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure OpenAI endpoint"
+              }
+            },
+            "cosmosEndpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "Cosmos DB endpoint"
+              }
+            },
+            "redisHostName": {
+              "type": "string",
+              "metadata": {
+                "description": "Redis hostname"
+              }
+            },
+            "serviceBusEndpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "Service Bus endpoint"
+              }
+            },
+            "keyVaultName": {
+              "type": "string",
+              "metadata": {
+                "description": "Key Vault name"
+              }
+            },
+            "contentSafetyEndpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "Content Safety endpoint"
+              }
+            },
+            "speechEndpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "Speech endpoint"
+              }
+            },
+            "speechRegion": {
+              "type": "string",
+              "metadata": {
+                "description": "Speech region"
+              }
+            },
+            "snowInstanceUrl": {
+              "type": "string",
+              "metadata": {
+                "description": "ServiceNow instance URL"
+              }
+            },
+            "aiSearchEndpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "AI Search endpoint"
+              }
+            },
+            "agentAppId": {
+              "type": "string",
+              "metadata": {
+                "description": "Agent Blueprint App ID"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.App/managedEnvironments",
+              "apiVersion": "2024-03-01",
+              "name": "[format('itsm-ops-{0}-cae', parameters('environmentName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "appLogsConfiguration": {
+                  "destination": "log-analytics",
+                  "logAnalyticsConfiguration": {
+                    "customerId": "[parameters('logAnalyticsCustomerId')]",
+                    "sharedKey": "[parameters('logAnalyticsSharedKey')]"
+                  }
+                },
+                "zoneRedundant": false
+              }
+            },
+            {
+              "type": "Microsoft.App/containerApps",
+              "apiVersion": "2024-03-01",
+              "name": "[format('itsm-ops-{0}-worker', parameters('environmentName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', format('itsm-ops-{0}-cae', parameters('environmentName')))]",
+                "configuration": {
+                  "activeRevisionsMode": "Single",
+                  "ingress": {
+                    "external": true,
+                    "targetPort": 3978,
+                    "transport": "http",
+                    "allowInsecure": false
+                  },
+                  "registries": [
+                    {
+                      "server": "[parameters('acrLoginServer')]",
+                      "identity": "system"
+                    }
+                  ]
+                },
+                "template": {
+                  "containers": [
+                    {
+                      "name": "digital-worker",
+                      "image": "[format('{0}/itsm-digital-worker:latest', parameters('acrLoginServer'))]",
+                      "resources": {
+                        "cpu": "[json('1.0')]",
+                        "memory": "2Gi"
+                      },
+                      "env": [
+                        {
+                          "name": "PORT",
+                          "value": "3978"
+                        },
+                        {
+                          "name": "NODE_ENV",
+                          "value": "production"
+                        },
+                        {
+                          "name": "MicrosoftAppType",
+                          "value": "SingleTenant"
+                        },
+                        {
+                          "name": "MicrosoftAppId",
+                          "value": "[parameters('agentAppId')]"
+                        },
+                        {
+                          "name": "AZURE_OPENAI_ENDPOINT",
+                          "value": "[parameters('openaiEndpoint')]"
+                        },
+                        {
+                          "name": "AZURE_OPENAI_MODEL",
+                          "value": "gpt-4o"
+                        },
+                        {
+                          "name": "AZURE_OPENAI_API_VERSION",
+                          "value": "2024-12-01-preview"
+                        },
+                        {
+                          "name": "COSMOS_ENDPOINT",
+                          "value": "[parameters('cosmosEndpoint')]"
+                        },
+                        {
+                          "name": "COSMOS_DATABASE",
+                          "value": "itsm-db"
+                        },
+                        {
+                          "name": "REDIS_URL",
+                          "value": "[format('rediss://{0}:6380', parameters('redisHostName'))]"
+                        },
+                        {
+                          "name": "SERVICE_BUS_ENDPOINT",
+                          "value": "[parameters('serviceBusEndpoint')]"
+                        },
+                        {
+                          "name": "KEY_VAULT_NAME",
+                          "value": "[parameters('keyVaultName')]"
+                        },
+                        {
+                          "name": "CONTENT_SAFETY_ENDPOINT",
+                          "value": "[parameters('contentSafetyEndpoint')]"
+                        },
+                        {
+                          "name": "AZURE_SPEECH_ENDPOINT",
+                          "value": "[parameters('speechEndpoint')]"
+                        },
+                        {
+                          "name": "AZURE_SPEECH_REGION",
+                          "value": "[parameters('speechRegion')]"
+                        },
+                        {
+                          "name": "MCP_CHANGE_ENDPOINT",
+                          "value": "[format('https://itsm-ops-{0}-mcp.{1}', parameters('environmentName'), reference(resourceId('Microsoft.App/managedEnvironments', format('itsm-ops-{0}-cae', parameters('environmentName'))), '2024-03-01').defaultDomain)]"
+                        },
+                        {
+                          "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                          "value": "[parameters('appInsightsConnectionString')]"
+                        }
+                      ]
+                    }
+                  ],
+                  "scale": {
+                    "minReplicas": 1,
+                    "maxReplicas": 5,
+                    "rules": [
+                      {
+                        "name": "http-scaling",
+                        "http": {
+                          "metadata": {
+                            "concurrentRequests": "50"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.App/managedEnvironments', format('itsm-ops-{0}-cae', parameters('environmentName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.App/containerApps",
+              "apiVersion": "2024-03-01",
+              "name": "[format('itsm-ops-{0}-mcp', parameters('environmentName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', format('itsm-ops-{0}-cae', parameters('environmentName')))]",
+                "configuration": {
+                  "activeRevisionsMode": "Single",
+                  "ingress": {
+                    "external": true,
+                    "targetPort": 3002,
+                    "transport": "http",
+                    "allowInsecure": false
+                  },
+                  "registries": [
+                    {
+                      "server": "[parameters('acrLoginServer')]",
+                      "identity": "system"
+                    }
+                  ]
+                },
+                "template": {
+                  "containers": [
+                    {
+                      "name": "mcp-server",
+                      "image": "[format('{0}/itsm-mcp-server:latest', parameters('acrLoginServer'))]",
+                      "resources": {
+                        "cpu": "[json('0.5')]",
+                        "memory": "1Gi"
+                      },
+                      "env": [
+                        {
+                          "name": "PORT",
+                          "value": "3002"
+                        },
+                        {
+                          "name": "SERVER_BASE_URL",
+                          "value": "[format('https://itsm-ops-{0}-mcp.{1}', parameters('environmentName'), reference(resourceId('Microsoft.App/managedEnvironments', format('itsm-ops-{0}-cae', parameters('environmentName'))), '2024-03-01').defaultDomain)]"
+                        },
+                        {
+                          "name": "SNOW_INSTANCE",
+                          "value": "[parameters('snowInstanceUrl')]"
+                        },
+                        {
+                          "name": "AZURE_SEARCH_ENDPOINT",
+                          "value": "[parameters('aiSearchEndpoint')]"
+                        },
+                        {
+                          "name": "KEY_VAULT_NAME",
+                          "value": "[parameters('keyVaultName')]"
+                        },
+                        {
+                          "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                          "value": "[parameters('appInsightsConnectionString')]"
+                        }
+                      ]
+                    }
+                  ],
+                  "scale": {
+                    "minReplicas": 1,
+                    "maxReplicas": 3
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.App/managedEnvironments', format('itsm-ops-{0}-cae', parameters('environmentName')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "containerAppsEnvId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.App/managedEnvironments', format('itsm-ops-{0}-cae', parameters('environmentName')))]"
+            },
+            "containerAppsEnvName": {
+              "type": "string",
+              "value": "[format('itsm-ops-{0}-cae', parameters('environmentName'))]"
+            },
+            "containerAppsEnvDomain": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/managedEnvironments', format('itsm-ops-{0}-cae', parameters('environmentName'))), '2024-03-01').defaultDomain]"
+            },
+            "digitalWorkerFqdn": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/containerApps', format('itsm-ops-{0}-worker', parameters('environmentName'))), '2024-03-01').configuration.ingress.fqdn]"
+            },
+            "digitalWorkerPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/containerApps', format('itsm-ops-{0}-worker', parameters('environmentName'))), '2024-03-01', 'full').identity.principalId]"
+            },
+            "mcpServerFqdn": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/containerApps', format('itsm-ops-{0}-mcp', parameters('environmentName'))), '2024-03-01').configuration.ingress.fqdn]"
+            },
+            "mcpServerPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/containerApps', format('itsm-ops-{0}-mcp', parameters('environmentName'))), '2024-03-01', 'full').identity.principalId]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "acr",
+        "cognitiveServices",
+        "dataServices",
+        "keyVault",
+        "monitoring"
+      ]
+    },
+    "aiFoundry": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "ai-foundry-deployment",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "environmentName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          },
+          "storageAccountId": {
+            "value": "[reference('dataServices').outputs.storageAccountId.value]"
+          },
+          "keyVaultId": {
+            "value": "[resourceId('Microsoft.KeyVault/vaults', format('itsm-ops-{0}-kv', parameters('environmentName')))]"
+          },
+          "appInsightsId": {
+            "value": "[reference('monitoring').outputs.appInsightsId.value]"
+          },
+          "openaiResourceId": {
+            "value": "[reference('cognitiveServices').outputs.openaiId.value]"
+          },
+          "openaiEndpoint": {
+            "value": "[reference('cognitiveServices').outputs.openaiEndpoint.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "27103861822234481"
+            }
+          },
+          "parameters": {
+            "environmentName": {
+              "type": "string",
+              "metadata": {
+                "description": "Environment name used in resource naming"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "metadata": {
+                "description": "Tags applied to every resource"
+              }
+            },
+            "storageAccountId": {
+              "type": "string",
+              "metadata": {
+                "description": "Storage Account ID for AI Foundry backing storage"
+              }
+            },
+            "keyVaultId": {
+              "type": "string",
+              "metadata": {
+                "description": "Key Vault ID for AI Foundry secrets"
+              }
+            },
+            "appInsightsId": {
+              "type": "string",
+              "metadata": {
+                "description": "Application Insights ID for AI Foundry telemetry"
+              }
+            },
+            "openaiResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure OpenAI resource ID to connect"
+              }
+            },
+            "openaiEndpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure OpenAI endpoint URL"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.MachineLearningServices/workspaces",
+              "apiVersion": "2024-10-01",
+              "name": "[format('itsm-ops-{0}-hub', parameters('environmentName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "Hub",
+              "sku": {
+                "name": "Basic",
+                "tier": "Basic"
+              },
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "friendlyName": "ITSM Operations AI Hub",
+                "description": "AI Foundry Hub for ITSM Operations Digital Worker",
+                "storageAccount": "[parameters('storageAccountId')]",
+                "keyVault": "[parameters('keyVaultId')]",
+                "applicationInsights": "[parameters('appInsightsId')]",
+                "publicNetworkAccess": "Enabled"
+              }
+            },
+            {
+              "type": "Microsoft.MachineLearningServices/workspaces",
+              "apiVersion": "2024-10-01",
+              "name": "[format('itsm-ops-{0}-project', parameters('environmentName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "Project",
+              "sku": {
+                "name": "Basic",
+                "tier": "Basic"
+              },
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "friendlyName": "ITSM Operations AI Project",
+                "description": "AI Foundry Project for agent development and evaluation",
+                "hubResourceId": "[resourceId('Microsoft.MachineLearningServices/workspaces', format('itsm-ops-{0}-hub', parameters('environmentName')))]",
+                "publicNetworkAccess": "Enabled"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.MachineLearningServices/workspaces', format('itsm-ops-{0}-hub', parameters('environmentName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.MachineLearningServices/workspaces/connections",
+              "apiVersion": "2024-10-01",
+              "name": "[format('{0}/{1}', format('itsm-ops-{0}-hub', parameters('environmentName')), 'itsm-openai-connection')]",
+              "properties": {
+                "category": "AzureOpenAI",
+                "authType": "AAD",
+                "isSharedToAll": true,
+                "target": "[parameters('openaiEndpoint')]",
+                "metadata": {
+                  "ApiType": "Azure",
+                  "ResourceId": "[parameters('openaiResourceId')]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.MachineLearningServices/workspaces', format('itsm-ops-{0}-hub', parameters('environmentName')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "aiHubId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.MachineLearningServices/workspaces', format('itsm-ops-{0}-hub', parameters('environmentName')))]"
+            },
+            "aiHubName": {
+              "type": "string",
+              "value": "[format('itsm-ops-{0}-hub', parameters('environmentName'))]"
+            },
+            "aiProjectId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.MachineLearningServices/workspaces', format('itsm-ops-{0}-project', parameters('environmentName')))]"
+            },
+            "aiProjectName": {
+              "type": "string",
+              "value": "[format('itsm-ops-{0}-project', parameters('environmentName'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "cognitiveServices",
+        "dataServices",
+        "keyVault",
+        "monitoring"
+      ]
+    },
+    "identity": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "identity-deployment",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "environmentName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          },
+          "digitalWorkerPrincipalId": {
+            "value": "[reference('containerApps').outputs.digitalWorkerPrincipalId.value]"
+          },
+          "keyVaultId": {
+            "value": "[resourceId('Microsoft.KeyVault/vaults', format('itsm-ops-{0}-kv', parameters('environmentName')))]"
+          },
+          "openaiId": {
+            "value": "[reference('cognitiveServices').outputs.openaiId.value]"
+          },
+          "contentSafetyId": {
+            "value": "[reference('cognitiveServices').outputs.contentSafetyId.value]"
+          },
+          "speechId": {
+            "value": "[reference('cognitiveServices').outputs.speechId.value]"
+          },
+          "cosmosAccountId": {
+            "value": "[reference('dataServices').outputs.cosmosAccountId.value]"
+          },
+          "serviceBusId": {
+            "value": "[reference('dataServices').outputs.serviceBusId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "3405237809119994955"
+            }
+          },
+          "parameters": {
+            "environmentName": {
+              "type": "string",
+              "metadata": {
+                "description": "Environment name used in resource naming"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "metadata": {
+                "description": "Tags applied to every resource"
+              }
+            },
+            "digitalWorkerPrincipalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID of the Digital Worker Container App system MI"
+              }
+            },
+            "keyVaultId": {
+              "type": "string",
+              "metadata": {
+                "description": "Key Vault resource ID for role scoping"
+              }
+            },
+            "openaiId": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure OpenAI resource ID for role scoping"
+              }
+            },
+            "contentSafetyId": {
+              "type": "string",
+              "metadata": {
+                "description": "Content Safety resource ID for role scoping"
+              }
+            },
+            "speechId": {
+              "type": "string",
+              "metadata": {
+                "description": "Speech resource ID for role scoping"
+              }
+            },
+            "cosmosAccountId": {
+              "type": "string",
+              "metadata": {
+                "description": "Cosmos DB account resource ID for role scoping"
+              }
+            },
+            "serviceBusId": {
+              "type": "string",
+              "metadata": {
+                "description": "Service Bus namespace resource ID for role scoping"
+              }
+            }
+          },
+          "variables": {
+            "roles": {
+              "keyVaultSecretsUser": "4633458b-17de-408a-b874-0445c86b69e6",
+              "cognitiveServicesUser": "a97b65f3-24c7-4388-baec-2e87135dc908",
+              "cosmosDbDataContributor": "00000000-0000-0000-0000-000000000002",
+              "cosmosDbDataReader": "00000000-0000-0000-0000-000000000001",
+              "serviceBusDataOwner": "090c5cfd-751d-490a-894a-3ce6f1109419",
+              "monitoringMetricsPublisher": "3913510d-42f4-4e42-8a64-420c390055eb"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[format('itsm-ops-{0}-mi-incident', parameters('environmentName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]"
+            },
+            {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[format('itsm-ops-{0}-mi-change', parameters('environmentName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]"
+            },
+            {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[format('itsm-ops-{0}-mi-security', parameters('environmentName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]"
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.KeyVault/vaults', format('itsm-ops-{0}-kv', parameters('environmentName')))]",
+              "name": "[guid(parameters('keyVaultId'), parameters('digitalWorkerPrincipalId'), variables('roles').keyVaultSecretsUser)]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').keyVaultSecretsUser)]",
+                "principalId": "[parameters('digitalWorkerPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', format('itsm-ops-{0}-openai', parameters('environmentName')))]",
+              "name": "[guid(parameters('openaiId'), parameters('digitalWorkerPrincipalId'), variables('roles').cognitiveServicesUser)]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').cognitiveServicesUser)]",
+                "principalId": "[parameters('digitalWorkerPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', format('itsm-ops-{0}-safety', parameters('environmentName')))]",
+              "name": "[guid(parameters('contentSafetyId'), parameters('digitalWorkerPrincipalId'), variables('roles').cognitiveServicesUser)]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').cognitiveServicesUser)]",
+                "principalId": "[parameters('digitalWorkerPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', format('itsm-ops-{0}-speech', parameters('environmentName')))]",
+              "name": "[guid(parameters('speechId'), parameters('digitalWorkerPrincipalId'), variables('roles').cognitiveServicesUser)]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').cognitiveServicesUser)]",
+                "principalId": "[parameters('digitalWorkerPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments",
+              "apiVersion": "2024-05-15",
+              "name": "[format('{0}/{1}', format('itsm-ops-{0}-cosmos', parameters('environmentName')), guid(parameters('cosmosAccountId'), parameters('digitalWorkerPrincipalId'), variables('roles').cosmosDbDataContributor))]",
+              "properties": {
+                "roleDefinitionId": "[format('{0}/sqlRoleDefinitions/{1}', parameters('cosmosAccountId'), variables('roles').cosmosDbDataContributor)]",
+                "principalId": "[parameters('digitalWorkerPrincipalId')]",
+                "scope": "[parameters('cosmosAccountId')]"
+              }
+            },
+            {
+              "type": "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments",
+              "apiVersion": "2024-05-15",
+              "name": "[format('{0}/{1}', format('itsm-ops-{0}-cosmos', parameters('environmentName')), guid(parameters('cosmosAccountId'), parameters('digitalWorkerPrincipalId'), variables('roles').cosmosDbDataReader))]",
+              "properties": {
+                "roleDefinitionId": "[format('{0}/sqlRoleDefinitions/{1}', parameters('cosmosAccountId'), variables('roles').cosmosDbDataReader)]",
+                "principalId": "[parameters('digitalWorkerPrincipalId')]",
+                "scope": "[parameters('cosmosAccountId')]"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.ServiceBus/namespaces', format('itsm-ops-{0}-sb', parameters('environmentName')))]",
+              "name": "[guid(parameters('serviceBusId'), parameters('digitalWorkerPrincipalId'), variables('roles').serviceBusDataOwner)]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').serviceBusDataOwner)]",
+                "principalId": "[parameters('digitalWorkerPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(resourceGroup().id, parameters('digitalWorkerPrincipalId'), variables('roles').monitoringMetricsPublisher)]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roles').monitoringMetricsPublisher)]",
+                "principalId": "[parameters('digitalWorkerPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            }
+          ],
+          "outputs": {
+            "incidentManagerPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('itsm-ops-{0}-mi-incident', parameters('environmentName'))), '2023-01-31').principalId]"
+            },
+            "incidentManagerClientId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('itsm-ops-{0}-mi-incident', parameters('environmentName'))), '2023-01-31').clientId]"
+            },
+            "incidentManagerResourceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('itsm-ops-{0}-mi-incident', parameters('environmentName')))]"
+            },
+            "changeManagerPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('itsm-ops-{0}-mi-change', parameters('environmentName'))), '2023-01-31').principalId]"
+            },
+            "changeManagerClientId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('itsm-ops-{0}-mi-change', parameters('environmentName'))), '2023-01-31').clientId]"
+            },
+            "changeManagerResourceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('itsm-ops-{0}-mi-change', parameters('environmentName')))]"
+            },
+            "securityManagerPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('itsm-ops-{0}-mi-security', parameters('environmentName'))), '2023-01-31').principalId]"
+            },
+            "securityManagerClientId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('itsm-ops-{0}-mi-security', parameters('environmentName'))), '2023-01-31').clientId]"
+            },
+            "securityManagerResourceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('itsm-ops-{0}-mi-security', parameters('environmentName')))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "cognitiveServices",
+        "containerApps",
+        "dataServices",
+        "keyVault"
+      ]
+    }
+  },
+  "outputs": {
+    "digitalWorkerUrl": {
+      "type": "string",
+      "value": "[format('https://{0}', reference('containerApps').outputs.digitalWorkerFqdn.value)]"
+    },
+    "mcpServerUrl": {
+      "type": "string",
+      "value": "[format('https://{0}', reference('containerApps').outputs.mcpServerFqdn.value)]"
+    },
+    "containerAppsEnvironment": {
+      "type": "string",
+      "value": "[reference('containerApps').outputs.containerAppsEnvName.value]"
+    },
+    "acrLoginServer": {
+      "type": "string",
+      "value": "[reference('acr').loginServer]"
+    },
+    "openaiEndpoint": {
+      "type": "string",
+      "value": "[reference('cognitiveServices').outputs.openaiEndpoint.value]"
+    },
+    "contentSafetyEndpoint": {
+      "type": "string",
+      "value": "[reference('cognitiveServices').outputs.contentSafetyEndpoint.value]"
+    },
+    "speechEndpoint": {
+      "type": "string",
+      "value": "[reference('cognitiveServices').outputs.speechEndpoint.value]"
+    },
+    "cosmosEndpoint": {
+      "type": "string",
+      "value": "[reference('dataServices').outputs.cosmosEndpoint.value]"
+    },
+    "redisHostName": {
+      "type": "string",
+      "value": "[reference('dataServices').outputs.redisHostName.value]"
+    },
+    "serviceBusEndpoint": {
+      "type": "string",
+      "value": "[reference('dataServices').outputs.serviceBusEndpoint.value]"
+    },
+    "aiSearchEndpoint": {
+      "type": "string",
+      "value": "[reference('dataServices').outputs.aiSearchEndpoint.value]"
+    },
+    "appInsightsConnectionString": {
+      "type": "string",
+      "value": "[reference('monitoring').outputs.appInsightsConnectionString.value]"
+    },
+    "logAnalyticsWorkspaceId": {
+      "type": "string",
+      "value": "[reference('monitoring').outputs.logAnalyticsWorkspaceId.value]"
+    },
+    "keyVaultName": {
+      "type": "string",
+      "value": "[format('itsm-ops-{0}-kv', parameters('environmentName'))]"
+    },
+    "keyVaultUri": {
+      "type": "string",
+      "value": "[reference('keyVault').vaultUri]"
+    },
+    "functionAppUrl": {
+      "type": "string",
+      "value": "[format('https://{0}', reference('functionApp').defaultHostName)]"
+    },
+    "aiHubName": {
+      "type": "string",
+      "value": "[reference('aiFoundry').outputs.aiHubName.value]"
+    },
+    "aiProjectName": {
+      "type": "string",
+      "value": "[reference('aiFoundry').outputs.aiProjectName.value]"
+    },
+    "incidentManagerPrincipalId": {
+      "type": "string",
+      "value": "[reference('identity').outputs.incidentManagerPrincipalId.value]"
+    },
+    "changeManagerPrincipalId": {
+      "type": "string",
+      "value": "[reference('identity').outputs.changeManagerPrincipalId.value]"
+    },
+    "securityManagerPrincipalId": {
+      "type": "string",
+      "value": "[reference('identity').outputs.securityManagerPrincipalId.value]"
+    }
+  }
+}

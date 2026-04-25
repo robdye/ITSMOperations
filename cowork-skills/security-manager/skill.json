@@ -1,0 +1,174 @@
+{
+  "$schema": "https://schemas.microsoft.com/agents/v1/skill.json",
+  "id": "security-manager",
+  "name": "Security Manager",
+  "description": "Protects information needed by the organization for conducting business, managing risks to confidentiality, integrity, and availability.",
+  "version": "1.0.0",
+  "itilPractice": "Information Security Management",
+  "valueChainActivity": "All value chain activities",
+  "triggers": [
+    {
+      "type": "intent",
+      "patterns": [
+        "security",
+        "vulnerabilit",
+        "CVE",
+        "access review",
+        "ISO.27001",
+        "threat",
+        "SIEM",
+        "phishing"
+      ],
+      "description": "Activates when user mentions security, vulnerabilities, CVEs, access reviews, threats, SIEM, or phishing"
+    }
+  ],
+  "actions": [
+    {
+      "name": "manage-security-incident",
+      "description": "Create, manage, and track security incident records and investigations",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: create, update, query, investigate, close" },
+        { "name": "incidentId", "type": "string", "required": false, "description": "Security incident ID" },
+        { "name": "details", "type": "object", "required": false, "description": "Incident details (type, severity, affected systems)" }
+      ],
+      "outputs": [
+        { "name": "securityIncident", "type": "object", "description": "Security incident record" }
+      ]
+    },
+    {
+      "name": "manage-vulnerabilities",
+      "description": "Ingest scan results, track remediation, and verify fixes",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: ingest-scan, query, track-remediation, verify-fix" },
+        { "name": "scanId", "type": "string", "required": false, "description": "Vulnerability scan ID" },
+        { "name": "cveFilter", "type": "string", "required": false, "description": "Filter by CVE identifier" }
+      ],
+      "outputs": [
+        { "name": "vulnerabilities", "type": "array", "description": "Vulnerability records with remediation status" }
+      ]
+    },
+    {
+      "name": "conduct-access-review",
+      "description": "Conduct, track, and report on access reviews and certification campaigns",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: initiate, track, report, certify" },
+        { "name": "scope", "type": "string", "required": false, "description": "Review scope: application, role, user-group" }
+      ],
+      "outputs": [
+        { "name": "reviewStatus", "type": "object", "description": "Access review progress and findings" }
+      ]
+    },
+    {
+      "name": "audit-compliance",
+      "description": "Map controls, collect evidence, and track findings against frameworks (ISO 27001, SOC 2, etc.)",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "framework", "type": "string", "required": true, "description": "Compliance framework: ISO-27001, SOC2, NIST, PCI-DSS" },
+        { "name": "scope", "type": "string", "required": false, "description": "Audit scope filter" }
+      ],
+      "outputs": [
+        { "name": "complianceReport", "type": "object", "description": "Compliance assessment results and gaps" }
+      ]
+    },
+    {
+      "name": "query-asset-security",
+      "description": "Query asset inventory, service maps, and CI security classifications from CMDB",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "classificationFilter", "type": "string", "required": false, "description": "Filter by security classification" },
+        { "name": "ciFilter", "type": "string", "required": false, "description": "Filter by CI" }
+      ],
+      "outputs": [
+        { "name": "assetSecurity", "type": "object", "description": "Asset security classifications and exposure" }
+      ]
+    },
+    {
+      "name": "analyze-threat-intelligence",
+      "description": "Receive and analyze threat advisories and indicators of compromise",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "feedSource", "type": "string", "required": false, "description": "Threat intelligence feed to query" },
+        { "name": "iocFilter", "type": "string", "required": false, "description": "Filter by indicator of compromise" }
+      ],
+      "outputs": [
+        { "name": "threats", "type": "array", "description": "Relevant threat advisories and IoCs" }
+      ]
+    },
+    {
+      "name": "manage-risk-register",
+      "description": "Maintain and report on security risks, treatments, and acceptance decisions",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: query, create, update, accept, mitigate" },
+        { "name": "riskId", "type": "string", "required": false, "description": "Risk identifier" },
+        { "name": "details", "type": "object", "required": false, "description": "Risk details and treatment plan" }
+      ],
+      "outputs": [
+        { "name": "riskRecord", "type": "object", "description": "Risk register entry" }
+      ]
+    },
+    {
+      "name": "review-change-security",
+      "description": "Query proposed changes and submit security assessment results",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "changeId", "type": "string", "required": true, "description": "Change record to review" }
+      ],
+      "outputs": [
+        { "name": "securityAssessment", "type": "object", "description": "Security review findings for the change" }
+      ]
+    },
+    {
+      "name": "generate-security-report",
+      "description": "Generate compliance reports, risk dashboards, and security metrics",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "reportType", "type": "string", "required": true, "description": "Type: compliance, risk-dashboard, security-metrics, vulnerability-summary" },
+        { "name": "period", "type": "string", "required": false, "description": "Reporting period" }
+      ],
+      "outputs": [
+        { "name": "report", "type": "object", "description": "Security report data" }
+      ]
+    }
+  ],
+  "crossPracticeIntegrations": [
+    { "practice": "Incident Management", "direction": "bidirectional", "description": "Security events may escalate to operational incidents; coordinates on security-related major incidents" },
+    { "practice": "Change Enablement", "direction": "bidirectional", "description": "Security reviews proposed changes; emergency security patches follow change process" },
+    { "practice": "IT Asset & Configuration Management", "direction": "receives", "description": "CMDB provides asset inventory for vulnerability management; security classification of CIs" },
+    { "practice": "Problem Management", "direction": "sends", "description": "Recurring security incidents trigger problem investigation; security root cause analysis" },
+    { "practice": "Service Continuity Management", "direction": "bidirectional", "description": "Security controls maintained in DR environments; security incidents may trigger continuity" },
+    { "practice": "Monitoring and Event Management", "direction": "receives", "description": "Security events routed from monitoring; security thresholds configured in alerting" },
+    { "practice": "Knowledge Management", "direction": "sends", "description": "Security advisories, procedures, lessons learned documented in knowledge base" },
+    { "practice": "Supplier Management", "direction": "sends", "description": "Third-party security assessments; vendor security compliance validation" }
+  ],
+  "hitlControls": [
+    { "action": "Security incident declaration", "level": "write", "reason": "Declaring a security incident (especially data breach) requires human authorization" },
+    { "action": "Containment actions", "level": "write", "reason": "Isolating systems or blocking access requires human approval" },
+    { "action": "Regulatory notification", "level": "notify", "reason": "Reporting security incidents to regulators requires human sign-off" },
+    { "action": "Risk acceptance decisions", "level": "write", "reason": "Accepting security risks or granting policy exceptions requires authorized human approval" },
+    { "action": "Access revocation", "level": "write", "reason": "Revoking user or system access requires human review and authorization" },
+    { "action": "Compliance finding closure", "level": "write", "reason": "Closing audit findings requires human validation of remediation" },
+    { "action": "Security policy changes", "level": "write", "reason": "Modifications to security policies require governance board approval" },
+    { "action": "Emergency security changes", "level": "write", "reason": "Expedited security patches or configuration changes require ECAB approval" }
+  ],
+  "knowledgeSources": [
+    { "source": "Security Incident Tracker", "type": "api", "description": "Security incident records and investigation data" },
+    { "source": "Vulnerability Scanner", "type": "api", "description": "Vulnerability scan results and remediation tracking" },
+    { "source": "SIEM", "type": "api", "description": "Security event logs and correlation data" },
+    { "source": "Threat Intelligence Feeds", "type": "api", "description": "External threat advisories and IoCs" },
+    { "source": "Risk Register", "type": "api", "description": "Security risks, treatments, and acceptance records" },
+    { "source": "Compliance Framework Mappings", "type": "document", "description": "Control mappings for ISO 27001, SOC 2, NIST, PCI-DSS" }
+  ]
+}

@@ -20,6 +20,7 @@ import { enableVoice, disableVoice, isVoiceEnabled } from './voice/voiceGate';
 import tokenCache, { createAgenticTokenCacheKey } from './token-cache';
 import { classifyIntent } from './worker-registry';
 import { runWorker, type PromptContext } from './agent-harness';
+import { createConfirmationCard } from './adaptive-cards';
 
 const mcp = new ItsmMcpClient();
 const workiq = new WorkIqClient();
@@ -109,6 +110,58 @@ export class ItsmAgent extends AgentApplication<TurnState> {
     this.onAgentNotification('agents:*', async (context, state, notification) => {
       await this.handleNotification(context, state, notification);
     }, 1, [ItsmAgent.authHandlerName]);
+
+    // Handle Adaptive Card Action.Execute invokes (CAB votes, approvals, etc.)
+    this.onActivity('invoke' as ActivityTypes, async (context: TurnContext, _state: TurnState) => {
+      const invoke = context.activity;
+      if (invoke.name === 'adaptiveCard/action') {
+        const actionValue = (invoke as any).value?.action;
+        const verb: string = actionValue?.verb ?? '';
+        const data: Record<string, any> = actionValue?.data ?? {};
+
+        console.log(`[Agent] Adaptive Card action: ${verb}`, JSON.stringify(data).substring(0, 200));
+
+        let responseText = '';
+        switch (verb) {
+          case 'approveEscalation':
+            responseText = `✅ Escalation approved for ${data.incidentNumber}`;
+            break;
+          case 'rejectEscalation':
+            responseText = `❌ Escalation rejected for ${data.incidentNumber}`;
+            break;
+          case 'submitCabVote':
+            responseText = `📝 CAB vote recorded for ${data.changeNumber}: ${data.cabVote || 'submitted'}`;
+            break;
+          case 'approveAction':
+            responseText = `✅ Action ${data.toolName} approved`;
+            break;
+          case 'rejectAction':
+            responseText = `❌ Action ${data.toolName} rejected`;
+            break;
+          case 'acknowledgeHandover':
+            responseText = `✅ Handover acknowledged for ${data.shift} shift`;
+            break;
+          case 'escalateBreaches':
+            responseText = `🔔 Escalation triggered for ${(data.tickets || []).length} tickets`;
+            break;
+          default:
+            responseText = `Action received: ${verb}`;
+        }
+
+        await context.sendActivity(responseText);
+
+        // Return invoke response for the Adaptive Card runtime
+        const invokeResponse = {
+          status: 200,
+          body: {
+            statusCode: 200,
+            type: 'application/vnd.microsoft.activity.message',
+            value: responseText,
+          },
+        };
+        (context as any).turnState?.set('BotFrameworkAdapter.InvokeResponse', invokeResponse);
+      }
+    });
   }
 
   async handleMessage(context: TurnContext, state: TurnState): Promise<void> {

@@ -1,0 +1,166 @@
+{
+  "$schema": "https://schemas.microsoft.com/agents/v1/skill.json",
+  "id": "asset-cmdb-manager",
+  "name": "Asset & CMDB Manager",
+  "description": "Plans and manages the full lifecycle of IT assets and configuration items, ensuring accurate and reliable information about asset configurations and relationships.",
+  "version": "1.0.0",
+  "itilPractice": "IT Asset Management & Service Configuration Management",
+  "valueChainActivity": "Plan, Obtain/Build, Deliver and Support",
+  "triggers": [
+    {
+      "type": "intent",
+      "patterns": [
+        "asset",
+        "CMDB",
+        "configuration item",
+        "CI",
+        "warranty",
+        "EOL",
+        "end.of.life",
+        "end.of.support",
+        "lifecycle",
+        "inventory",
+        "dependenc",
+        "relationship",
+        "upstream",
+        "downstream"
+      ],
+      "description": "Activates when user mentions assets, CMDB, configuration items, warranties, lifecycle, or dependency mapping"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "0 6 1 * *",
+      "description": "asset-eol-scan — Scans for assets approaching end-of-life on the 1st of each month at 06:00"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "0 6 15 * *",
+      "description": "asset-warranty-check — Checks warranty expiration status on the 15th of each month at 06:00"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "0 2 * * *",
+      "description": "cmdb-health-audit — Audits CMDB data quality and integrity daily at 02:00"
+    }
+  ],
+  "actions": [
+    {
+      "name": "manage-ci-record",
+      "description": "Create, read, update, or retire CI records; query relationships and dependencies",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: create, read, update, retire, query-relationships" },
+        { "name": "ciId", "type": "string", "required": false, "description": "Configuration item ID" },
+        { "name": "details", "type": "object", "required": false, "description": "CI attributes and metadata" }
+      ],
+      "outputs": [
+        { "name": "ciRecord", "type": "object", "description": "CI record with attributes and relationships" },
+        { "name": "ciId", "type": "string", "description": "Configuration item identifier" }
+      ]
+    },
+    {
+      "name": "manage-asset-register",
+      "description": "Track IT asset lifecycle, financial data, and ownership",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: query, update, transfer-ownership" },
+        { "name": "assetId", "type": "string", "required": false, "description": "Asset identifier" },
+        { "name": "details", "type": "object", "required": false, "description": "Asset details (financial, ownership, lifecycle stage)" }
+      ],
+      "outputs": [
+        { "name": "assetRecord", "type": "object", "description": "Asset record with lifecycle and financial data" }
+      ]
+    },
+    {
+      "name": "run-discovery",
+      "description": "Interface with network and infrastructure discovery tools",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "scope", "type": "string", "required": false, "description": "Discovery scope: network, endpoint, cloud" },
+        { "name": "subnetFilter", "type": "string", "required": false, "description": "Network range to scan" }
+      ],
+      "outputs": [
+        { "name": "discoveredAssets", "type": "array", "description": "Newly discovered assets and CIs" },
+        { "name": "discrepancies", "type": "array", "description": "Differences from CMDB records" }
+      ]
+    },
+    {
+      "name": "manage-baseline",
+      "description": "Establish, compare, and report on configuration baselines",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: create, compare, report" },
+        { "name": "baselineId", "type": "string", "required": false, "description": "Baseline identifier" },
+        { "name": "ciScope", "type": "array", "required": false, "description": "CIs included in the baseline" }
+      ],
+      "outputs": [
+        { "name": "baseline", "type": "object", "description": "Baseline record and comparison results" }
+      ]
+    },
+    {
+      "name": "check-license-compliance",
+      "description": "Monitor software license usage and entitlement compliance",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "softwareFilter", "type": "string", "required": false, "description": "Filter by software product" }
+      ],
+      "outputs": [
+        { "name": "complianceReport", "type": "object", "description": "License compliance status and discrepancies" }
+      ]
+    },
+    {
+      "name": "visualize-relationships",
+      "description": "Generate service topology and dependency maps",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "rootCi", "type": "string", "required": true, "description": "Starting CI for topology visualization" },
+        { "name": "depth", "type": "number", "required": false, "description": "Relationship traversal depth" }
+      ],
+      "outputs": [
+        { "name": "topologyMap", "type": "object", "description": "Service topology and dependency visualization" }
+      ]
+    },
+    {
+      "name": "generate-audit-report",
+      "description": "Produce asset inventory and compliance reports",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "reportType", "type": "string", "required": true, "description": "Type: inventory, compliance, health, stale-ci, shadow-it" },
+        { "name": "scope", "type": "string", "required": false, "description": "Report scope filter" }
+      ],
+      "outputs": [
+        { "name": "report", "type": "object", "description": "Generated audit report data" }
+      ]
+    }
+  ],
+  "crossPracticeIntegrations": [
+    { "practice": "Incident Management", "direction": "sends", "description": "CMDB provides CI context for categorization and impact analysis" },
+    { "practice": "Change Enablement", "direction": "bidirectional", "description": "CI impact analysis informs change risk assessment; CMDB updated post-change" },
+    { "practice": "Problem Management", "direction": "sends", "description": "CI data supports root cause analysis; problem resolution may update CI configurations" },
+    { "practice": "Service Level Management", "direction": "sends", "description": "Service-to-CI mapping enables SLA impact assessment" },
+    { "practice": "Knowledge Management", "direction": "sends", "description": "CI documentation and configuration guides published as knowledge articles" },
+    { "practice": "Supplier Management", "direction": "bidirectional", "description": "Vendor-managed CIs linked to supplier contracts and support agreements" },
+    { "practice": "Financial Management", "direction": "sends", "description": "Asset cost data feeds IT financial management and budgeting" }
+  ],
+  "hitlControls": [
+    { "action": "CI decommissioning", "level": "write", "reason": "Removing CIs from active service requires human approval" },
+    { "action": "Bulk CI updates", "level": "write", "reason": "Mass changes to CI attributes require human review and approval" },
+    { "action": "Baseline modification", "level": "write", "reason": "Changing approved configuration baselines requires change authority sign-off" },
+    { "action": "Shadow IT disposition", "level": "write", "reason": "Discovered unauthorized assets require human decision on remediation" },
+    { "action": "Asset disposal", "level": "write", "reason": "Financial write-off and physical disposal require human authorization" },
+    { "action": "Relationship restructuring", "level": "write", "reason": "Major changes to service dependency models require architecture review" }
+  ],
+  "knowledgeSources": [
+    { "source": "ServiceNow CMDB", "type": "api", "description": "Configuration items, relationships, and service maps" },
+    { "source": "Asset Register", "type": "api", "description": "IT asset lifecycle, financial, and ownership data" },
+    { "source": "Discovery Tools", "type": "api", "description": "Network and infrastructure discovery scan results" },
+    { "source": "License Management System", "type": "api", "description": "Software entitlements and usage data" }
+  ]
+}

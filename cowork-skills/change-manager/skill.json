@@ -1,0 +1,175 @@
+{
+  "$schema": "https://schemas.microsoft.com/agents/v1/skill.json",
+  "id": "change-manager",
+  "name": "Change Manager",
+  "description": "Maximizes successful service and product changes by assessing risks, authorizing changes, and managing the change schedule while balancing speed with risk management.",
+  "version": "1.0.0",
+  "itilPractice": "Change Enablement",
+  "valueChainActivity": "Design and Transition, Obtain/Build, Deliver and Support",
+  "triggers": [
+    {
+      "type": "intent",
+      "patterns": [
+        "change",
+        "CHG\\d+",
+        "RFC",
+        "CAB",
+        "blast radius",
+        "collision",
+        "PIR",
+        "post.implementation",
+        "maintenance window",
+        "backout",
+        "rollback",
+        "change.*risk",
+        "change.*dashboard",
+        "change.*metric",
+        "change.*agenda"
+      ],
+      "description": "Activates when user mentions changes, RFCs, CAB, rollbacks, or change risk assessments"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "0 7 * * 1-5",
+      "description": "change-collision-check — Detects scheduling collisions on weekdays at 07:00"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "0 9 * * 3",
+      "description": "change-pir-overdue — Checks for overdue post-implementation reviews on Wednesdays at 09:00"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "0 7 * * 1",
+      "description": "monday-cab-prep — Prepares CAB meeting agenda and materials every Monday at 07:00"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "*/15 * * * *",
+      "description": "emergency-change-fast-track — Monitors for emergency change requests every 15 minutes"
+    }
+  ],
+  "actions": [
+    {
+      "name": "manage-change-record",
+      "description": "Create, update, query, or close change records (RFCs)",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: create, update, query, or close" },
+        { "name": "changeId", "type": "string", "required": false, "description": "Change record ID for update/query/close operations" },
+        { "name": "details", "type": "object", "required": false, "description": "Change details (type, risk, description, implementation plan)" }
+      ],
+      "outputs": [
+        { "name": "changeRecord", "type": "object", "description": "The change record with current state" },
+        { "name": "changeId", "type": "string", "description": "The change identifier" }
+      ]
+    },
+    {
+      "name": "check-change-calendar",
+      "description": "View, schedule, and detect conflicts in the change schedule",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "dateRange", "type": "object", "required": false, "description": "Start and end dates to query" },
+        { "name": "changeId", "type": "string", "required": false, "description": "Specific change to check for conflicts" }
+      ],
+      "outputs": [
+        { "name": "schedule", "type": "array", "description": "Scheduled changes in the date range" },
+        { "name": "conflicts", "type": "array", "description": "Detected scheduling conflicts" }
+      ]
+    },
+    {
+      "name": "assess-change-risk",
+      "description": "Calculate change risk scores based on configurable criteria",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "changeId", "type": "string", "required": true, "description": "Change record to assess" },
+        { "name": "riskFactors", "type": "object", "required": false, "description": "Additional risk factors to consider" }
+      ],
+      "outputs": [
+        { "name": "riskScore", "type": "number", "description": "Calculated risk score" },
+        { "name": "riskBreakdown", "type": "object", "description": "Detailed risk factor analysis" },
+        { "name": "recommendation", "type": "string", "description": "Risk-based recommendation" }
+      ]
+    },
+    {
+      "name": "query-ci-impact",
+      "description": "Query CI relationships and impact topology from CMDB",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "ciName", "type": "string", "required": true, "description": "Configuration item to analyze" }
+      ],
+      "outputs": [
+        { "name": "impactTopology", "type": "object", "description": "Upstream and downstream impact analysis" },
+        { "name": "affectedServices", "type": "array", "description": "Business services affected by the change" }
+      ]
+    },
+    {
+      "name": "manage-cab-workflow",
+      "description": "Manage CAB meeting agendas, votes, and authorization records",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: prepare-agenda, record-vote, authorize" },
+        { "name": "meetingDate", "type": "string", "required": false, "description": "CAB meeting date" },
+        { "name": "changeIds", "type": "array", "required": false, "description": "Change records for the agenda" }
+      ],
+      "outputs": [
+        { "name": "agenda", "type": "object", "description": "CAB meeting agenda" },
+        { "name": "authorizationStatus", "type": "object", "description": "Authorization decisions" }
+      ]
+    },
+    {
+      "name": "send-change-notification",
+      "description": "Send change communications and approval requests",
+      "sideEffects": "notify",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "notificationType", "type": "string", "required": true, "description": "Type: approval-request, schedule-update, implementation-alert" },
+        { "name": "recipients", "type": "array", "required": true, "description": "Notification recipients" },
+        { "name": "changeId", "type": "string", "required": true, "description": "Related change record" }
+      ],
+      "outputs": [
+        { "name": "notificationId", "type": "string", "description": "Notification tracking identifier" }
+      ]
+    },
+    {
+      "name": "track-deployment",
+      "description": "Interface with deployment tools for implementation tracking",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "changeId", "type": "string", "required": true, "description": "Change record to track deployment for" }
+      ],
+      "outputs": [
+        { "name": "deploymentStatus", "type": "object", "description": "Current deployment status and progress" }
+      ]
+    }
+  ],
+  "crossPracticeIntegrations": [
+    { "practice": "Incident Management", "direction": "bidirectional", "description": "Failed changes create incidents; incidents may trigger emergency changes" },
+    { "practice": "Problem Management", "direction": "bidirectional", "description": "Problem resolutions often require changes; change failures may trigger problems" },
+    { "practice": "Service Level Management", "direction": "receives", "description": "Changes must consider SLA impact; maintenance windows aligned to SLA terms" },
+    { "practice": "IT Asset & Configuration Management", "direction": "bidirectional", "description": "CMDB updated post-change; CI impact analysis informs risk assessment" },
+    { "practice": "Knowledge Management", "direction": "sends", "description": "Change models and PIR outcomes feed knowledge base" },
+    { "practice": "Supplier Management", "direction": "receives", "description": "Vendor-managed changes require supplier coordination" },
+    { "practice": "Release Management", "direction": "bidirectional", "description": "Changes may be bundled into releases; release plans drive change scheduling" }
+  ],
+  "hitlControls": [
+    { "action": "Normal change authorization", "level": "write", "reason": "CAB or change authority must approve before implementation" },
+    { "action": "Emergency change authorization", "level": "write", "reason": "ECAB must approve; post-implementation review required" },
+    { "action": "Rollback initiation", "level": "write", "reason": "Human decision required before triggering rollback" },
+    { "action": "Change schedule override", "level": "write", "reason": "Moving changes into frozen/blackout periods requires human approval" },
+    { "action": "Change model creation/modification", "level": "write", "reason": "New standard change models require human review" },
+    { "action": "Cross-service impact changes", "level": "write", "reason": "Changes affecting multiple business services require additional sign-off" }
+  ],
+  "knowledgeSources": [
+    { "source": "ServiceNow Change Table", "type": "api", "description": "Change records, RFCs, and authorization history" },
+    { "source": "Change Calendar", "type": "api", "description": "Scheduled changes and maintenance windows" },
+    { "source": "CMDB", "type": "api", "description": "Configuration items and service dependency maps" },
+    { "source": "Risk Assessment Templates", "type": "document", "description": "Risk scoring criteria and NIST CM-3 controls reference" }
+  ]
+}

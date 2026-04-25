@@ -1,0 +1,153 @@
+{
+  "$schema": "https://schemas.microsoft.com/agents/v1/skill.json",
+  "id": "service-desk-manager",
+  "name": "Service Desk Manager",
+  "description": "Captures demand for incident resolution and service requests, serves as single point of contact for the service provider with all users.",
+  "version": "1.0.0",
+  "itilPractice": "Service Desk",
+  "valueChainActivity": "Engage, Deliver and Support",
+  "triggers": [
+    {
+      "type": "intent",
+      "patterns": [
+        "service desk",
+        "catalog",
+        "service request",
+        "self.service",
+        "user request",
+        "ticket",
+        "help desk"
+      ],
+      "description": "Activates when user mentions service desk, catalog, tickets, service requests, or help desk"
+    }
+  ],
+  "actions": [
+    {
+      "name": "manage-ticket",
+      "description": "Create, update, query, route, or close tickets across all channels",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: create, update, query, route, close" },
+        { "name": "ticketId", "type": "string", "required": false, "description": "Ticket ID for existing tickets" },
+        { "name": "details", "type": "object", "required": false, "description": "Ticket details (category, description, user, channel)" }
+      ],
+      "outputs": [
+        { "name": "ticketRecord", "type": "object", "description": "Ticket record with current state" },
+        { "name": "ticketId", "type": "string", "description": "Ticket identifier" }
+      ]
+    },
+    {
+      "name": "search-knowledge-base",
+      "description": "Search knowledge articles and FAQ for first-contact resolution",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "query", "type": "string", "required": true, "description": "Search query" }
+      ],
+      "outputs": [
+        { "name": "articles", "type": "array", "description": "Matching knowledge articles and FAQs" }
+      ]
+    },
+    {
+      "name": "kedb-lookup",
+      "description": "Search known errors and approved workarounds",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "query", "type": "string", "required": true, "description": "Search query for known errors" }
+      ],
+      "outputs": [
+        { "name": "knownErrors", "type": "array", "description": "Matching known errors with workarounds" }
+      ]
+    },
+    {
+      "name": "manage-self-service-portal",
+      "description": "Manage portal content, virtual agent configuration, and catalog items",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: query, update-content, configure-virtual-agent" },
+        { "name": "details", "type": "object", "required": false, "description": "Portal configuration details" }
+      ],
+      "outputs": [
+        { "name": "portalStatus", "type": "object", "description": "Portal configuration state" }
+      ]
+    },
+    {
+      "name": "lookup-user",
+      "description": "Look up user profiles, entitlements, VIP status, and contact history",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "userId", "type": "string", "required": false, "description": "User ID or email" },
+        { "name": "searchTerm", "type": "string", "required": false, "description": "Search by name or department" }
+      ],
+      "outputs": [
+        { "name": "userProfile", "type": "object", "description": "User profile with entitlements and history" }
+      ]
+    },
+    {
+      "name": "send-user-notification",
+      "description": "Send user communications, status updates, and survey requests",
+      "sideEffects": "notify",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "notificationType", "type": "string", "required": true, "description": "Type: status-update, survey, broadcast" },
+        { "name": "recipients", "type": "array", "required": true, "description": "Notification recipients" },
+        { "name": "message", "type": "string", "required": true, "description": "Notification content" }
+      ],
+      "outputs": [
+        { "name": "notificationId", "type": "string", "description": "Notification tracking identifier" }
+      ]
+    },
+    {
+      "name": "browse-service-catalog",
+      "description": "Browse and initiate standard service request fulfillment workflows",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "categoryFilter", "type": "string", "required": false, "description": "Filter by catalog category" },
+        { "name": "searchTerm", "type": "string", "required": false, "description": "Search catalog items" }
+      ],
+      "outputs": [
+        { "name": "catalogItems", "type": "array", "description": "Available service catalog items" }
+      ]
+    },
+    {
+      "name": "view-desk-dashboard",
+      "description": "Track service desk KPIs: FCR rate, CSAT, abandonment, handle time",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "period", "type": "string", "required": false, "description": "Reporting period" }
+      ],
+      "outputs": [
+        { "name": "kpiData", "type": "object", "description": "Service desk performance metrics" }
+      ]
+    }
+  ],
+  "crossPracticeIntegrations": [
+    { "practice": "Incident Management", "direction": "bidirectional", "description": "Service desk logs incidents and routes to incident management; receives status for user updates" },
+    { "practice": "Change Enablement", "direction": "receives", "description": "Service desk communicates planned changes to users; receives change-related contacts" },
+    { "practice": "Knowledge Management", "direction": "bidirectional", "description": "Knowledge articles enable first-contact resolution; service desk identifies knowledge gaps" },
+    { "practice": "Service Level Management", "direction": "receives", "description": "SLA targets drive service desk response and escalation timers; desk feeds SLA metrics" },
+    { "practice": "IT Asset & Configuration Management", "direction": "receives", "description": "CMDB provides user-CI mapping for ticket context and impact identification" },
+    { "practice": "Service Request Management", "direction": "sends", "description": "Service desk initiates and tracks service request fulfillment" },
+    { "practice": "Monitoring and Event Management", "direction": "receives", "description": "Proactive alerts enable service desk to communicate before users report issues" }
+  ],
+  "hitlControls": [
+    { "action": "VIP escalation handling", "level": "notify", "reason": "Contacts from VIP users require human review of response quality" },
+    { "action": "Major incident broadcasting", "level": "notify", "reason": "Mass communication to users about service disruptions requires human approval" },
+    { "action": "Hierarchical escalation", "level": "notify", "reason": "Management escalation requires human judgment and approval" },
+    { "action": "Survey response follow-up", "level": "notify", "reason": "Negative satisfaction scores triggering service recovery require human engagement" },
+    { "action": "Self-service content publishing", "level": "write", "reason": "New portal articles or virtual agent flows require human review before activation" },
+    { "action": "Channel routing changes", "level": "write", "reason": "Modifications to ticket routing rules require human approval" }
+  ],
+  "knowledgeSources": [
+    { "source": "ServiceNow Ticketing System", "type": "api", "description": "Tickets, routing rules, and queue data" },
+    { "source": "Knowledge Base", "type": "index", "description": "Knowledge articles and FAQs for first-contact resolution" },
+    { "source": "User Directory", "type": "api", "description": "User profiles, entitlements, and contact history" },
+    { "source": "Service Catalog", "type": "api", "description": "Catalog items and fulfillment workflows" }
+  ]
+}

@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Audit Trail</title>
+<style>
+  :root {
+    --colorBrandBackground: #0078d4;
+    --colorBrandBackgroundHover: #106ebe;
+    --colorBrandForegroundOnLight: #0078d4;
+    --colorNeutralBackground1: #ffffff;
+    --colorNeutralBackground2: #fafafa;
+    --colorNeutralBackground3: #f5f5f5;
+    --colorNeutralForeground1: #242424;
+    --colorNeutralForeground2: #616161;
+    --colorNeutralForeground3: #9e9e9e;
+    --colorNeutralStroke1: #e0e0e0;
+    --colorNeutralStroke2: #e8e8e8;
+    --colorPaletteRedBackground3: #d13438;
+    --colorPaletteRedForeground1: #bc2f32;
+    --colorPaletteRedBackground1: #fdf3f4;
+    --colorPaletteYellowBackground3: #d29200;
+    --colorPaletteYellowForeground1: #8a6200;
+    --colorPaletteYellowBackground1: #fef7e0;
+    --colorPaletteBlueBackground1: #ebf3fc;
+    --colorPaletteBlueForeground1: #0078d4;
+    --colorPalettePurpleBackground1: #f3eafc;
+    --colorPalettePurpleForeground1: #7b2fa0;
+    --colorNeutralShadowAmbient: rgba(0,0,0,0.12);
+    --colorNeutralShadowKey: rgba(0,0,0,0.14);
+    --borderRadiusMedium: 4px;
+    --fontFamilyBase: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    --fontSizeBase200: 12px;
+    --fontSizeBase300: 14px;
+    --fontSizeBase400: 16px;
+    --fontSizeBase500: 20px;
+    --fontWeightSemibold: 600;
+    --spacingHorizontalS: 8px;
+    --spacingHorizontalM: 12px;
+    --spacingHorizontalL: 16px;
+    --spacingVerticalS: 8px;
+    --spacingVerticalM: 12px;
+    --spacingVerticalL: 16px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--fontFamilyBase);
+    font-size: var(--fontSizeBase300);
+    color: var(--colorNeutralForeground1);
+    background: var(--colorNeutralBackground1);
+    line-height: 1.4;
+  }
+
+  .audit-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--spacingVerticalL) var(--spacingHorizontalL);
+  }
+
+  /* Header */
+  .audit-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--spacingHorizontalM);
+    margin-bottom: var(--spacingVerticalL);
+  }
+
+  .audit-header h1 {
+    font-size: var(--fontSizeBase500);
+    font-weight: var(--fontWeightSemibold);
+    color: var(--colorNeutralForeground1);
+  }
+
+  .header-meta {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground3);
+  }
+
+  /* Toolbar */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--spacingHorizontalS);
+    margin-bottom: var(--spacingVerticalM);
+    padding: var(--spacingVerticalS) var(--spacingHorizontalM);
+    background: var(--colorNeutralBackground3);
+    border-radius: var(--borderRadiusMedium);
+  }
+
+  .toolbar input[type="search"],
+  .toolbar input[type="date"] {
+    font-family: var(--fontFamilyBase);
+    font-size: var(--fontSizeBase300);
+    padding: 5px 10px;
+    border: 1px solid var(--colorNeutralStroke1);
+    border-radius: var(--borderRadiusMedium);
+    background: var(--colorNeutralBackground1);
+    color: var(--colorNeutralForeground1);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .toolbar input[type="search"] {
+    flex: 1 1 200px;
+    min-width: 160px;
+  }
+
+  .toolbar input[type="date"] {
+    width: 140px;
+  }
+
+  .toolbar input:focus-visible {
+    border-color: var(--colorBrandBackground);
+    box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.3);
+  }
+
+  .toolbar-sep {
+    color: var(--colorNeutralForeground3);
+    font-size: var(--fontSizeBase200);
+    user-select: none;
+  }
+
+  .btn {
+    font-family: var(--fontFamilyBase);
+    font-size: var(--fontSizeBase300);
+    font-weight: var(--fontWeightSemibold);
+    padding: 5px 14px;
+    border: none;
+    border-radius: var(--borderRadiusMedium);
+    cursor: pointer;
+    transition: background-color 0.15s;
+    white-space: nowrap;
+  }
+
+  .btn:focus-visible {
+    outline: 2px solid var(--colorBrandBackground);
+    outline-offset: 2px;
+  }
+
+  .btn-primary {
+    background: var(--colorBrandBackground);
+    color: #fff;
+  }
+
+  .btn-primary:hover { background: var(--colorBrandBackgroundHover); }
+
+  .btn-outline {
+    background: var(--colorNeutralBackground1);
+    color: var(--colorNeutralForeground1);
+    border: 1px solid var(--colorNeutralStroke1);
+  }
+
+  .btn-outline:hover { background: var(--colorNeutralBackground2); }
+
+  /* Summary bar */
+  .summary-bar {
+    display: flex;
+    gap: var(--spacingHorizontalM);
+    flex-wrap: wrap;
+    margin-bottom: var(--spacingVerticalM);
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground2);
+  }
+
+  .summary-bar .count {
+    font-weight: var(--fontWeightSemibold);
+    color: var(--colorNeutralForeground1);
+  }
+
+  /* Table */
+  .table-wrapper {
+    overflow-x: auto;
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusMedium);
+  }
+
+  .audit-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 700px;
+  }
+
+  .audit-table [role="columnheader"] {
+    text-align: left;
+    padding: 8px 12px;
+    font-size: var(--fontSizeBase200);
+    font-weight: var(--fontWeightSemibold);
+    color: var(--colorNeutralForeground2);
+    background: var(--colorNeutralBackground3);
+    border-bottom: 1px solid var(--colorNeutralStroke1);
+    white-space: nowrap;
+    user-select: none;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  .audit-table [role="row"]:not(:last-child) [role="cell"] {
+    border-bottom: 1px solid var(--colorNeutralStroke2);
+  }
+
+  .audit-table [role="row"]:hover [role="cell"] {
+    background: var(--colorNeutralBackground2);
+  }
+
+  .audit-table [role="row"]:focus-visible {
+    outline: 2px solid var(--colorBrandBackground);
+    outline-offset: -2px;
+  }
+
+  .audit-table [role="cell"] {
+    padding: 6px 12px;
+    vertical-align: top;
+    font-size: var(--fontSizeBase300);
+    transition: background-color 0.1s;
+  }
+
+  .cell-timestamp {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    color: var(--colorNeutralForeground2);
+    font-size: var(--fontSizeBase200);
+  }
+
+  .cell-action { font-weight: var(--fontWeightSemibold); }
+
+  /* Severity badge */
+  .severity-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+    flex-shrink: 0;
+  }
+
+  .severity-info .severity-dot    { background: var(--colorPaletteBlueForeground1); }
+  .severity-warning .severity-dot { background: var(--colorPaletteYellowBackground3); }
+  .severity-error .severity-dot   { background: var(--colorPaletteRedBackground3); }
+  .severity-critical .severity-dot { background: var(--colorPalettePurpleForeground1); }
+
+  /* Outcome badge */
+  .outcome-badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: var(--fontSizeBase200);
+    font-weight: var(--fontWeightSemibold);
+    line-height: 1.6;
+  }
+
+  .outcome-success {
+    background: #dff6dd;
+    color: #107c10;
+  }
+
+  .outcome-failure, .outcome-error {
+    background: var(--colorPaletteRedBackground1);
+    color: var(--colorPaletteRedForeground1);
+  }
+
+  .outcome-partial {
+    background: var(--colorPaletteYellowBackground1);
+    color: var(--colorPaletteYellowForeground1);
+  }
+
+  .outcome-pending {
+    background: var(--colorPaletteBlueBackground1);
+    color: var(--colorPaletteBlueForeground1);
+  }
+
+  /* Details expand */
+  .details-toggle {
+    background: none;
+    border: none;
+    color: var(--colorBrandForegroundOnLight);
+    cursor: pointer;
+    font-family: var(--fontFamilyBase);
+    font-size: var(--fontSizeBase200);
+    padding: 2px 4px;
+    border-radius: var(--borderRadiusMedium);
+  }
+
+  .details-toggle:focus-visible {
+    outline: 2px solid var(--colorBrandBackground);
+    outline-offset: 1px;
+  }
+
+  .details-row [role="cell"] {
+    padding: 4px 12px 10px 12px;
+    background: var(--colorNeutralBackground2);
+  }
+
+  .details-content {
+    font-size: var(--fontSizeBase200);
+    color: var(--colorNeutralForeground2);
+    padding: 6px 10px;
+    background: var(--colorNeutralBackground1);
+    border: 1px solid var(--colorNeutralStroke2);
+    border-radius: var(--borderRadiusMedium);
+    white-space: pre-wrap;
+    word-break: break-word;
+    animation: fadeIn 0.15s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--colorNeutralForeground3);
+  }
+
+  /* Responsive */
+  @media (max-width: 640px) {
+    .audit-header { flex-direction: column; align-items: flex-start; }
+    .toolbar { flex-direction: column; }
+    .toolbar input[type="search"] { width: 100%; flex: unset; }
+    .toolbar input[type="date"] { width: 100%; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="audit-container" role="main" aria-label="Audit Trail">
+  <div class="audit-header">
+    <h1>Audit Trail</h1>
+    <span class="header-meta" id="generated-at"></span>
+  </div>
+
+  <div class="toolbar" role="toolbar" aria-label="Audit trail filters">
+    <input
+      type="search"
+      id="search-input"
+      placeholder="Search records…"
+      aria-label="Search audit records"
+      tabindex="0"
+    />
+    <span class="toolbar-sep">from</span>
+    <input type="date" id="date-from" aria-label="Date from" tabindex="0" />
+    <span class="toolbar-sep">to</span>
+    <input type="date" id="date-to" aria-label="Date to" tabindex="0" />
+    <button class="btn btn-primary" id="filter-btn" tabindex="0" aria-label="Apply filters">Filter</button>
+    <button class="btn btn-outline" id="export-btn" tabindex="0" aria-label="Export audit records">Export CSV</button>
+  </div>
+
+  <div class="summary-bar" id="summary-bar" aria-live="polite"></div>
+
+  <div class="table-wrapper">
+    <div class="audit-table" role="table" aria-label="Audit records">
+      <div role="rowgroup">
+        <div role="row">
+          <span role="columnheader" aria-sort="none">Timestamp</span>
+          <span role="columnheader">Action</span>
+          <span role="columnheader">User</span>
+          <span role="columnheader">Worker</span>
+          <span role="columnheader">Resource</span>
+          <span role="columnheader">Outcome</span>
+          <span role="columnheader"><span class="sr-only">Details</span></span>
+        </div>
+      </div>
+      <div role="rowgroup" id="table-body"></div>
+    </div>
+  </div>
+
+  <div class="empty-state" id="empty-state" style="display:none;" role="status">No audit records found.</div>
+</div>
+
+<script>
+(function () {
+  const data = window.__TOOL_DATA__ || { records: [], query: {}, generatedAt: '' };
+  const records = Array.isArray(data.records) ? data.records : [];
+  const query = data.query || {};
+
+  // Populate header
+  if (data.generatedAt) {
+    document.getElementById('generated-at').textContent = 'Generated ' + new Date(data.generatedAt).toLocaleString();
+  }
+
+  // Populate query defaults
+  const searchInput = document.getElementById('search-input');
+  const dateFrom = document.getElementById('date-from');
+  const dateTo = document.getElementById('date-to');
+
+  if (query.search) searchInput.value = query.search;
+  if (query.dateFrom) dateFrom.value = query.dateFrom;
+  if (query.dateTo) dateTo.value = query.dateTo;
+
+  function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str || '';
+    return d.innerHTML;
+  }
+
+  function outcomeClass(outcome) {
+    const o = (outcome || '').toLowerCase();
+    if (o === 'success') return 'outcome-success';
+    if (o === 'failure' || o === 'failed') return 'outcome-failure';
+    if (o === 'error') return 'outcome-error';
+    if (o === 'partial') return 'outcome-partial';
+    return 'outcome-pending';
+  }
+
+  function severityClass(severity) {
+    const s = (severity || 'info').toLowerCase();
+    if (['info', 'warning', 'error', 'critical'].includes(s)) return 'severity-' + s;
+    return 'severity-info';
+  }
+
+  function filterRecords() {
+    const term = searchInput.value.toLowerCase().trim();
+    return records.filter(function (r) {
+      if (!term) return true;
+      return [r.action, r.user, r.worker, r.resource, r.outcome, r.details]
+        .some(function (v) { return (v || '').toLowerCase().includes(term); });
+    });
+  }
+
+  function renderSummary(filtered) {
+    const total = filtered.length;
+    const counts = { info: 0, warning: 0, error: 0, critical: 0 };
+    filtered.forEach(function (r) {
+      var s = (r.severity || 'info').toLowerCase();
+      if (counts.hasOwnProperty(s)) counts[s]++;
+    });
+
+    document.getElementById('summary-bar').innerHTML =
+      '<span><span class="count">' + total + '</span> records</span>' +
+      '<span style="color:var(--colorPaletteBlueForeground1)">● <span class="count">' + counts.info + '</span> info</span>' +
+      '<span style="color:var(--colorPaletteYellowBackground3)">● <span class="count">' + counts.warning + '</span> warning</span>' +
+      '<span style="color:var(--colorPaletteRedBackground3)">● <span class="count">' + counts.error + '</span> error</span>' +
+      '<span style="color:var(--colorPalettePurpleForeground1)">● <span class="count">' + counts.critical + '</span> critical</span>';
+  }
+
+  function render() {
+    var filtered = filterRecords();
+    renderSummary(filtered);
+
+    var body = document.getElementById('table-body');
+    var empty = document.getElementById('empty-state');
+
+    if (filtered.length === 0) {
+      body.innerHTML = '';
+      empty.style.display = '';
+      return;
+    }
+    empty.style.display = 'none';
+
+    var html = '';
+    filtered.forEach(function (r, i) {
+      var sevCls = severityClass(r.severity);
+      var outCls = outcomeClass(r.outcome);
+      var ts = r.timestamp ? new Date(r.timestamp).toLocaleString() : '';
+      var rowId = 'row-' + i;
+      var detailsId = 'details-' + i;
+
+      html += '<div role="row" tabindex="0" id="' + rowId + '" class="' + sevCls + '" aria-label="' + escapeHtml(r.action) + ' by ' + escapeHtml(r.user) + '">';
+      html += '<span role="cell" class="cell-timestamp"><span class="severity-dot" aria-hidden="true"></span>' + escapeHtml(ts) + '</span>';
+      html += '<span role="cell" class="cell-action">' + escapeHtml(r.action) + '</span>';
+      html += '<span role="cell">' + escapeHtml(r.user) + '</span>';
+      html += '<span role="cell">' + escapeHtml(r.worker) + '</span>';
+      html += '<span role="cell">' + escapeHtml(r.resource) + '</span>';
+      html += '<span role="cell"><span class="outcome-badge ' + outCls + '">' + escapeHtml(r.outcome) + '</span></span>';
+      html += '<span role="cell">';
+      if (r.details) {
+        html += '<button class="details-toggle" aria-expanded="false" aria-controls="' + detailsId + '" data-index="' + i + '" tabindex="0">Show</button>';
+      }
+      html += '</span>';
+      html += '</div>';
+
+      if (r.details) {
+        html += '<div role="row" class="details-row" id="' + detailsId + '" style="display:none;" aria-hidden="true">';
+        html += '<span role="cell" colspan="7"><div class="details-content">' + escapeHtml(r.details) + '</div></span>';
+        html += '</div>';
+      }
+    });
+
+    body.innerHTML = html;
+
+    // Grid layout for rows
+    body.querySelectorAll('[role="row"]:not(.details-row)').forEach(function (row) {
+      row.style.display = 'grid';
+      row.style.gridTemplateColumns = '180px 1fr 1fr 1fr 1fr 100px 60px';
+      row.style.alignItems = 'center';
+    });
+  }
+
+  // Apply grid to header row
+  var headerRow = document.querySelector('.audit-table > [role="rowgroup"]:first-child > [role="row"]');
+  if (headerRow) {
+    headerRow.style.display = 'grid';
+    headerRow.style.gridTemplateColumns = '180px 1fr 1fr 1fr 1fr 100px 60px';
+    headerRow.style.alignItems = 'center';
+  }
+
+  // Details toggle
+  document.getElementById('table-body').addEventListener('click', function (e) {
+    var btn = e.target.closest('.details-toggle');
+    if (!btn) return;
+    var detailsId = btn.getAttribute('aria-controls');
+    var row = document.getElementById(detailsId);
+    if (!row) return;
+    var expanded = btn.getAttribute('aria-expanded') === 'true';
+    btn.setAttribute('aria-expanded', String(!expanded));
+    btn.textContent = expanded ? 'Show' : 'Hide';
+    row.style.display = expanded ? 'none' : '';
+    row.setAttribute('aria-hidden', String(expanded));
+  });
+
+  // Keyboard nav on rows
+  document.getElementById('table-body').addEventListener('keydown', function (e) {
+    var row = e.target.closest('[role="row"]:not(.details-row)');
+    if (!row) return;
+    var rows = Array.from(document.getElementById('table-body').querySelectorAll('[role="row"]:not(.details-row)'));
+    var idx = rows.indexOf(row);
+    if (e.key === 'ArrowDown' && idx < rows.length - 1) {
+      e.preventDefault();
+      rows[idx + 1].focus();
+    } else if (e.key === 'ArrowUp' && idx > 0) {
+      e.preventDefault();
+      rows[idx - 1].focus();
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      var toggle = row.querySelector('.details-toggle');
+      if (toggle) { e.preventDefault(); toggle.click(); }
+    }
+  });
+
+  // Filter button (cosmetic + search)
+  document.getElementById('filter-btn').addEventListener('click', render);
+  searchInput.addEventListener('input', render);
+
+  // Export button (cosmetic)
+  document.getElementById('export-btn').addEventListener('click', function () {
+    // Cosmetic stub
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

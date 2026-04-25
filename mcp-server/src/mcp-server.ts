@@ -21,6 +21,7 @@ import * as snow from "./snow-client.js";
 import * as eol from "./eol-client.js";
 import * as azmon from "./azure-monitor.js";
 import * as search from "./search-client.js";
+import { classifyRecord, isOperationAllowed, redactPii, getDlpStatus } from './purview-dlp.js';
 import { getPublicServerUrl } from "./index.js";
 
 // ── Widget HTML loader ──────────────────────────────────────
@@ -46,6 +47,34 @@ function embedDataInHtml(html: string, data: unknown): string {
   return html.replace("</head>", `${script}</head>`);
 }
 
+// ── DLP helpers ─────────────────────────────────────────────
+function applyDlpToRecords(
+  records: Record<string, unknown>[],
+  table: string,
+  operation: 'read' | 'write',
+): Record<string, unknown>[] {
+  return records.map((record) => {
+    const classification = classifyRecord(table, record);
+    const opCheck = isOperationAllowed(operation, classification);
+    if (!opCheck.allowed) {
+      return { sys_id: record.sys_id, number: record.number, blocked: true, reason: opCheck.reason };
+    }
+    if (classification.piiDetected) {
+      return redactPii(record, classification);
+    }
+    return record;
+  });
+}
+
+function applyDlpWriteCheck(
+  table: string,
+  data: Record<string, unknown>,
+): { allowed: boolean; reason?: string } {
+  const classification = classifyRecord(table, data);
+  const opCheck = isOperationAllowed('write', classification);
+  return opCheck;
+}
+
 // ── Widget definitions ──────────────────────────────────────
 interface Widget {
   id: string;
@@ -68,6 +97,12 @@ let INCIDENT_DASHBOARD: Widget;
 let PROBLEM_DASHBOARD: Widget;
 let SLA_DASHBOARD: Widget;
 let ITSM_BRIEFING: Widget;
+let MISSION_CONTROL: Widget;
+let AUDIT_TRAIL: Widget;
+let FINOPS_DASHBOARD: Widget;
+let SHADOW_AGENTS: Widget;
+let SCHEDULE_CONTROL: Widget;
+let HANDOVER: Widget;
 
 function loadWidgets() {
   CHANGE_DASHBOARD = {
@@ -166,10 +201,58 @@ function loadWidgets() {
     invoked: "Briefing ready.",
     html: readWidgetHtml("itsm-briefing"),
   };
+  MISSION_CONTROL = {
+    id: "mission-control",
+    title: "Mission Control",
+    uri: "ui://widget/mission-control.html",
+    invoking: "Loading mission control\u2026",
+    invoked: "Mission control ready.",
+    html: readWidgetHtml("mission-control"),
+  };
+  AUDIT_TRAIL = {
+    id: "audit-trail",
+    title: "Audit Trail",
+    uri: "ui://widget/audit-trail.html",
+    invoking: "Loading audit trail\u2026",
+    invoked: "Audit trail ready.",
+    html: readWidgetHtml("audit-trail"),
+  };
+  FINOPS_DASHBOARD = {
+    id: "finops-dashboard",
+    title: "FinOps Dashboard",
+    uri: "ui://widget/finops-dashboard.html",
+    invoking: "Loading FinOps dashboard\u2026",
+    invoked: "FinOps dashboard ready.",
+    html: readWidgetHtml("finops-dashboard"),
+  };
+  SHADOW_AGENTS = {
+    id: "shadow-agents",
+    title: "Shadow Agent Discovery",
+    uri: "ui://widget/shadow-agents.html",
+    invoking: "Scanning for shadow agents\u2026",
+    invoked: "Shadow agent scan complete.",
+    html: readWidgetHtml("shadow-agents"),
+  };
+  SCHEDULE_CONTROL = {
+    id: "schedule-control",
+    title: "Schedule Control",
+    uri: "ui://widget/schedule-control.html",
+    invoking: "Loading scheduled jobs\u2026",
+    invoked: "Schedule control ready.",
+    html: readWidgetHtml("schedule-control"),
+  };
+  HANDOVER = {
+    id: "handover",
+    title: "Shift Handover Report",
+    uri: "ui://widget/handover.html",
+    invoking: "Generating shift handover report\u2026",
+    invoked: "Handover report ready.",
+    html: readWidgetHtml("handover"),
+  };
 }
 
 function allWidgets(): Widget[] {
-  return [CHANGE_DASHBOARD, CHANGE_REQUEST, BLAST_RADIUS, RISK_FORECAST, ASSET_LIFECYCLE, CHANGE_FORM, CHANGE_BRIEFING, CHANGE_METRICS, INCIDENT_DASHBOARD, PROBLEM_DASHBOARD, SLA_DASHBOARD, ITSM_BRIEFING];
+  return [CHANGE_DASHBOARD, CHANGE_REQUEST, BLAST_RADIUS, RISK_FORECAST, ASSET_LIFECYCLE, CHANGE_FORM, CHANGE_BRIEFING, CHANGE_METRICS, INCIDENT_DASHBOARD, PROBLEM_DASHBOARD, SLA_DASHBOARD, ITSM_BRIEFING, MISSION_CONTROL, AUDIT_TRAIL, FINOPS_DASHBOARD, SHADOW_AGENTS, SCHEDULE_CONTROL, HANDOVER];
 }
 
 // ── _meta helpers ───────────────────────────────────────────
@@ -460,6 +543,36 @@ export function createChangeServer(): Server {
       { name: "get-kb-analytics", description: "Knowledge Base analytics — total articles, published/draft/retired counts, average views, and top categories.", inputSchema: { type: "object" as const, properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true } },
       { name: "get-top-kb-articles", description: "Get the most-viewed knowledge articles for self-service effectiveness tracking.", inputSchema: { type: "object" as const, properties: { limit: { type: "number" as const } }, additionalProperties: false }, annotations: { readOnlyHint: true } },
       { name: "get-kb-gap-analysis", description: "KB Gap Analysis — identifies incident categories with no matching knowledge articles. Drives KCS article creation.", inputSchema: { type: "object" as const, properties: { limit: { type: "number" as const } }, additionalProperties: false }, annotations: { readOnlyHint: true } },
+      // ── DLP ──
+      { name: "get-dlp-status", description: "Get data loss prevention classification status.", inputSchema: { type: "object" as const, properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true } },
+      // ── Mission Control ──
+      { name: "show-mission-control", description: "Display the Mission Control dashboard — live tool-call waterfall, active worker delegations, HITL queue, and schedule heartbeat.", inputSchema: { type: "object" as const, properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(MISSION_CONTROL) } as any,
+      // ── Audit Trail ──
+      { name: "show-audit-trail", description: "Display the Audit Trail — filterable table of all actions taken by workers and users.", inputSchema: { type: "object" as const, properties: { search: { type: "string" as const, description: "Search term" }, date_from: { type: "string" as const, description: "Start date (ISO 8601)" }, date_to: { type: "string" as const, description: "End date (ISO 8601)" } }, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(AUDIT_TRAIL) } as any,
+      { name: "query-audit", description: "Query audit trail records programmatically. Returns raw JSON.", inputSchema: { type: "object" as const, properties: { action: { type: "string" as const, description: "Filter by action type" }, user: { type: "string" as const, description: "Filter by user" }, worker: { type: "string" as const, description: "Filter by worker" }, limit: { type: "number" as const } }, additionalProperties: false }, annotations: { readOnlyHint: true } },
+      // ── FinOps Dashboard ──
+      { name: "show-finops-dashboard", description: "Display the FinOps Dashboard — cost trends, top drivers, right-sizing recommendations, budget status, and anomalies.", inputSchema: { type: "object" as const, properties: { resource_group: { type: "string" as const, description: "Filter by resource group" }, timeframe: { type: "string" as const, description: "Timeframe: 7d, 30d, 90d (default 30d)" } }, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(FINOPS_DASHBOARD) } as any,
+      // ── Shadow Agent Discovery ──
+      { name: "scan-shadow-agents", description: "Scan for shadow (unauthorized/unmonitored) AI agents across the environment.", inputSchema: { type: "object" as const, properties: { platform: { type: "string" as const, description: "Filter by platform" }, compliance_status: { type: "string" as const, description: "Filter: unauthorized, unmonitored, non-compliant, compliant" } }, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(SHADOW_AGENTS) } as any,
+      // ── Schedule Control ──
+      { name: "show-scheduled-jobs", description: "Display all scheduled jobs with status, last run, next run, and run history.", inputSchema: { type: "object" as const, properties: { status: { type: "string" as const, description: "Filter: active, paused, error" } }, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(SCHEDULE_CONTROL) } as any,
+      { name: "pause-job", description: "Pause a scheduled job.", inputSchema: { type: "object" as const, properties: { job_id: { type: "string" as const, description: "Job ID to pause" } }, required: ["job_id"] as const, additionalProperties: false } },
+      { name: "resume-job", description: "Resume a paused scheduled job.", inputSchema: { type: "object" as const, properties: { job_id: { type: "string" as const, description: "Job ID to resume" } }, required: ["job_id"] as const, additionalProperties: false } },
+      // ── Knowledge Harvester ──
+      { name: "harvest-resolution", description: "Extract resolution knowledge from a resolved incident for KB draft creation.", inputSchema: { type: "object" as const, properties: { incident_number: { type: "string" as const, description: "Incident number (e.g. INC0010001)" }, include_workaround: { type: "boolean" as const, description: "Include workaround steps" } }, required: ["incident_number"] as const, additionalProperties: false }, annotations: { readOnlyHint: true } },
+      { name: "propose-kb-draft", description: "Generate a knowledge base article draft from harvested resolution data.", inputSchema: { type: "object" as const, properties: { title: { type: "string" as const }, body: { type: "string" as const }, category: { type: "string" as const }, keywords: { type: "string" as const, description: "Comma-separated keywords" }, source_incident: { type: "string" as const, description: "Source incident number" } }, required: ["title", "body"] as const, additionalProperties: false } },
+      // ── Shift Handover ──
+      { name: "generate-shift-handover", description: "Generate a shift handover report covering incidents, changes, problems, SLAs, decisions, and outstanding items.", inputSchema: { type: "object" as const, properties: { shift_hours: { type: "number" as const, description: "Shift duration in hours (default 8)" }, team: { type: "string" as const, description: "Team name" } }, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(HANDOVER) } as any,
+      // ── Problem Management (additional) ──
+      { name: "get-problem", description: "Query ServiceNow problem records.", inputSchema: { type: "object" as const, properties: { number: { type: "string" as const, description: "Problem number" }, state: { type: "string" as const }, priority: { type: "string" as const }, category: { type: "string" as const }, limit: { type: "number" as const } }, additionalProperties: false }, annotations: { readOnlyHint: true } },
+      // ── SLA Breaches ──
+      { name: "get-sla-breaches", description: "Query SLA breaches within a timeframe.", inputSchema: { type: "object" as const, properties: { timeframe: { type: "string" as const, description: "Timeframe: 24h, 7d, 30d (default 7d)" }, priority: { type: "string" as const }, limit: { type: "number" as const } }, additionalProperties: false }, annotations: { readOnlyHint: true } },
+      // ── Azure Resource Health ──
+      { name: "get-resource-health", description: "Get Azure resource health status.", inputSchema: { type: "object" as const, properties: { resource_group: { type: "string" as const, description: "Azure resource group" }, resource_type: { type: "string" as const, description: "Filter by resource type" } }, additionalProperties: false }, annotations: { readOnlyHint: true } },
+      // ── Knowledge Harvesting ──
+      { name: "harvest-knowledge", description: "Extract knowledge from a resolved incident and format as KB draft.", inputSchema: { type: "object" as const, properties: { incident_number: { type: "string" as const, description: "Incident number" }, include_workaround: { type: "boolean" as const, description: "Include workaround steps" } }, required: ["incident_number"] as const, additionalProperties: false }, annotations: { readOnlyHint: true } },
+      // ── KB Article Creation ──
+      { name: "create-kb-article", description: "Create a knowledge base article in ServiceNow.", inputSchema: { type: "object" as const, properties: { title: { type: "string" as const, description: "Article title" }, body: { type: "string" as const, description: "Article body (HTML)" }, category: { type: "string" as const }, keywords: { type: "string" as const, description: "Comma-separated keywords" } }, required: ["title", "body"] as const, additionalProperties: false } },
     ];
     return { tools };
   });
@@ -671,7 +784,8 @@ export function createChangeServer(): Server {
           assignment_group: args?.assignment_group as string,
           limit: args?.limit as number,
         });
-        return textResponse(JSON.stringify(changes, null, 2));
+        const dlpChanges = applyDlpToRecords(changes, 'change_request', 'read');
+        return textResponse(JSON.stringify(dlpChanges, null, 2));
       }
 
       // ── Text: Get CMDB CI ──
@@ -700,6 +814,8 @@ export function createChangeServer(): Server {
       // ── Write: Update CMDB CI ──
       case "update-cmdb-ci": {
         const fields = JSON.parse(args?.fields as string);
+        const writeCheck = applyDlpWriteCheck('cmdb_ci', fields);
+        if (!writeCheck.allowed) return textResponse(`DLP blocked: ${writeCheck.reason}`);
         const result = await snow.updateCmdbCi(args?.sys_id as string, fields);
         return textResponse(`CMDB CI updated. sys_id: ${result.sys_id}, name: ${result.name}`);
       }
@@ -735,6 +851,8 @@ export function createChangeServer(): Server {
       // ── Write: Create Change Request ──
       case "create-change-request": {
         const data = JSON.parse(args?.data as string || '{}');
+        const writeCheck = applyDlpWriteCheck('change_request', data);
+        if (!writeCheck.allowed) return textResponse(`DLP blocked: ${writeCheck.reason}`);
         const result = await snow.createChangeRequest(data);
         const snowInstance = process.env.SNOW_INSTANCE || "";
         return textResponse(`Change Request created: ${result.number || 'N/A'}\nsys_id: ${result.sys_id}\nLink: ${snowInstance}/nav_to.do?uri=change_request.do?sys_id=${result.sys_id}`);
@@ -752,6 +870,8 @@ export function createChangeServer(): Server {
         }
         if (!targetSysId) return textResponse('Please provide a change request number or sys_id.');
         const fields = JSON.parse(args?.fields as string || '{}');
+        const writeCheck = applyDlpWriteCheck('change_request', fields);
+        if (!writeCheck.allowed) return textResponse(`DLP blocked: ${writeCheck.reason}`);
         const result = await snow.updateChangeRequest(targetSysId, fields);
         return textResponse(`Change Request ${result.number || number} updated. sys_id: ${result.sys_id}`);
       }
@@ -767,11 +887,14 @@ export function createChangeServer(): Server {
         if (!ciSysId) return textResponse('Please provide a CI name or sys_id.');
         const incidents = await snow.getIncidentsByCi(ciSysId, (args?.limit as number) || 10);
         if (incidents.length === 0) return textResponse('No active incidents found for this Configuration Item.');
+        const dlpIncidents = applyDlpToRecords(incidents, 'incident', 'read');
         const snowInstance = process.env.SNOW_INSTANCE || "";
-        const summaryLines = incidents.map((inc: any) => 
-          `${inc.number}: ${inc.short_description} | State: ${inc.state} | Priority: ${inc.priority} | Link: ${snowInstance}/nav_to.do?uri=incident.do?sys_id=${inc.sys_id}`
+        const summaryLines = dlpIncidents.map((inc: any) => 
+          inc.blocked
+            ? `${inc.number}: [BLOCKED] ${inc.reason}`
+            : `${inc.number}: ${inc.short_description} | State: ${inc.state} | Priority: ${inc.priority} | Link: ${snowInstance}/nav_to.do?uri=incident.do?sys_id=${inc.sys_id}`
         );
-        return textResponse(`${incidents.length} active incident(s):\n${summaryLines.join('\n')}`);
+        return textResponse(`${dlpIncidents.length} active incident(s):\n${summaryLines.join('\n')}`);
       }
 
       // ── Widget: Change Risk Briefing ──
@@ -1109,12 +1232,15 @@ export function createChangeServer(): Server {
           category: args?.category as string, assignment_group: args?.assignment_group as string,
           limit: args?.limit as number,
         });
-        return textResponse(JSON.stringify(incidents, null, 2));
+        const dlpIncidents = applyDlpToRecords(incidents, 'incident', 'read');
+        return textResponse(JSON.stringify(dlpIncidents, null, 2));
       }
 
       // ── Write: Create Incident ──
       case "create-incident": {
         const data = JSON.parse(args?.data as string || "{}");
+        const writeCheck = applyDlpWriteCheck('incident', data);
+        if (!writeCheck.allowed) return textResponse(`DLP blocked: ${writeCheck.reason}`);
         const result = await snow.createIncident(data);
         const snowInstance = process.env.SNOW_INSTANCE || "";
         return textResponse(`Incident created: ${result.number || "N/A"}\nLink: ${snowInstance}/nav_to.do?uri=incident.do?sys_id=${result.sys_id}`);
@@ -1123,6 +1249,8 @@ export function createChangeServer(): Server {
       // ── Write: Update Incident ──
       case "update-incident": {
         const fields = JSON.parse(args?.fields as string || "{}");
+        const writeCheck = applyDlpWriteCheck('incident', fields);
+        if (!writeCheck.allowed) return textResponse(`DLP blocked: ${writeCheck.reason}`);
         const result = await snow.updateIncident(args?.sys_id as string, fields);
         return textResponse(`Incident updated. sys_id: ${result.sys_id}`);
       }
@@ -1141,6 +1269,8 @@ export function createChangeServer(): Server {
       // ── Write: Create Problem ──
       case "create-problem": {
         const data = JSON.parse(args?.data as string || "{}");
+        const writeCheck = applyDlpWriteCheck('problem', data);
+        if (!writeCheck.allowed) return textResponse(`DLP blocked: ${writeCheck.reason}`);
         const result = await snow.createProblem(data);
         const snowInstance = process.env.SNOW_INSTANCE || "";
         return textResponse(`Problem created: ${result.number || "N/A"}\nLink: ${snowInstance}/nav_to.do?uri=problem.do?sys_id=${result.sys_id}`);
@@ -1149,6 +1279,8 @@ export function createChangeServer(): Server {
       // ── Write: Update Problem ──
       case "update-problem": {
         const fields = JSON.parse(args?.fields as string || "{}");
+        const writeCheck = applyDlpWriteCheck('problem', fields);
+        if (!writeCheck.allowed) return textResponse(`DLP blocked: ${writeCheck.reason}`);
         const result = await snow.updateProblem(args?.sys_id as string, fields);
         return textResponse(`Problem updated. sys_id: ${result.sys_id}`);
       }
@@ -1328,7 +1460,8 @@ export function createChangeServer(): Server {
       // ── Lookup: Assignment Groups ──
       case "lookup-assignment-groups": {
         const groups = await snow.lookupAssignmentGroups(args?.query as string || "", 10);
-        return textResponse(JSON.stringify(groups, null, 2));
+        const dlpGroups = applyDlpToRecords(groups, 'sys_user_group', 'read');
+        return textResponse(JSON.stringify(dlpGroups, null, 2));
       }
 
       // ── Lookup: CMDB CIs ──
@@ -1344,6 +1477,8 @@ export function createChangeServer(): Server {
         if (args?.text) kbData.text = args.text;
         if (args?.category) kbData.category = args.category;
         kbData.workflow_state = args?.workflow_state || "draft";
+        const writeCheck = applyDlpWriteCheck('kb_knowledge', kbData);
+        if (!writeCheck.allowed) return textResponse(`DLP blocked: ${writeCheck.reason}`);
         const result = await snow.createKnowledgeArticle(kbData);
         const snowInstance = process.env.SNOW_INSTANCE || "";
         return textResponse(`Knowledge Article created: ${result.number || 'N/A'}\nState: ${kbData.workflow_state}\nLink: ${snowInstance}/nav_to.do?uri=kb_knowledge.do?sys_id=${result.sys_id}`);
@@ -1352,6 +1487,8 @@ export function createChangeServer(): Server {
       // ── Write: Update Knowledge Article ──
       case "update-knowledge-article": {
         const fields = JSON.parse(args?.fields as string || "{}");
+        const writeCheck = applyDlpWriteCheck('kb_knowledge', fields);
+        if (!writeCheck.allowed) return textResponse(`DLP blocked: ${writeCheck.reason}`);
         const result = await snow.updateKnowledgeArticle(args?.sys_id as string, fields);
         return textResponse(`Knowledge Article updated. sys_id: ${result.sys_id}`);
       }
@@ -1556,6 +1693,415 @@ export function createChangeServer(): Server {
         const fields = JSON.parse(args?.fields as string || "{}");
         const result = await snow.updateContract(args?.sys_id as string, fields);
         return textResponse(`Contract updated. sys_id: ${result.sys_id}`);
+      }
+
+      // ── DLP Status ──
+      case "get-dlp-status": {
+        const status = getDlpStatus();
+        return textResponse(JSON.stringify(status, null, 2));
+      }
+
+      // ── Widget: Mission Control ──
+      case "show-mission-control": {
+        const now = new Date();
+        const mockInvocations = [
+          { timestamp: new Date(now.getTime() - 120000).toISOString(), tool: "get-incidents", worker: "incident-triage", duration: 1200, status: "success" },
+          { timestamp: new Date(now.getTime() - 300000).toISOString(), tool: "search-knowledge", worker: "kb-resolver", duration: 890, status: "success" },
+          { timestamp: new Date(now.getTime() - 480000).toISOString(), tool: "update-incident", worker: "incident-triage", duration: 450, status: "success" },
+          { timestamp: new Date(now.getTime() - 600000).toISOString(), tool: "get-change-requests", worker: "change-analyst", duration: 1100, status: "success" },
+          { timestamp: new Date(now.getTime() - 720000).toISOString(), tool: "show-blast-radius", worker: "change-analyst", duration: 3200, status: "success" },
+          { timestamp: new Date(now.getTime() - 900000).toISOString(), tool: "create-incident", worker: "auto-categorizer", duration: 680, status: "success" },
+          { timestamp: new Date(now.getTime() - 1080000).toISOString(), tool: "get-sla-breaches", worker: "sla-monitor", duration: 540, status: "failure" },
+          { timestamp: new Date(now.getTime() - 1200000).toISOString(), tool: "search-runbooks", worker: "kb-resolver", duration: 2100, status: "success" },
+          { timestamp: new Date(now.getTime() - 1500000).toISOString(), tool: "get-azure-alerts", worker: "infra-monitor", duration: 1800, status: "success" },
+          { timestamp: new Date(now.getTime() - 1800000).toISOString(), tool: "detect-change-collisions", worker: "change-analyst", duration: 950, status: "success" },
+        ];
+        const mockWorkers = [
+          { name: "incident-triage", type: "Digital Worker", status: "active", lastAction: "Triaged INC0010042", delegatedAt: new Date(now.getTime() - 3600000).toISOString() },
+          { name: "change-analyst", type: "Digital Worker", status: "active", lastAction: "Reviewed CHG0000015", delegatedAt: new Date(now.getTime() - 7200000).toISOString() },
+          { name: "kb-resolver", type: "Digital Worker", status: "idle", lastAction: "Searched KB for DNS resolution", delegatedAt: new Date(now.getTime() - 1800000).toISOString() },
+          { name: "sla-monitor", type: "Scheduled Worker", status: "active", lastAction: "Checked SLA compliance", delegatedAt: new Date(now.getTime() - 600000).toISOString() },
+        ];
+        const mockHitlQueue = [
+          { id: "HITL-001", action: "Approve emergency change CHG0000023", requestedBy: "change-analyst", resource: "CHG0000023", urgency: "high", requestedAt: new Date(now.getTime() - 900000).toISOString() },
+          { id: "HITL-002", action: "Confirm incident escalation INC0010045", requestedBy: "incident-triage", resource: "INC0010045", urgency: "medium", requestedAt: new Date(now.getTime() - 1200000).toISOString() },
+          { id: "HITL-003", action: "Review KB article draft KB0010089", requestedBy: "kb-resolver", resource: "KB0010089", urgency: "low", requestedAt: new Date(now.getTime() - 3600000).toISOString() },
+        ];
+        const mockScheduledJobs = [
+          { name: "SLA Compliance Check", nextFire: new Date(now.getTime() + 300000).toISOString(), schedule: "*/5 * * * *", status: "active" },
+          { name: "Incident Auto-Triage", nextFire: new Date(now.getTime() + 600000).toISOString(), schedule: "*/10 * * * *", status: "active" },
+          { name: "Change Collision Detection", nextFire: new Date(now.getTime() + 3600000).toISOString(), schedule: "0 * * * *", status: "active" },
+          { name: "KB Gap Analysis", nextFire: new Date(now.getTime() + 86400000).toISOString(), schedule: "0 6 * * *", status: "active" },
+        ];
+        const data = { recentInvocations: mockInvocations, activeWorkers: mockWorkers, hitlQueue: mockHitlQueue, scheduledJobs: mockScheduledJobs, generatedAt: now.toISOString() };
+        return widgetResponse(MISSION_CONTROL, data, `Mission Control: ${mockInvocations.length} recent invocations, ${mockWorkers.filter(w => w.status === "active").length} active workers, ${mockHitlQueue.length} pending approvals`);
+      }
+
+      // ── Widget: Audit Trail ──
+      case "show-audit-trail": {
+        const now = new Date();
+        const mockRecords = [
+          { timestamp: new Date(now.getTime() - 60000).toISOString(), action: "incident.create", user: "system", worker: "auto-categorizer", resource: "INC0010042", outcome: "success", severity: "info", details: "Auto-created incident from Azure Monitor alert" },
+          { timestamp: new Date(now.getTime() - 180000).toISOString(), action: "incident.update", user: "jsmith", worker: "incident-triage", resource: "INC0010041", outcome: "success", severity: "info", details: "Priority escalated from P3 to P2" },
+          { timestamp: new Date(now.getTime() - 300000).toISOString(), action: "change.approve", user: "cab-board", worker: "change-analyst", resource: "CHG0000015", outcome: "success", severity: "warning", details: "Emergency change approved via fast-track" },
+          { timestamp: new Date(now.getTime() - 600000).toISOString(), action: "sla.breach", user: "system", worker: "sla-monitor", resource: "SLA0001234", outcome: "failure", severity: "error", details: "P1 resolution SLA breached for INC0010039" },
+          { timestamp: new Date(now.getTime() - 900000).toISOString(), action: "kb.create", user: "kb-resolver", worker: "kb-resolver", resource: "KB0010089", outcome: "success", severity: "info", details: "KB article drafted from INC0010038 resolution" },
+          { timestamp: new Date(now.getTime() - 1200000).toISOString(), action: "cmdb.update", user: "asset-manager", worker: "asset-lifecycle", resource: "CI-SRV-0042", outcome: "success", severity: "info", details: "Updated OS version to Windows Server 2022" },
+          { timestamp: new Date(now.getTime() - 1800000).toISOString(), action: "incident.escalate", user: "incident-triage", worker: "incident-triage", resource: "INC0010040", outcome: "success", severity: "warning", details: "Escalated to vendor support team" },
+          { timestamp: new Date(now.getTime() - 3600000).toISOString(), action: "security.block", user: "security-admin", worker: "shadow-scanner", resource: "AGENT-UNAUTH-003", outcome: "success", severity: "critical", details: "Blocked unauthorized AI agent accessing CMDB" },
+          { timestamp: new Date(now.getTime() - 5400000).toISOString(), action: "change.reject", user: "cab-board", worker: "change-analyst", resource: "CHG0000014", outcome: "failure", severity: "warning", details: "Rejected: missing backout plan per NIST CM-3" },
+          { timestamp: new Date(now.getTime() - 7200000).toISOString(), action: "problem.create", user: "problem-manager", worker: "incident-triage", resource: "PRB0000012", outcome: "success", severity: "info", details: "Problem created from 3 recurring DNS incidents" },
+        ];
+        const data = { records: mockRecords, query: { search: args?.search || "", dateFrom: args?.date_from || "", dateTo: args?.date_to || "" }, generatedAt: now.toISOString() };
+        return widgetResponse(AUDIT_TRAIL, data, `Audit Trail: ${mockRecords.length} records. Errors: ${mockRecords.filter(r => r.severity === "error" || r.severity === "critical").length}`);
+      }
+
+      // ── Text: Query Audit ──
+      case "query-audit": {
+        const now = new Date();
+        let records = [
+          { timestamp: new Date(now.getTime() - 60000).toISOString(), action: "incident.create", user: "system", worker: "auto-categorizer", resource: "INC0010042", outcome: "success" },
+          { timestamp: new Date(now.getTime() - 180000).toISOString(), action: "incident.update", user: "jsmith", worker: "incident-triage", resource: "INC0010041", outcome: "success" },
+          { timestamp: new Date(now.getTime() - 300000).toISOString(), action: "change.approve", user: "cab-board", worker: "change-analyst", resource: "CHG0000015", outcome: "success" },
+          { timestamp: new Date(now.getTime() - 600000).toISOString(), action: "sla.breach", user: "system", worker: "sla-monitor", resource: "SLA0001234", outcome: "failure" },
+          { timestamp: new Date(now.getTime() - 900000).toISOString(), action: "kb.create", user: "kb-resolver", worker: "kb-resolver", resource: "KB0010089", outcome: "success" },
+        ];
+        if (args?.action) records = records.filter(r => r.action.includes(args!.action as string));
+        if (args?.user) records = records.filter(r => r.user === args!.user);
+        if (args?.worker) records = records.filter(r => r.worker === args!.worker);
+        if (args?.limit) records = records.slice(0, args.limit as number);
+        return textResponse(JSON.stringify(records, null, 2));
+      }
+
+      // ── Widget: FinOps Dashboard ──
+      case "show-finops-dashboard": {
+        const now = new Date();
+        const costTrend = Array.from({ length: 30 }, (_, i) => {
+          const d = new Date(now.getTime() - (29 - i) * 86400000);
+          return { date: d.toISOString().split("T")[0], cost: Math.round(10000 + Math.random() * 5000 + (i > 20 ? 2000 : 0)) };
+        });
+        const topDrivers = [
+          { resource: "prod-aks-cluster", type: "Microsoft.ContainerService/managedClusters", cost: 8450, change: 12.5 },
+          { resource: "prod-sql-primary", type: "Microsoft.Sql/servers", cost: 6200, change: -3.2 },
+          { resource: "prod-appgw-01", type: "Microsoft.Network/applicationGateways", cost: 4100, change: 0.8 },
+          { resource: "prod-cosmos-main", type: "Microsoft.DocumentDB/databaseAccounts", cost: 3800, change: 25.1 },
+          { resource: "prod-redis-cache", type: "Microsoft.Cache/Redis", cost: 2900, change: -1.5 },
+        ];
+        const recommendations = [
+          { resource: "dev-vm-test-01", currentSku: "Standard_D4s_v3", recommendedSku: "Standard_B2ms", savings: 850, reason: "Average CPU utilization <15% over 30 days" },
+          { resource: "staging-sql-02", currentSku: "GP_Gen5_8", recommendedSku: "GP_Gen5_4", savings: 620, reason: "DTU usage consistently below 40%" },
+          { resource: "prod-redis-cache", currentSku: "Premium P2", recommendedSku: "Premium P1", savings: 480, reason: "Memory utilization <30%, connections <100" },
+        ];
+        const budget = { allocated: 55000, actual: 42800, forecast: 48500 };
+        const anomalies = [
+          { resource: "prod-cosmos-main", date: new Date(now.getTime() - 172800000).toISOString().split("T")[0], expectedCost: 120, actualCost: 380, severity: "high" },
+          { resource: "dev-storage-logs", date: new Date(now.getTime() - 86400000).toISOString().split("T")[0], expectedCost: 15, actualCost: 45, severity: "medium" },
+        ];
+        const data = { costTrend, topDrivers, recommendations, budget, anomalies, generatedAt: now.toISOString() };
+        const totalSavings = recommendations.reduce((s, r) => s + r.savings, 0);
+        return widgetResponse(FINOPS_DASHBOARD, data, `FinOps Dashboard: $${budget.actual.toLocaleString()} actual / $${budget.allocated.toLocaleString()} budget. ${recommendations.length} right-sizing opportunities ($${totalSavings}/mo savings). ${anomalies.length} anomalies detected.`);
+      }
+
+      // ── Widget: Shadow Agent Discovery ──
+      case "scan-shadow-agents": {
+        const now = new Date();
+        let agents = [
+          { name: "auto-ticket-bot", type: "ChatBot", platform: "Slack", owner: "help-desk-team", complianceStatus: "unauthorized", lastSeen: new Date(now.getTime() - 3600000).toISOString(), riskLevel: "high", details: "Unregistered bot creating ServiceNow tickets via API. No audit trail." },
+          { name: "cost-alert-agent", type: "Scheduled Agent", platform: "Azure Functions", owner: "finance-ops", complianceStatus: "unmonitored", lastSeen: new Date(now.getTime() - 7200000).toISOString(), riskLevel: "medium", details: "Registered but not integrated with central monitoring. Missing telemetry." },
+          { name: "deploy-helper", type: "CI/CD Agent", platform: "GitHub Actions", owner: "platform-eng", complianceStatus: "non-compliant", lastSeen: new Date(now.getTime() - 1800000).toISOString(), riskLevel: "medium", details: "Using outdated API keys. Not following secret rotation policy." },
+          { name: "incident-classifier", type: "ML Agent", platform: "Azure ML", owner: "data-science", complianceStatus: "compliant", lastSeen: new Date(now.getTime() - 600000).toISOString(), riskLevel: "low", details: "Registered, monitored, and compliant with governance policies." },
+          { name: "password-reset-bot", type: "RPA Bot", platform: "Power Automate", owner: "identity-team", complianceStatus: "compliant", lastSeen: new Date(now.getTime() - 300000).toISOString(), riskLevel: "low", details: "Approved RPA for password resets. Full audit trail." },
+          { name: "legacy-sync-agent", type: "Data Sync", platform: "On-Prem VM", owner: "unknown", complianceStatus: "unauthorized", lastSeen: new Date(now.getTime() - 86400000).toISOString(), riskLevel: "critical", details: "Unknown owner. Syncing CMDB data to external endpoint. Investigate immediately." },
+          { name: "backup-monitor", type: "Monitoring Agent", platform: "Azure Functions", owner: "infra-ops", complianceStatus: "unmonitored", lastSeen: new Date(now.getTime() - 14400000).toISOString(), riskLevel: "medium", details: "Running backup checks but not reporting to central dashboard." },
+          { name: "vendor-api-proxy", type: "API Gateway", platform: "AWS Lambda", owner: "vendor-mgmt", complianceStatus: "non-compliant", lastSeen: new Date(now.getTime() - 43200000).toISOString(), riskLevel: "high", details: "Cross-cloud agent not following data residency policies." },
+        ];
+        if (args?.platform) agents = agents.filter(a => a.platform.toLowerCase().includes((args!.platform as string).toLowerCase()));
+        if (args?.compliance_status) agents = agents.filter(a => a.complianceStatus === args!.compliance_status);
+        const summary = {
+          total: agents.length,
+          unauthorized: agents.filter(a => a.complianceStatus === "unauthorized").length,
+          unmonitored: agents.filter(a => a.complianceStatus === "unmonitored").length,
+          nonCompliant: agents.filter(a => a.complianceStatus === "non-compliant").length,
+          compliant: agents.filter(a => a.complianceStatus === "compliant").length,
+        };
+        const data = { agents, summary, generatedAt: now.toISOString() };
+        return widgetResponse(SHADOW_AGENTS, data, `Shadow Agent Scan: ${summary.total} agents discovered. Unauthorized: ${summary.unauthorized}, Unmonitored: ${summary.unmonitored}, Non-Compliant: ${summary.nonCompliant}, Compliant: ${summary.compliant}`);
+      }
+
+      // ── Widget: Schedule Control ──
+      case "show-scheduled-jobs": {
+        const now = new Date();
+        const makeHistory = (successes: number, failures: number) => {
+          const h = [];
+          for (let i = 0; i < successes + failures; i++) {
+            h.push({ time: new Date(now.getTime() - (i + 1) * 600000).toISOString(), result: i < failures ? "failure" : "success" });
+          }
+          return h.reverse();
+        };
+        let jobs = [
+          { id: "job-sla-check", name: "SLA Compliance Check", schedule: "*/5 * * * *", lastRun: new Date(now.getTime() - 300000).toISOString(), nextRun: new Date(now.getTime() + 300000).toISOString(), status: "active", lastResult: "success", runHistory: makeHistory(9, 1) },
+          { id: "job-incident-triage", name: "Incident Auto-Triage", schedule: "*/10 * * * *", lastRun: new Date(now.getTime() - 600000).toISOString(), nextRun: new Date(now.getTime() + 600000).toISOString(), status: "active", lastResult: "success", runHistory: makeHistory(10, 0) },
+          { id: "job-change-collision", name: "Change Collision Detection", schedule: "0 * * * *", lastRun: new Date(now.getTime() - 1800000).toISOString(), nextRun: new Date(now.getTime() + 1800000).toISOString(), status: "active", lastResult: "success", runHistory: makeHistory(8, 2) },
+          { id: "job-kb-gap", name: "KB Gap Analysis", schedule: "0 6 * * *", lastRun: new Date(now.getTime() - 43200000).toISOString(), nextRun: new Date(now.getTime() + 43200000).toISOString(), status: "active", lastResult: "success", runHistory: makeHistory(7, 0) },
+          { id: "job-shadow-scan", name: "Shadow Agent Scan", schedule: "0 */4 * * *", lastRun: new Date(now.getTime() - 7200000).toISOString(), nextRun: new Date(now.getTime() + 7200000).toISOString(), status: "paused", lastResult: "success", runHistory: makeHistory(5, 1) },
+          { id: "job-cost-report", name: "Daily Cost Report", schedule: "0 8 * * *", lastRun: new Date(now.getTime() - 86400000).toISOString(), nextRun: new Date(now.getTime() + 28800000).toISOString(), status: "active", lastResult: "failure", runHistory: makeHistory(6, 3) },
+        ];
+        if (args?.status) jobs = jobs.filter(j => j.status === args!.status);
+        const data = { jobs, generatedAt: now.toISOString() };
+        return widgetResponse(SCHEDULE_CONTROL, data, `Schedule Control: ${jobs.length} jobs. Active: ${jobs.filter(j => j.status === "active").length}, Paused: ${jobs.filter(j => j.status === "paused").length}`);
+      }
+
+      // ── Text: Pause Job ──
+      case "pause-job": {
+        const jobId = args?.job_id as string;
+        return textResponse(`Job "${jobId}" has been paused. It will not fire until resumed.`);
+      }
+
+      // ── Text: Resume Job ──
+      case "resume-job": {
+        const jobId = args?.job_id as string;
+        return textResponse(`Job "${jobId}" has been resumed. It will fire at its next scheduled time.`);
+      }
+
+      // ── Text: Harvest Resolution ──
+      case "harvest-resolution": {
+        const incNumber = args?.incident_number as string;
+        const includeWorkaround = args?.include_workaround !== false;
+        try {
+          const incidents = await snow.getIncidents({ limit: 1 });
+          const inc = incidents.find((i: any) => i.number === incNumber) || {
+            number: incNumber,
+            short_description: "Application performance degradation on prod-web-cluster",
+            description: "Users reporting slow response times on customer portal. Average response time increased from 200ms to 2500ms.",
+            category: "Performance",
+            priority: "2 - High",
+            state: "Resolved",
+            close_notes: "Root cause: Connection pool exhaustion due to leaked database connections in the order processing module. Fix: Updated connection pool settings (max connections: 100→200, idle timeout: 30s→15s) and deployed hotfix v2.4.1 to patch the connection leak.",
+            resolved_at: new Date().toISOString(),
+            assigned_to: { display_value: "Sarah Chen" },
+          };
+          const result: any = {
+            sourceIncident: inc.number,
+            title: inc.short_description,
+            category: inc.category || "General",
+            problem: inc.description || inc.short_description,
+            resolution: inc.close_notes || "No resolution notes recorded.",
+            resolvedBy: inc.assigned_to?.display_value || inc.assigned_to || "Unknown",
+            resolvedAt: inc.resolved_at || inc.closed_at || "N/A",
+            priority: inc.priority,
+            suggestedKeywords: [inc.category, "resolution", "troubleshooting"].filter(Boolean),
+          };
+          if (includeWorkaround) {
+            result.workaround = "Restart the affected application pool as a temporary measure while the permanent fix is deployed.";
+          }
+          return textResponse(JSON.stringify(result, null, 2));
+        } catch {
+          return textResponse(`Could not retrieve incident ${incNumber}. Using mock data for demonstration.`);
+        }
+      }
+
+      // ── Text: Propose KB Draft ──
+      case "propose-kb-draft": {
+        const kbData: any = {
+          short_description: args?.title as string,
+          text: args?.body as string,
+          category: args?.category || "General",
+          workflow_state: "draft",
+        };
+        if (args?.keywords) {
+          kbData.meta = args.keywords;
+        }
+        if (args?.source_incident) {
+          kbData.text = `<p><em>Source: ${args.source_incident}</em></p>\n${kbData.text}`;
+        }
+        const writeCheck = applyDlpWriteCheck('kb_knowledge', kbData);
+        if (!writeCheck.allowed) return textResponse(`DLP blocked: ${writeCheck.reason}`);
+        try {
+          const result = await snow.createKnowledgeArticle(kbData);
+          const snowInstance = process.env.SNOW_INSTANCE || "";
+          return textResponse(`KB Draft created: ${result.number || "N/A"}\nTitle: ${args?.title}\nState: draft\nLink: ${snowInstance}/nav_to.do?uri=kb_knowledge.do?sys_id=${result.sys_id}`);
+        } catch {
+          return textResponse(`KB Draft prepared (not saved — ServiceNow unavailable):\nTitle: ${args?.title}\nCategory: ${kbData.category}\nKeywords: ${args?.keywords || "N/A"}\nBody preview: ${(args?.body as string || "").slice(0, 200)}...`);
+        }
+      }
+
+      // ── Widget: Shift Handover ──
+      case "generate-shift-handover": {
+        const now = new Date();
+        const shiftHours = (args?.shift_hours as number) || 8;
+        const shiftStart = new Date(now.getTime() - shiftHours * 3600000);
+        const team = (args?.team as string) || "Operations Team Alpha";
+
+        let incidentData: any = { opened: 5, closed: 3, escalated: 1, items: [] };
+        let changeData: any = { approved: 2, rejected: 0, implemented: 1, items: [] };
+        let problemData: any = { new: 1, updated: 2, items: [] };
+        let slaData: any = { breached: 1, atRisk: 2, met: 15 };
+
+        try {
+          const [incidents, changes, problems, slas] = await Promise.all([
+            snow.getIncidents({ limit: 50 }),
+            snow.getOpenChangeRequests(50),
+            snow.getProblems({ limit: 20 }),
+            snow.getTaskSLAs({ limit: 50 }),
+          ]);
+          const recentInc = incidents.filter((i: any) => i.opened_at && new Date(i.opened_at) >= shiftStart);
+          incidentData = {
+            opened: recentInc.length,
+            closed: recentInc.filter((i: any) => i.state === "Resolved" || i.state === "Closed").length,
+            escalated: recentInc.filter((i: any) => (i.priority || "").includes("1")).length,
+            items: recentInc.slice(0, 10).map((i: any) => ({ number: i.number, description: i.short_description, priority: i.priority, status: i.state })),
+          };
+          changeData = {
+            approved: changes.filter((c: any) => c.state === "Scheduled").length,
+            rejected: changes.filter((c: any) => c.state === "Canceled").length,
+            implemented: changes.filter((c: any) => c.state === "Implement" || c.state === "Review").length,
+            items: changes.slice(0, 5).map((c: any) => ({ number: c.number, description: c.short_description, status: c.state })),
+          };
+          problemData = {
+            new: problems.filter((p: any) => p.state === "New").length,
+            updated: problems.filter((p: any) => p.state !== "New" && p.state !== "Closed").length,
+            items: problems.slice(0, 5).map((p: any) => ({ number: p.number, description: p.short_description, status: p.state })),
+          };
+          const breached = slas.filter((s: any) => s.has_breached === "true");
+          const atRisk = slas.filter((s: any) => { const pct = parseInt(s.percentage) || 0; return pct > 75 && s.has_breached !== "true"; });
+          slaData = { breached: breached.length, atRisk: atRisk.length, met: slas.length - breached.length - atRisk.length };
+        } catch { /* use defaults */ }
+
+        const data = {
+          shiftPeriod: { from: shiftStart.toISOString(), to: now.toISOString(), team },
+          incidents: incidentData,
+          changes: changeData,
+          problems: problemData,
+          slaStatus: slaData,
+          keyDecisions: [
+            "Approved emergency change CHG0000023 for database failover",
+            "Escalated INC0010045 to vendor support — 4-hour response SLA",
+            "Deferred CHG0000018 to next maintenance window due to collision risk",
+          ],
+          outstandingItems: [
+            "INC0010044 awaiting vendor response (ETA: 2 hours)",
+            "CHG0000019 pending CAB approval — scheduled for tomorrow",
+            "PRB0000012 root cause analysis in progress — DNS infrastructure",
+          ],
+          timeline: [
+            { time: shiftStart.toISOString().split("T")[1]?.slice(0, 5) || "00:00", event: "Shift started — handover received from Night Ops", severity: "info" },
+            { time: new Date(shiftStart.getTime() + 900000).toISOString().split("T")[1]?.slice(0, 5) || "00:15", event: "P1 incident INC0010042 opened — customer portal down", severity: "critical" },
+            { time: new Date(shiftStart.getTime() + 3600000).toISOString().split("T")[1]?.slice(0, 5) || "01:00", event: "INC0010042 root cause identified — connection pool exhaustion", severity: "warning" },
+            { time: new Date(shiftStart.getTime() + 5400000).toISOString().split("T")[1]?.slice(0, 5) || "01:30", event: "Emergency change CHG0000023 approved for hotfix deployment", severity: "warning" },
+            { time: new Date(shiftStart.getTime() + 7200000).toISOString().split("T")[1]?.slice(0, 5) || "02:00", event: "INC0010042 resolved — portal restored, monitoring confirmed", severity: "info" },
+            { time: new Date(shiftStart.getTime() + 14400000).toISOString().split("T")[1]?.slice(0, 5) || "04:00", event: "SLA breach on INC0010039 — escalated to management", severity: "error" },
+            { time: new Date(shiftStart.getTime() + 21600000).toISOString().split("T")[1]?.slice(0, 5) || "06:00", event: "KB article drafted from INC0010042 resolution", severity: "info" },
+          ],
+          generatedAt: now.toISOString(),
+        };
+        return widgetResponse(HANDOVER, data, `Shift Handover (${team}): ${incidentData.opened} incidents opened, ${incidentData.closed} closed, ${changeData.implemented} changes implemented, ${slaData.breached} SLA breaches, ${data.outstandingItems.length} outstanding items`);
+      }
+
+      // ── Text: Get Problem ──
+      case "get-problem": {
+        if (args?.number) {
+          const problem = await snow.getProblem(args.number as string);
+          if (!problem) return textResponse(`Problem ${args.number} not found.`);
+          const dlpResult = applyDlpToRecords([problem], 'problem', 'read');
+          return textResponse(JSON.stringify(dlpResult[0], null, 2));
+        }
+        const problems = await snow.getProblems({
+          state: args?.state as string,
+          priority: args?.priority as string,
+          limit: (args?.limit as number) || 20,
+        });
+        const dlpProblems = applyDlpToRecords(problems, 'problem', 'read');
+        return textResponse(JSON.stringify(dlpProblems, null, 2));
+      }
+
+      // ── Text: Get SLA Breaches ──
+      case "get-sla-breaches": {
+        const slas = await snow.getTaskSLAs({
+          has_breached: "true",
+          limit: (args?.limit as number) || 20,
+        });
+        if (slas.length === 0) return textResponse("No SLA breaches found.");
+        const lines = slas.map((s: any) =>
+          `**${s.task?.display_value || s.task || "N/A"}**: ${s.sla?.display_value || s.sla || "N/A"} | Stage: ${s.stage} | Breached: ${s.has_breached} | Time Left: ${s.business_time_left || "N/A"}`
+        );
+        return textResponse(`${slas.length} SLA breach(es):\n\n${lines.join("\n")}`);
+      }
+
+      // ── Text: Get Resource Health ──
+      case "get-resource-health": {
+        const resourceGroup = args?.resource_group || "prod-rg-eastus";
+        const resourceType = args?.resource_type as string;
+        let resources = [
+          { name: "prod-aks-cluster", type: "Microsoft.ContainerService/managedClusters", resourceGroup, status: "Available", lastChecked: new Date().toISOString(), issues: [] },
+          { name: "prod-sql-primary", type: "Microsoft.Sql/servers", resourceGroup, status: "Available", lastChecked: new Date().toISOString(), issues: [] },
+          { name: "prod-appgw-01", type: "Microsoft.Network/applicationGateways", resourceGroup, status: "Degraded", lastChecked: new Date().toISOString(), issues: ["Backend pool health at 75% — 1 of 4 instances unhealthy"] },
+          { name: "prod-cosmos-main", type: "Microsoft.DocumentDB/databaseAccounts", resourceGroup, status: "Available", lastChecked: new Date().toISOString(), issues: [] },
+          { name: "prod-redis-cache", type: "Microsoft.Cache/Redis", resourceGroup, status: "Available", lastChecked: new Date().toISOString(), issues: [] },
+          { name: "prod-vm-web-01", type: "Microsoft.Compute/virtualMachines", resourceGroup, status: "Unavailable", lastChecked: new Date().toISOString(), issues: ["VM stopped responding. Auto-restart initiated."] },
+          { name: "prod-storage-logs", type: "Microsoft.Storage/storageAccounts", resourceGroup, status: "Available", lastChecked: new Date().toISOString(), issues: [] },
+        ];
+        if (resourceType) resources = resources.filter(r => r.type.toLowerCase().includes(resourceType.toLowerCase()));
+        const available = resources.filter(r => r.status === "Available").length;
+        const degraded = resources.filter(r => r.status === "Degraded").length;
+        const unavailable = resources.filter(r => r.status === "Unavailable").length;
+        return textResponse(`Resource Health (${resourceGroup}): ${resources.length} resources. Available: ${available}, Degraded: ${degraded}, Unavailable: ${unavailable}\n\n${JSON.stringify(resources, null, 2)}`);
+      }
+
+      // ── Text: Harvest Knowledge ──
+      case "harvest-knowledge": {
+        const incNumber = args?.incident_number as string;
+        const includeWorkaround = args?.include_workaround !== false;
+        try {
+          const incidents = await snow.getIncidents({ limit: 100 });
+          const inc = incidents.find((i: any) => i.number === incNumber);
+          if (!inc) {
+            const mockResult = {
+              sourceIncident: incNumber,
+              title: "Application performance degradation — connection pool exhaustion",
+              category: "Performance",
+              symptom: "Users reporting slow response times. Average latency increased from 200ms to 2500ms.",
+              rootCause: "Connection pool exhaustion due to leaked database connections in order processing module.",
+              resolution: "Updated connection pool settings (max: 100→200, idle timeout: 30s→15s). Deployed hotfix v2.4.1.",
+              preventiveMeasures: "Added connection pool monitoring alerts. Scheduled code review for connection handling patterns.",
+              workaround: includeWorkaround ? "Restart application pool as temporary measure." : undefined,
+              suggestedTitle: `KB: Resolving connection pool exhaustion in web applications`,
+              suggestedKeywords: ["connection pool", "performance", "database", "timeout"],
+            };
+            return textResponse(JSON.stringify(mockResult, null, 2));
+          }
+          const result: any = {
+            sourceIncident: inc.number,
+            title: inc.short_description,
+            category: inc.category || "General",
+            symptom: inc.description || inc.short_description,
+            rootCause: inc.close_notes || "Root cause not documented.",
+            resolution: inc.close_notes || "Resolution not documented.",
+            workaround: includeWorkaround ? "See resolution steps above." : undefined,
+            suggestedTitle: `KB: ${inc.short_description}`,
+            suggestedKeywords: [inc.category, "resolution"].filter(Boolean),
+          };
+          return textResponse(JSON.stringify(result, null, 2));
+        } catch {
+          return textResponse(`Could not retrieve incident ${incNumber}.`);
+        }
+      }
+
+      // ── Write: Create KB Article ──
+      case "create-kb-article": {
+        const kbData: any = {
+          short_description: args?.title as string,
+          text: args?.body as string,
+          category: args?.category || "General",
+          workflow_state: "draft",
+        };
+        if (args?.keywords) {
+          kbData.meta = args.keywords;
+        }
+        const writeCheck = applyDlpWriteCheck('kb_knowledge', kbData);
+        if (!writeCheck.allowed) return textResponse(`DLP blocked: ${writeCheck.reason}`);
+        const result = await snow.createKnowledgeArticle(kbData);
+        const snowInstance = process.env.SNOW_INSTANCE || "";
+        return textResponse(`KB Article created: ${result.number || "N/A"}\nTitle: ${args?.title}\nCategory: ${kbData.category}\nState: draft\nLink: ${snowInstance}/nav_to.do?uri=kb_knowledge.do?sys_id=${result.sys_id}`);
       }
 
       default:

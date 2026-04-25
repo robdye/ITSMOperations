@@ -1,0 +1,156 @@
+{
+  "$schema": "https://schemas.microsoft.com/agents/v1/skill.json",
+  "id": "release-manager",
+  "name": "Release Manager",
+  "description": "Makes new and changed services and features available for use, protects live environment integrity, and coordinates build/test/deployment.",
+  "version": "1.0.0",
+  "itilPractice": "Release Management",
+  "valueChainActivity": "Design and Transition, Obtain/Build",
+  "triggers": [
+    {
+      "type": "intent",
+      "patterns": [
+        "release",
+        "deploy",
+        "rollout",
+        "go.live",
+        "launch",
+        "version"
+      ],
+      "description": "Activates when user mentions releases, deployments, rollouts, go-live, or versioning"
+    }
+  ],
+  "actions": [
+    {
+      "name": "manage-release-record",
+      "description": "Create, update, query, or close release records",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: create, update, query, close" },
+        { "name": "releaseId", "type": "string", "required": false, "description": "Release record ID" },
+        { "name": "details", "type": "object", "required": false, "description": "Release details (scope, components, schedule)" }
+      ],
+      "outputs": [
+        { "name": "releaseRecord", "type": "object", "description": "Release record with current state" },
+        { "name": "releaseId", "type": "string", "description": "Release identifier" }
+      ]
+    },
+    {
+      "name": "check-release-calendar",
+      "description": "Schedule releases and detect conflicts with change schedule",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "dateRange", "type": "object", "required": false, "description": "Date range to query" },
+        { "name": "releaseId", "type": "string", "required": false, "description": "Specific release to check" }
+      ],
+      "outputs": [
+        { "name": "schedule", "type": "array", "description": "Scheduled releases" },
+        { "name": "conflicts", "type": "array", "description": "Schedule conflicts detected" }
+      ]
+    },
+    {
+      "name": "orchestrate-deployment",
+      "description": "Coordinate and track deployment activities across environments",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "releaseId", "type": "string", "required": true, "description": "Release to deploy" },
+        { "name": "targetEnvironment", "type": "string", "required": true, "description": "Target environment: dev, staging, production" },
+        { "name": "deploymentPlan", "type": "object", "required": false, "description": "Deployment steps and configuration" }
+      ],
+      "outputs": [
+        { "name": "deploymentStatus", "type": "object", "description": "Deployment progress and status" }
+      ]
+    },
+    {
+      "name": "manage-dml",
+      "description": "Store and retrieve verified release packages and artifacts from the Definitive Media Library",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: store, retrieve, verify, query" },
+        { "name": "packageId", "type": "string", "required": false, "description": "Release package identifier" }
+      ],
+      "outputs": [
+        { "name": "package", "type": "object", "description": "Release package details and verification status" }
+      ]
+    },
+    {
+      "name": "manage-gate-checklist",
+      "description": "Manage readiness gate criteria and approval workflows",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "releaseId", "type": "string", "required": true, "description": "Release to check readiness" },
+        { "name": "gate", "type": "string", "required": true, "description": "Gate: dev-complete, test-complete, staging-approved, production-ready" }
+      ],
+      "outputs": [
+        { "name": "gateStatus", "type": "object", "description": "Gate criteria status and approval state" }
+      ]
+    },
+    {
+      "name": "update-cmdb-baseline",
+      "description": "Update configuration baselines and CI versions post-release via CMDB",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "releaseId", "type": "string", "required": true, "description": "Completed release" },
+        { "name": "ciUpdates", "type": "array", "required": true, "description": "CI version updates to apply" }
+      ],
+      "outputs": [
+        { "name": "updateResult", "type": "object", "description": "CMDB update confirmation" }
+      ]
+    },
+    {
+      "name": "validate-post-release",
+      "description": "Validate post-release service health and performance via monitoring integration",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "releaseId", "type": "string", "required": true, "description": "Release to validate" }
+      ],
+      "outputs": [
+        { "name": "healthStatus", "type": "object", "description": "Post-release health check results" }
+      ]
+    },
+    {
+      "name": "send-release-notification",
+      "description": "Send release communications, go/no-go invitations, and status updates",
+      "sideEffects": "notify",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "notificationType", "type": "string", "required": true, "description": "Type: go-no-go, status-update, completion" },
+        { "name": "recipients", "type": "array", "required": true, "description": "Notification recipients" },
+        { "name": "releaseId", "type": "string", "required": true, "description": "Related release" }
+      ],
+      "outputs": [
+        { "name": "notificationId", "type": "string", "description": "Notification tracking identifier" }
+      ]
+    }
+  ],
+  "crossPracticeIntegrations": [
+    { "practice": "Change Enablement", "direction": "bidirectional", "description": "Releases are authorized through change enablement; changes bundled into releases" },
+    { "practice": "Incident Management", "direction": "bidirectional", "description": "Release failures may create incidents; major incidents may trigger emergency releases" },
+    { "practice": "Monitoring and Event Management", "direction": "receives", "description": "Post-release monitoring validates release success; alerts detect release issues" },
+    { "practice": "IT Asset & Configuration Management", "direction": "sends", "description": "CMDB updated with new baselines post-release; DML stores release packages" },
+    { "practice": "Service Level Management", "direction": "receives", "description": "Release timing considers SLA windows; post-release SLA compliance validated" },
+    { "practice": "Knowledge Management", "direction": "sends", "description": "Release notes and deployment guides feed knowledge base" },
+    { "practice": "Problem Management", "direction": "sends", "description": "Recurring release failures trigger problem investigation" }
+  ],
+  "hitlControls": [
+    { "action": "Go/no-go decisions", "level": "write", "reason": "Release authority must approve progression to production deployment" },
+    { "action": "Rollback initiation", "level": "write", "reason": "Human decision required before triggering release rollback" },
+    { "action": "Release scope changes", "level": "write", "reason": "Adding or removing components from approved release requires human approval" },
+    { "action": "Emergency release authorization", "level": "write", "reason": "Expedited releases require human sign-off with post-release review" },
+    { "action": "Production deployment execution", "level": "write", "reason": "Final authorization to deploy to production requires human confirmation" },
+    { "action": "Early-life support exit", "level": "write", "reason": "Transitioning from ELS to standard support requires human sign-off" }
+  ],
+  "knowledgeSources": [
+    { "source": "Release Record System", "type": "api", "description": "Release records, schedules, and deployment history" },
+    { "source": "Definitive Media Library", "type": "api", "description": "Verified release packages and artifacts" },
+    { "source": "CMDB", "type": "api", "description": "Configuration baselines and CI version data" },
+    { "source": "Monitoring Platforms", "type": "api", "description": "Post-release health and performance data" }
+  ]
+}

@@ -1,0 +1,169 @@
+{
+    "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
+    "schema_version": "v2.4",
+    "name_for_human": "ITSM CMDB & Asset Management",
+    "name_for_model": "itsm_cmdb_asset",
+    "description_for_human": "CMDB and asset management: configuration items, relationships, assets, warranties, service catalog, and lifecycle tracking.",
+    "description_for_model": "Use for ServiceNow CMDB and asset management: querying configuration items, CI relationships, updating CIs, querying assets, expired warranties, service catalog items, asset lifecycle dashboards, and blast radius analysis.",
+    "logo_url": "https://itsm-digital-worker.graycoast-8df9ee76.eastus.azurecontainerapps.io/assets/itsm-logo.png",
+    "contact_email": "itops@absx68251802.onmicrosoft.com",
+    "legal_info_url": "https://absx68251802.sharepoint.com/sites/itsm-operations/legal",
+    "namespace": "itsm_cmdb_asset",
+    "functions": [
+        { "name": "get-cmdb-ci", "description": "Get a Configuration Item from CMDB with full details including class, status, environment, and owner." },
+        { "name": "get-ci-relationships", "description": "Get upstream and downstream CI relationships from the CMDB relationship table." },
+        { "name": "update-cmdb-ci", "description": "Update a Configuration Item in the ServiceNow CMDB." },
+        { "name": "get-assets", "description": "Query IT assets including hardware, software, and warranty status." },
+        { "name": "get-expired-warranties", "description": "Get assets with expired warranties." },
+        { "name": "get-catalog-items", "description": "List available Service Catalog items." },
+        { "name": "show-asset-lifecycle", "description": "Display the Asset Lifecycle compliance dashboard with EOL status, risk scores, and remediation actions." },
+        { "name": "show-blast-radius", "description": "Display the Blast Radius dependency graph showing how a CI failure cascades to connected services." }
+    ],
+    "runtimes": [
+        {
+            "type": "RemoteMCPServer",
+            "run_for_functions": [
+                "get-cmdb-ci", "get-ci-relationships", "update-cmdb-ci",
+                "get-assets", "get-expired-warranties", "get-catalog-items",
+                "show-asset-lifecycle", "show-blast-radius"
+            ],
+            "spec": {
+                "url": "${{CHANGE_MCP_ENDPOINT}}",
+                "headers": {
+                    "x-api-key": "${{MCP_API_KEY}}"
+                },
+                "mcp_tool_description": {
+                    "tools": [
+                        {
+                            "name": "get-cmdb-ci",
+                            "description": "Get a Configuration Item from CMDB with full details including class, status, environment, and owner.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "name": { "type": "string", "description": "CI name" },
+                                    "sys_id": { "type": "string", "description": "CI sys_id" },
+                                    "ci_class": { "type": "string", "description": "CMDB class: cmdb_ci_server, cmdb_ci_app_server, cmdb_ci_database, cmdb_ci_network_device" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "get-ci-relationships",
+                            "description": "Get upstream and downstream CI relationships from the CMDB relationship table.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "ci_sys_id": { "type": "string", "description": "sys_id of the CI to trace relationships for" },
+                                    "depth": { "type": "number", "description": "Relationship depth (default 2, max 5)" }
+                                },
+                                "required": ["ci_sys_id"],
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "update-cmdb-ci",
+                            "description": "Update a Configuration Item in the ServiceNow CMDB. Logged with agent ID and timestamp.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "sys_id": { "type": "string", "description": "CI sys_id to update" },
+                                    "fields": { "type": "string", "description": "JSON object of fields to update" }
+                                },
+                                "required": ["sys_id", "fields"],
+                                "additionalProperties": false
+                            }
+                        },
+                        {
+                            "name": "get-assets",
+                            "description": "Query IT assets including hardware, software, and warranty status.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "install_status": { "type": "string", "description": "Filter by install status" },
+                                    "model_category": { "type": "string", "description": "Filter by model category" },
+                                    "limit": { "type": "number", "description": "Max results" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "get-expired-warranties",
+                            "description": "Get assets with expired warranties.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "limit": { "type": "number", "description": "Max results" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "get-catalog-items",
+                            "description": "List available Service Catalog items.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "limit": { "type": "number", "description": "Max results" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "show-asset-lifecycle",
+                            "description": "Display the Asset Lifecycle compliance dashboard showing all assets with their EOL status, risk category, and NIST compliance status.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "status": { "type": "string", "description": "Filter: supported, at-risk, non-compliant" },
+                                    "category": { "type": "string", "description": "Asset category: Server, Network, Application, Database" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/asset-lifecycle.html",
+                                "openai/toolInvocation/invoking": "Loading asset lifecycle data…",
+                                "openai/toolInvocation/invoked": "Lifecycle dashboard ready.",
+                                "openai/widgetAccessible": true
+                            }
+                        },
+                        {
+                            "name": "show-blast-radius",
+                            "description": "Display the Blast Radius graph — a visual dependency map showing how a CI failure cascades to connected banking services.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "ci_name": { "type": "string", "description": "Name of the Configuration Item to analyze" },
+                                    "ci_sys_id": { "type": "string", "description": "ServiceNow sys_id of the CI" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/blast-radius.html",
+                                "openai/toolInvocation/invoking": "Mapping blast radius…",
+                                "openai/toolInvocation/invoked": "Blast radius mapped.",
+                                "openai/widgetAccessible": true
+                            }
+                        }
+                    ]
+                }
+            },
+            "mcp_resource_description": {
+                "resources": [
+                    { "uri": "ui://widget/asset-lifecycle.html", "mimeType": "text/html+skybridge", "description": "Asset Lifecycle compliance dashboard with EOL status and risk categories" },
+                    { "uri": "ui://widget/blast-radius.html", "mimeType": "text/html+skybridge", "description": "Blast Radius dependency graph showing CI failure cascade impact" }
+                ]
+            }
+        }
+    ],
+    "auth": {
+        "type": "OAuthPluginVault",
+        "reference_id": "${{SERVICENOW_OAUTH_REGISTRATION_ID}}"
+    }
+}

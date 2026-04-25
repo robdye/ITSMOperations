@@ -1,46 +1,43 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeSnowValue } from '../snow-client.js';
+import { sanitizeSnowValue } from '../snow-query.js';
 
 describe('sanitizeSnowValue', () => {
   it('strips caret (query separator)', () => {
     expect(sanitizeSnowValue('value^ORfield=hack')).not.toContain('^');
   });
 
-  it('strips equals sign', () => {
-    expect(sanitizeSnowValue('state=active')).not.toContain('=');
+  it('preserves equals sign (safe inside typed builder)', () => {
+    expect(sanitizeSnowValue('state=active')).toBe('state=active');
   });
 
-  it('strips angle brackets', () => {
-    expect(sanitizeSnowValue('priority<1')).not.toContain('<');
-    expect(sanitizeSnowValue('priority>5')).not.toContain('>');
+  it('preserves angle brackets (safe inside typed builder)', () => {
+    expect(sanitizeSnowValue('priority<1')).toBe('priority<1');
+    expect(sanitizeSnowValue('priority>5')).toBe('priority>5');
   });
 
-  it('strips exclamation mark', () => {
-    expect(sanitizeSnowValue('state!=closed')).not.toContain('!');
+  it('preserves exclamation mark (safe inside typed builder)', () => {
+    expect(sanitizeSnowValue('state!=closed')).toBe('state!=closed');
   });
 
-  it('strips percent (wildcard)', () => {
-    expect(sanitizeSnowValue('%admin%')).not.toContain('%');
+  it('preserves percent (safe inside typed builder)', () => {
+    expect(sanitizeSnowValue('%admin%')).toBe('%admin%');
   });
 
-  it('strips OR keyword', () => {
-    const result = sanitizeSnowValue('active OR admin');
-    expect(result.toUpperCase()).not.toContain(' OR ');
+  it('preserves OR keyword in values (safe inside typed builder)', () => {
+    expect(sanitizeSnowValue('active OR admin')).toBe('active OR admin');
   });
 
-  it('strips NQ keyword (word-bounded)', () => {
-    const result = sanitizeSnowValue('state=active NQ priority=1');
-    expect(result.toUpperCase()).not.toMatch(/\bNQ\b/);
+  it('strips caret-based NQ injection', () => {
+    const result = sanitizeSnowValue('state=active^NQ priority=1');
+    expect(result).not.toContain('^');
   });
 
-  it('strips LIKE keyword (word-bounded)', () => {
-    const result = sanitizeSnowValue('name LIKE admin');
-    expect(result.toUpperCase()).not.toMatch(/\bLIKE\b/);
+  it('preserves LIKE keyword in values (safe inside typed builder)', () => {
+    expect(sanitizeSnowValue('name LIKE admin')).toBe('name LIKE admin');
   });
 
-  it('strips ORDERBY keyword (word-bounded)', () => {
-    const result = sanitizeSnowValue('name ORDERBY priority');
-    expect(result.toUpperCase()).not.toMatch(/\bORDERBY\b/);
+  it('preserves ORDERBY keyword in values (safe inside typed builder)', () => {
+    expect(sanitizeSnowValue('name ORDERBY priority')).toBe('name ORDERBY priority');
   });
 
   it('preserves safe values', () => {
@@ -55,5 +52,9 @@ describe('sanitizeSnowValue', () => {
 
   it('handles empty string', () => {
     expect(sanitizeSnowValue('')).toBe('');
+  });
+
+  it('strips newlines', () => {
+    expect(sanitizeSnowValue('line1\nline2')).toBe('line1 line2');
   });
 });

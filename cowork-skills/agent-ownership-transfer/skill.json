@@ -1,0 +1,84 @@
+{
+  "$schema": "https://schemas.microsoft.com/agents/v1/skill.json",
+  "id": "agent-ownership-transfer",
+  "name": "Agent Ownership Transfer",
+  "description": "When an employee leaves, identifies all Copilot agents they own, generates a handover document, drafts manager approval emails, and prepares reassignment. Enforces AGP-001 5-business-day transfer SLA.",
+  "version": "1.0.0",
+  "itilPractice": "Workforce and Talent Management",
+  "valueChainActivity": "Deliver and Support",
+  "triggers": [
+    {
+      "type": "intent",
+      "patterns": [
+        "ownership transfer",
+        "agent handover",
+        "employee leaving",
+        "reassign agent",
+        "orphaned agent",
+        "agent owner"
+      ],
+      "description": "Activates when user mentions agent ownership transfer, employee departure, or orphaned agents"
+    },
+    {
+      "type": "event",
+      "source": "hr-departure-events",
+      "description": "Triggered when HR system signals an employee departure"
+    }
+  ],
+  "actions": [
+    {
+      "name": "identify-owned-agents",
+      "description": "Find all agents owned by a departing employee",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "employeeId", "type": "string", "required": true, "description": "Departing employee identifier or UPN" }
+      ],
+      "outputs": [
+        { "name": "ownedAgents", "type": "array", "description": "List of agents owned by the employee" },
+        { "name": "transferDeadline", "type": "string", "description": "5-business-day SLA deadline for transfer" }
+      ]
+    },
+    {
+      "name": "prepare-transfer",
+      "description": "Generate handover document and draft manager approval emails for ownership transfer",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "employeeId", "type": "string", "required": true, "description": "Departing employee identifier" },
+        { "name": "newOwnerId", "type": "string", "required": true, "description": "Proposed new owner identifier" }
+      ],
+      "outputs": [
+        { "name": "handoverDocument", "type": "object", "description": "Generated handover document with agent details" },
+        { "name": "approvalEmails", "type": "array", "description": "Draft approval emails for manager sign-off" }
+      ]
+    },
+    {
+      "name": "execute-transfer",
+      "description": "Execute the ownership transfer after approval",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "transferId", "type": "string", "required": true, "description": "Transfer request identifier" },
+        { "name": "approvalReference", "type": "string", "required": true, "description": "Manager approval reference" }
+      ],
+      "outputs": [
+        { "name": "transferResult", "type": "object", "description": "Transfer completion status and audit record" }
+      ]
+    }
+  ],
+  "crossPracticeIntegrations": [
+    { "practice": "IT Asset & Configuration Management", "direction": "bidirectional", "description": "CMDB tracks agent ownership; transfers update CMDB records" },
+    { "practice": "Change Enablement", "direction": "sends", "description": "Ownership transfers create change requests for audit trail" },
+    { "practice": "Workforce and Talent Management", "direction": "receives", "description": "HR departure events trigger ownership identification" }
+  ],
+  "hitlControls": [
+    { "action": "Ownership transfer execution", "level": "write", "reason": "Manager must approve new owner before transfer" },
+    { "action": "SLA escalation", "level": "notify", "reason": "Notify governance if transfer SLA is at risk of breach" }
+  ],
+  "knowledgeSources": [
+    { "source": "Tenant Agent Inventory", "type": "document", "description": "Agent packages with ownership metadata" },
+    { "source": "Microsoft Entra ID", "type": "api", "description": "Employee profiles, managers, and org structure" },
+    { "source": "Agent Governance Policy", "type": "document", "description": "AGP-001 §3.4 ownership transfer requirements" }
+  ]
+}

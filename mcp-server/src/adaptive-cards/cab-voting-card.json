@@ -1,0 +1,139 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.6",
+  "fallbackText": "This card requires Adaptive Card version 1.6 or higher. Please update your client to view the CAB Voting form.",
+  "msTeams": {
+    "width": "full"
+  },
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "🗳️ CAB Vote Required",
+      "weight": "bolder",
+      "size": "large",
+      "style": "heading",
+      "spacing": "none"
+    },
+    {
+      "type": "TextBlock",
+      "text": "Change ${change_number}: ${change_title}",
+      "weight": "bolder",
+      "size": "medium",
+      "wrap": true,
+      "spacing": "small"
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "medium",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "Risk Score",
+              "isSubtle": true,
+              "spacing": "none"
+            },
+            {
+              "type": "TextBlock",
+              "text": "${risk_score}",
+              "weight": "bolder",
+              "size": "extraLarge",
+              "color": "${risk_color}",
+              "spacing": "none"
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "Affected Configuration Items",
+              "isSubtle": true,
+              "spacing": "none"
+            },
+            {
+              "type": "TextBlock",
+              "text": "${affected_cis}",
+              "wrap": true,
+              "spacing": "none"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "FactSet",
+      "spacing": "medium",
+      "separator": true,
+      "facts": [
+        { "title": "Submitter", "value": "${submitter}" },
+        { "title": "Category", "value": "${category}" },
+        { "title": "Planned Start", "value": "${planned_start_date}" },
+        { "title": "Planned End", "value": "${planned_end_date}" },
+        { "title": "Risk Assessment", "value": "${risk_assessment}" },
+        { "title": "Change Type", "value": "${change_type}" },
+        { "title": "Assignment Group", "value": "${assignment_group}" }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "Your Vote",
+      "weight": "bolder",
+      "size": "medium",
+      "spacing": "large",
+      "separator": true
+    },
+    {
+      "type": "Input.ChoiceSet",
+      "id": "vote",
+      "label": "Decision",
+      "isRequired": true,
+      "errorMessage": "Please select a vote",
+      "style": "expanded",
+      "choices": [
+        { "title": "✅ Approve", "value": "approve" },
+        { "title": "❌ Reject", "value": "reject" },
+        { "title": "⏸️ Defer", "value": "defer" },
+        { "title": "❓ Request More Info", "value": "request_more_info" }
+      ],
+      "spacing": "small"
+    },
+    {
+      "type": "Input.Text",
+      "id": "comments",
+      "label": "Comments",
+      "placeholder": "Provide rationale for your vote, conditions, or questions",
+      "isMultiline": true,
+      "spacing": "small"
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.Execute",
+      "title": "Submit Vote",
+      "verb": "submitCabVote",
+      "style": "positive",
+      "data": {
+        "change_number": "${change_number}",
+        "change_sys_id": "${change_sys_id}",
+        "vote": "${vote}",
+        "comments": "${comments}"
+      }
+    },
+    {
+      "type": "Action.Execute",
+      "title": "Request More Info",
+      "verb": "requestMoreInfo",
+      "data": {
+        "change_number": "${change_number}",
+        "change_sys_id": "${change_sys_id}"
+      }
+    }
+  ]
+}

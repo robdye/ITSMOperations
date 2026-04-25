@@ -1,0 +1,88 @@
+{
+    "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
+    "schema_version": "v2.4",
+    "name_for_human": "ITSM Problem Management",
+    "name_for_model": "itsm_problem",
+    "description_for_human": "Problem management: track problems, known errors, and root cause analysis.",
+    "description_for_model": "Use for ServiceNow problem management: viewing problem dashboards, creating problem records from recurring incidents, and querying problem details.",
+    "logo_url": "https://itsm-digital-worker.graycoast-8df9ee76.eastus.azurecontainerapps.io/assets/itsm-logo.png",
+    "contact_email": "itops@absx68251802.onmicrosoft.com",
+    "legal_info_url": "https://absx68251802.sharepoint.com/sites/itsm-operations/legal",
+    "namespace": "itsm_problem",
+    "functions": [
+        { "name": "show-problem-dashboard", "description": "Display the Problem Dashboard with open problems and known errors." },
+        { "name": "create-problem", "description": "Create a problem record from recurring incidents." },
+        { "name": "get-problem", "description": "Get details of a specific problem record by number or sys_id." }
+    ],
+    "runtimes": [
+        {
+            "type": "RemoteMCPServer",
+            "run_for_functions": [
+                "show-problem-dashboard", "create-problem", "get-problem"
+            ],
+            "spec": {
+                "url": "${{CHANGE_MCP_ENDPOINT}}",
+                "headers": {
+                    "x-api-key": "${{MCP_API_KEY}}"
+                },
+                "mcp_tool_description": {
+                    "tools": [
+                        {
+                            "name": "show-problem-dashboard",
+                            "description": "Display the Problem Dashboard with open problems and known errors.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "state": { "type": "string", "description": "Filter by state" },
+                                    "priority": { "type": "string", "description": "Filter by priority" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/problem-dashboard.html",
+                                "openai/toolInvocation/invoking": "Loading problem dashboard…",
+                                "openai/toolInvocation/invoked": "Problems ready.",
+                                "openai/widgetAccessible": true
+                            }
+                        },
+                        {
+                            "name": "create-problem",
+                            "description": "Create a problem record from recurring incidents.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "data": { "type": "string", "description": "JSON object of problem fields" }
+                                },
+                                "required": ["data"],
+                                "additionalProperties": false
+                            }
+                        },
+                        {
+                            "name": "get-problem",
+                            "description": "Get details of a specific problem record by number or sys_id.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "number": { "type": "string", "description": "Problem number (e.g. PRB0000001)" },
+                                    "sys_id": { "type": "string", "description": "Problem sys_id" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        }
+                    ]
+                }
+            },
+            "mcp_resource_description": {
+                "resources": [
+                    { "uri": "ui://widget/problem-dashboard.html", "mimeType": "text/html+skybridge", "description": "Problem Dashboard with open problems and known errors" }
+                ]
+            }
+        }
+    ],
+    "auth": {
+        "type": "OAuthPluginVault",
+        "reference_id": "${{SERVICENOW_OAUTH_REGISTRATION_ID}}"
+    }
+}

@@ -1,0 +1,66 @@
+{
+    "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
+    "schema_version": "v2.4",
+    "name_for_human": "ITSM Monitoring",
+    "name_for_model": "itsm_monitoring",
+    "description_for_human": "Infrastructure monitoring: Azure alerts and resource health status.",
+    "description_for_model": "Use for ServiceNow monitoring integration: querying Azure Monitor alerts for infrastructure health and checking resource health status.",
+    "logo_url": "https://itsm-digital-worker.graycoast-8df9ee76.eastus.azurecontainerapps.io/assets/itsm-logo.png",
+    "contact_email": "itops@absx68251802.onmicrosoft.com",
+    "legal_info_url": "https://absx68251802.sharepoint.com/sites/itsm-operations/legal",
+    "namespace": "itsm_monitoring",
+    "functions": [
+        { "name": "get-azure-alerts", "description": "Get Azure Monitor alerts for infrastructure health." },
+        { "name": "get-resource-health", "description": "Get Azure resource health status for monitored infrastructure components." }
+    ],
+    "runtimes": [
+        {
+            "type": "RemoteMCPServer",
+            "run_for_functions": [
+                "get-azure-alerts", "get-resource-health"
+            ],
+            "spec": {
+                "url": "${{CHANGE_MCP_ENDPOINT}}",
+                "headers": {
+                    "x-api-key": "${{MCP_API_KEY}}"
+                },
+                "mcp_tool_description": {
+                    "tools": [
+                        {
+                            "name": "get-azure-alerts",
+                            "description": "Get Azure Monitor alerts for infrastructure health.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "limit": { "type": "number", "description": "Max results" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "get-resource-health",
+                            "description": "Get Azure resource health status for monitored infrastructure components.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "resource_name": { "type": "string", "description": "Name of the Azure resource to check" },
+                                    "resource_type": { "type": "string", "description": "Azure resource type (e.g. Microsoft.Compute/virtualMachines)" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        }
+                    ]
+                }
+            },
+            "mcp_resource_description": {
+                "resources": []
+            }
+        }
+    ],
+    "auth": {
+        "type": "OAuthPluginVault",
+        "reference_id": "${{SERVICENOW_OAUTH_REGISTRATION_ID}}"
+    }
+}

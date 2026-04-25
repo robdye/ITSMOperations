@@ -1,0 +1,207 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "logAnalyticsWorkspaceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Full resource ID of the Log Analytics workspace"
+      }
+    },
+    "actionGroupId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource ID of the Action Group for alert notifications"
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    }
+  },
+  "variables": {
+    "alertPrefix": "ITSM-DigitalWorker"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Insights/scheduledQueryRules",
+      "apiVersion": "2023-03-15-preview",
+      "name": "[concat(variables('alertPrefix'), '-AgentErrorRate-Critical')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "displayName": "ITSM Agent Error Rate > 5% (Critical)",
+        "description": "Fires when the ITSM digital worker error rate exceeds 5% over the last hour.",
+        "severity": 0,
+        "enabled": true,
+        "evaluationFrequency": "PT5M",
+        "windowSize": "PT1H",
+        "scopes": [
+          "[parameters('logAnalyticsWorkspaceId')]"
+        ],
+        "criteria": {
+          "allOf": [
+            {
+              "query": "let total = toscalar(customEvents | where timestamp > ago(1h) and name startswith 'itsm.' | count); exceptions | where timestamp > ago(1h) | where customDimensions has 'itsm' | summarize errorCount = count() | extend errorRate = round(todouble(errorCount) / todouble(total) * 100, 2) | where errorRate > 5",
+              "timeAggregation": "Count",
+              "operator": "GreaterThan",
+              "threshold": 0,
+              "failingPeriods": {
+                "numberOfEvaluationPeriods": 1,
+                "minFailingPeriodsToAlert": 1
+              }
+            }
+          ]
+        },
+        "actions": {
+          "actionGroups": [
+            "[parameters('actionGroupId')]"
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/scheduledQueryRules",
+      "apiVersion": "2023-03-15-preview",
+      "name": "[concat(variables('alertPrefix'), '-ToolLatencyP95-Warning')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "displayName": "ITSM Tool Call P95 Latency > 10s (Warning)",
+        "description": "Fires when the P95 tool call latency exceeds 10 seconds.",
+        "severity": 2,
+        "enabled": true,
+        "evaluationFrequency": "PT5M",
+        "windowSize": "PT15M",
+        "scopes": [
+          "[parameters('logAnalyticsWorkspaceId')]"
+        ],
+        "criteria": {
+          "allOf": [
+            {
+              "query": "customEvents | where name == 'itsm.tool.call.completed' | where timestamp > ago(15m) | extend durationMs = todouble(customDimensions.durationMs) | summarize p95 = percentile(durationMs, 95) by bin(timestamp, 5m) | where p95 > 10000",
+              "timeAggregation": "Count",
+              "operator": "GreaterThan",
+              "threshold": 0,
+              "failingPeriods": {
+                "numberOfEvaluationPeriods": 1,
+                "minFailingPeriodsToAlert": 1
+              }
+            }
+          ]
+        },
+        "actions": {
+          "actionGroups": [
+            "[parameters('actionGroupId')]"
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/scheduledQueryRules",
+      "apiVersion": "2023-03-15-preview",
+      "name": "[concat(variables('alertPrefix'), '-ServiceNowFailures-Critical')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "displayName": "ServiceNow API Failures > 10 in 5 min (Critical)",
+        "description": "Fires when ServiceNow API failures exceed 10 within a 5-minute window.",
+        "severity": 0,
+        "enabled": true,
+        "evaluationFrequency": "PT1M",
+        "windowSize": "PT5M",
+        "scopes": [
+          "[parameters('logAnalyticsWorkspaceId')]"
+        ],
+        "criteria": {
+          "allOf": [
+            {
+              "query": "dependencies | where type == 'HTTP' and target contains 'service-now.com' | where timestamp > ago(5m) | where success == false | summarize failureCount = count() | where failureCount > 10",
+              "timeAggregation": "Count",
+              "operator": "GreaterThan",
+              "threshold": 0,
+              "failingPeriods": {
+                "numberOfEvaluationPeriods": 1,
+                "minFailingPeriodsToAlert": 1
+              }
+            }
+          ]
+        },
+        "actions": {
+          "actionGroups": [
+            "[parameters('actionGroupId')]"
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/scheduledQueryRules",
+      "apiVersion": "2023-03-15-preview",
+      "name": "[concat(variables('alertPrefix'), '-TokenUsageSpike-Warning')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "displayName": "Token Usage Spike > 2x Baseline (Warning)",
+        "description": "Fires when current token usage exceeds 2x the 7-day rolling baseline average.",
+        "severity": 2,
+        "enabled": true,
+        "evaluationFrequency": "PT15M",
+        "windowSize": "PT1H",
+        "scopes": [
+          "[parameters('logAnalyticsWorkspaceId')]"
+        ],
+        "criteria": {
+          "allOf": [
+            {
+              "query": "let baseline = toscalar(customMetrics | where name == 'gen_ai.client.token.usage' | where timestamp between (ago(7d) .. ago(1d)) | summarize avg(value)); customMetrics | where name == 'gen_ai.client.token.usage' | where timestamp > ago(1h) | summarize currentAvg = avg(value) | where currentAvg > baseline * 2",
+              "timeAggregation": "Count",
+              "operator": "GreaterThan",
+              "threshold": 0,
+              "failingPeriods": {
+                "numberOfEvaluationPeriods": 1,
+                "minFailingPeriodsToAlert": 1
+              }
+            }
+          ]
+        },
+        "actions": {
+          "actionGroups": [
+            "[parameters('actionGroupId')]"
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/scheduledQueryRules",
+      "apiVersion": "2023-03-15-preview",
+      "name": "[concat(variables('alertPrefix'), '-HitlPendingApprovals-Info')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "displayName": "HITL Approvals Pending > 30 min (Info)",
+        "description": "Fires when human-in-the-loop approvals have been pending for more than 30 minutes.",
+        "severity": 3,
+        "enabled": true,
+        "evaluationFrequency": "PT5M",
+        "windowSize": "PT1H",
+        "scopes": [
+          "[parameters('logAnalyticsWorkspaceId')]"
+        ],
+        "criteria": {
+          "allOf": [
+            {
+              "query": "customEvents | where name == 'itsm.hitl.requested' | where timestamp > ago(24h) | extend approvalId = tostring(customDimensions.approvalId) | join kind=leftanti (customEvents | where name == 'itsm.hitl.completed' | where timestamp > ago(24h) | extend approvalId = tostring(customDimensions.approvalId)) on approvalId | where timestamp < ago(30m) | summarize pendingCount = count() | where pendingCount > 0",
+              "timeAggregation": "Count",
+              "operator": "GreaterThan",
+              "threshold": 0,
+              "failingPeriods": {
+                "numberOfEvaluationPeriods": 1,
+                "minFailingPeriodsToAlert": 1
+              }
+            }
+          ]
+        },
+        "actions": {
+          "actionGroups": [
+            "[parameters('actionGroupId')]"
+          ]
+        }
+      }
+    }
+  ]
+}

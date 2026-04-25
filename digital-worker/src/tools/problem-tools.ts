@@ -38,8 +38,8 @@ export const problemTools = [
     description: 'Update an existing problem record in ServiceNow. WRITE OPERATION — confirm with user before executing.',
     parameters: z.object({
       sys_id: z.string().describe('sys_id of the problem to update'),
-      fields: z.record(z.string(), z.string()).describe('Fields to update'),
+      fields: z.string().describe('JSON object of fields to update, e.g. {"priority":"2","state":"open"}'),
     }),
-    execute: async ({ sys_id, fields }) => stringify(await mcp.updateProblem(sys_id, fields)),
+    execute: async ({ sys_id, fields }) => stringify(await mcp.updateProblem(sys_id, JSON.parse(fields))),
   }),
 ];

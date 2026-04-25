@@ -1,0 +1,164 @@
+{
+  "$schema": "https://schemas.microsoft.com/agents/v1/skill.json",
+  "id": "incident-manager",
+  "name": "Incident Manager",
+  "description": "Minimizes the negative impact of incidents by restoring normal service operation as quickly as possible, maintaining agreed service levels.",
+  "version": "1.0.0",
+  "itilPractice": "Incident Management",
+  "valueChainActivity": "Deliver and Support",
+  "triggers": [
+    {
+      "type": "intent",
+      "patterns": [
+        "incident",
+        "P1",
+        "P2",
+        "INC\\d+",
+        "outage",
+        "down",
+        "escalat",
+        "triage",
+        "sev(erity)?\\s*[12]",
+        "major incident",
+        "incident bridge",
+        "war room"
+      ],
+      "description": "Activates when user mentions incidents, outages, escalations, severity levels, or major incident coordination"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "0 */4 * * *",
+      "description": "incident-stale-check — Scans for stale incidents every 4 hours"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "0 6 * * 1",
+      "description": "incident-recurring-pattern — Analyzes recurring incident patterns every Monday at 06:00"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "*/5 * * * *",
+      "description": "major-incident-bridge — Checks major incident bridge status every 5 minutes"
+    }
+  ],
+  "actions": [
+    {
+      "name": "manage-incident-record",
+      "description": "Create, update, query, or close incident records in the ticketing system",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: create, update, query, or close" },
+        { "name": "incidentId", "type": "string", "required": false, "description": "Incident ID for update/query/close operations" },
+        { "name": "details", "type": "object", "required": false, "description": "Incident details (category, priority, description, affected CI)" }
+      ],
+      "outputs": [
+        { "name": "incidentRecord", "type": "object", "description": "The incident record with current state" },
+        { "name": "incidentId", "type": "string", "description": "The incident identifier" }
+      ]
+    },
+    {
+      "name": "cmdb-lookup",
+      "description": "Resolve CIs, services, and dependency maps from the CMDB",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "ciName", "type": "string", "required": false, "description": "Configuration item name or ID" },
+        { "name": "serviceName", "type": "string", "required": false, "description": "Service name to look up" }
+      ],
+      "outputs": [
+        { "name": "ciDetails", "type": "object", "description": "CI details and relationships" },
+        { "name": "dependencyMap", "type": "object", "description": "Upstream and downstream dependencies" }
+      ]
+    },
+    {
+      "name": "kedb-search",
+      "description": "Search known errors and workarounds in the KEDB",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "query", "type": "string", "required": true, "description": "Search query for known errors" },
+        { "name": "ciFilter", "type": "string", "required": false, "description": "Filter by configuration item" }
+      ],
+      "outputs": [
+        { "name": "knownErrors", "type": "array", "description": "Matching known error records with workarounds" }
+      ]
+    },
+    {
+      "name": "check-sla-timer",
+      "description": "Track and report on SLA target compliance for an incident",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "incidentId", "type": "string", "required": true, "description": "Incident ID to check SLA status" }
+      ],
+      "outputs": [
+        { "name": "slaStatus", "type": "object", "description": "Current SLA compliance status and time remaining" }
+      ]
+    },
+    {
+      "name": "send-notification",
+      "description": "Send stakeholder communications and escalation alerts",
+      "sideEffects": "notify",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "recipients", "type": "array", "required": true, "description": "List of notification recipients" },
+        { "name": "notificationType", "type": "string", "required": true, "description": "Type: escalation, status-update, resolution" },
+        { "name": "message", "type": "string", "required": true, "description": "Notification content" }
+      ],
+      "outputs": [
+        { "name": "notificationId", "type": "string", "description": "Notification tracking identifier" }
+      ]
+    },
+    {
+      "name": "correlate-alerts",
+      "description": "Receive and correlate alerts from monitoring platforms",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "alertIds", "type": "array", "required": false, "description": "Specific alert IDs to correlate" },
+        { "name": "timeWindow", "type": "string", "required": false, "description": "Time window for correlation analysis" }
+      ],
+      "outputs": [
+        { "name": "correlationResult", "type": "object", "description": "Correlated alert groups and patterns" }
+      ]
+    },
+    {
+      "name": "execute-runbook",
+      "description": "Execute approved automated remediation runbooks",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "runbookId", "type": "string", "required": true, "description": "Runbook identifier to execute" },
+        { "name": "targetCi", "type": "string", "required": true, "description": "Target CI for remediation" },
+        { "name": "parameters", "type": "object", "required": false, "description": "Runbook execution parameters" }
+      ],
+      "outputs": [
+        { "name": "executionResult", "type": "object", "description": "Runbook execution status and outcome" }
+      ]
+    }
+  ],
+  "crossPracticeIntegrations": [
+    { "practice": "Problem Management", "direction": "bidirectional", "description": "Incidents trigger problem investigation; known errors feed back as workarounds" },
+    { "practice": "Change Enablement", "direction": "bidirectional", "description": "Incidents may trigger emergency changes; change failures may generate incidents" },
+    { "practice": "Service Level Management", "direction": "receives", "description": "SLA targets drive prioritization and escalation timers" },
+    { "practice": "Knowledge Management", "direction": "bidirectional", "description": "Resolutions feed knowledge articles; KEDB provides workarounds" },
+    { "practice": "IT Asset & Configuration Management", "direction": "receives", "description": "CMDB provides CI context for categorization and impact analysis" },
+    { "practice": "Supplier Management", "direction": "sends", "description": "Third-party escalation for vendor-managed CIs" },
+    { "practice": "Monitoring and Event Management", "direction": "receives", "description": "Events and alerts correlated; may create incidents" }
+  ],
+  "hitlControls": [
+    { "action": "Major incident declaration", "level": "write", "reason": "Confirm escalation to major incident status due to broad impact" },
+    { "action": "Hierarchical escalation", "level": "notify", "reason": "Management escalation approval required" },
+    { "action": "Service restoration sign-off", "level": "write", "reason": "Critical service restoration must be confirmed by service owner" },
+    { "action": "Incident re-prioritization", "level": "write", "reason": "Changing priority of P1/P2 incidents requires human review" },
+    { "action": "Cross-team escalation", "level": "notify", "reason": "Routing incidents to external vendors or third parties requires approval" }
+  ],
+  "knowledgeSources": [
+    { "source": "ServiceNow Incident Table", "type": "api", "description": "Incident records, history, and related data" },
+    { "source": "CMDB", "type": "api", "description": "Configuration items, service maps, and dependency relationships" },
+    { "source": "KEDB", "type": "index", "description": "Known error database with workarounds and resolutions" },
+    { "source": "Monitoring Platform", "type": "api", "description": "Real-time alerts and event data from infrastructure monitoring" },
+    { "source": "Runbook Library", "type": "document", "description": "Approved automated remediation procedures" }
+  ]
+}

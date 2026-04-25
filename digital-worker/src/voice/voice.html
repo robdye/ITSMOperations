@@ -51,6 +51,11 @@
       border: 1px solid var(--border);
       color: var(--muted);
     }
+    header .badge.avatar-active {
+      background: rgba(34,197,94,0.1);
+      border-color: rgba(34,197,94,0.3);
+      color: var(--green);
+    }
     .main {
       flex: 1;
       width: 100%;
@@ -89,6 +94,49 @@
     @keyframes listen {
       0%, 100% { transform: scale(1); }
       50% { transform: scale(1.05); }
+    }
+    /* Avatar video container — replaces the orb when avatar is active */
+    .avatar-container {
+      position: relative;
+      width: 320px; height: 240px;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 2px solid var(--border);
+      background: #000;
+      display: none;
+    }
+    .avatar-container.active { display: block; }
+    .avatar-container video {
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+    .avatar-container audio { display: none; }
+    .avatar-container .avatar-status {
+      position: absolute;
+      bottom: 8px; left: 8px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 600;
+      background: rgba(0,0,0,0.6);
+      color: var(--green);
+      backdrop-filter: blur(4px);
+    }
+    .avatar-container .avatar-listening-ring {
+      position: absolute;
+      inset: 0;
+      border: 3px solid transparent;
+      border-radius: 16px;
+      transition: border-color 0.3s;
+      pointer-events: none;
+    }
+    .avatar-container.listening .avatar-listening-ring {
+      border-color: var(--green);
+      box-shadow: inset 0 0 20px rgba(34,197,94,0.15);
+    }
+    .avatar-container.speaking .avatar-listening-ring {
+      border-color: var(--accent);
+      box-shadow: inset 0 0 20px rgba(37,99,235,0.15);
     }
     .status {
       font-size: 14px;
@@ -190,13 +238,21 @@
 </div>
 
 <header>
-  <div class="logo">PM</div>
+  <div class="logo">⚡</div>
   <h1>ITSM Operations</h1>
-  <span class="badge">Voice Live</span>
+  <span class="badge" id="modeBadge">Voice Live</span>
 </header>
 
 <div class="main">
-  <div class="orb-container">
+  <!-- Avatar video — shown when Azure Speech Avatar is configured -->
+  <div class="avatar-container" id="avatarContainer">
+    <video id="avatarVideo" autoplay playsinline></video>
+    <audio id="avatarAudio" autoplay></audio>
+    <div class="avatar-listening-ring"></div>
+    <div class="avatar-status" id="avatarStatus">Avatar idle</div>
+  </div>
+  <!-- Orb fallback — shown when avatar is not available -->
+  <div class="orb-container" id="orbContainer">
     <div class="orb" id="orb"></div>
   </div>
   <div class="status" id="status">Click Connect to start a voice session</div>
@@ -210,8 +266,15 @@
 
 <footer>ITSM Operations &middot; Digital Worker &middot; Powered by Azure Voice Live</footer>
 
+<script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
 <script>
   const orbEl = document.getElementById('orb');
+  const orbContainer = document.getElementById('orbContainer');
+  const avatarContainer = document.getElementById('avatarContainer');
+  const avatarVideo = document.getElementById('avatarVideo');
+  const avatarAudio = document.getElementById('avatarAudio');
+  const avatarStatusEl = document.getElementById('avatarStatus');
+  const modeBadge = document.getElementById('modeBadge');
   const statusEl = document.getElementById('status');
   const transcriptEl = document.getElementById('transcript');
   const btnConnect = document.getElementById('btnConnect');
@@ -224,6 +287,11 @@
 
   let ws = null;
   let isMuted = false;
+  // Avatar state
+  let avatarSynthesizer = null;
+  let peerConnection = null;
+  let avatarEnabled = false;
+  let avatarConfig = null;
 
   async function checkVoiceGate() {
     try {
@@ -279,6 +347,129 @@
     transcriptEl.scrollTop = transcriptEl.scrollHeight;
   }
 
+  // ── Azure Speech Avatar ──
+  async function initAvatar() {
+    try {
+      const res = await fetch('/api/voice/avatar-config');
+      const cfg = await res.json();
+      if (!cfg.enabled) {
+        console.log('[avatar] Not enabled:', cfg.reason);
+        avatarEnabled = false;
+        return;
+      }
+      avatarConfig = cfg;
+
+      // Check if Speech SDK is loaded
+      if (typeof SpeechSDK === 'undefined') {
+        console.log('[avatar] Speech SDK not loaded, falling back to orb');
+        avatarEnabled = false;
+        return;
+      }
+
+      // Create speech config with auth token
+      const speechConfig = SpeechSDK.SpeechConfig.fromAuthorizationToken(cfg.authToken, cfg.region);
+      speechConfig.speechSynthesisVoiceName = cfg.voice;
+
+      // Create avatar config
+      const avConfig = new SpeechSDK.AvatarConfig(cfg.character, cfg.style);
+      avConfig.backgroundColor = '#0f1117FF';
+
+      // Create WebRTC peer connection with ICE servers
+      const iceUrls = [];
+      if (cfg.iceServers?.Urls) {
+        for (const u of cfg.iceServers.Urls) {
+          if (u.startsWith('turn:')) iceUrls.push(u);
+        }
+      }
+
+      peerConnection = new RTCPeerConnection({
+        iceServers: iceUrls.length > 0 ? [{
+          urls: iceUrls,
+          username: cfg.iceServers.Username || '',
+          credential: cfg.iceServers.Password || '',
+        }] : undefined,
+      });
+
+      // Mount video/audio tracks when they arrive
+      peerConnection.ontrack = (event) => {
+        if (event.track.kind === 'video') {
+          avatarVideo.srcObject = event.streams[0];
+        }
+        if (event.track.kind === 'audio') {
+          avatarAudio.srcObject = event.streams[0];
+        }
+      };
+
+      peerConnection.addTransceiver('video', { direction: 'sendrecv' });
+      peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
+
+      // Create avatar synthesizer and start
+      avatarSynthesizer = new SpeechSDK.AvatarSynthesizer(speechConfig, avConfig);
+      await avatarSynthesizer.startAvatarAsync(peerConnection);
+
+      // Switch UI from orb to avatar
+      avatarEnabled = true;
+      orbContainer.style.display = 'none';
+      avatarContainer.classList.add('active');
+      modeBadge.textContent = 'Avatar + Voice Live';
+      modeBadge.classList.add('avatar-active');
+      avatarStatusEl.textContent = 'Avatar ready';
+      console.log('[avatar] Started successfully');
+    } catch (err) {
+      console.warn('[avatar] Init failed, using orb fallback:', err.message || err);
+      avatarEnabled = false;
+      orbContainer.style.display = '';
+      avatarContainer.classList.remove('active');
+    }
+  }
+
+  // Send text to avatar for lip-synced speech (used alongside Voice Live audio)
+  function avatarSpeak(text) {
+    if (!avatarEnabled || !avatarSynthesizer || !text.trim()) return;
+    avatarStatusEl.textContent = 'Speaking...';
+    avatarContainer.classList.add('speaking');
+    avatarContainer.classList.remove('listening');
+    avatarSynthesizer.speakTextAsync(text).then((result) => {
+      avatarStatusEl.textContent = 'Avatar idle';
+      avatarContainer.classList.remove('speaking');
+      if (result.reason !== SpeechSDK.ResultReason.SynthesizingAudioCompleted) {
+        console.warn('[avatar] Speak failed:', result.reason);
+      }
+    }).catch((err) => {
+      console.error('[avatar] Speak error:', err);
+      avatarStatusEl.textContent = 'Avatar idle';
+      avatarContainer.classList.remove('speaking');
+    });
+  }
+
+  function setAvatarListening(listening) {
+    if (!avatarEnabled) return;
+    if (listening) {
+      avatarContainer.classList.add('listening');
+      avatarContainer.classList.remove('speaking');
+      avatarStatusEl.textContent = 'Listening...';
+    } else {
+      avatarContainer.classList.remove('listening');
+      avatarStatusEl.textContent = 'Processing...';
+    }
+  }
+
+  function cleanupAvatar() {
+    if (avatarSynthesizer) {
+      try { avatarSynthesizer.close(); } catch (_) {}
+      avatarSynthesizer = null;
+    }
+    if (peerConnection) {
+      try { peerConnection.close(); } catch (_) {}
+      peerConnection = null;
+    }
+    avatarEnabled = false;
+    orbContainer.style.display = '';
+    avatarContainer.classList.remove('active', 'speaking', 'listening');
+    modeBadge.textContent = 'Voice Live';
+    modeBadge.classList.remove('avatar-active');
+  }
+
   async function connect() {
     const gateOpen = await checkVoiceGate();
     if (!gateOpen) return;
@@ -291,6 +482,11 @@
       });
       audioContext = new AudioContext();
       nextPlaybackTime = 0;
+
+      // Try to start avatar
+      setStatus('Initializing avatar...', '');
+      await initAvatar();
+
       setStatus('Connecting to ITSM Operations...', '');
 
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -346,6 +542,7 @@
     btnMute.classList.remove('muted');
     orbEl.className = 'orb';
     stopMicCapture();
+    cleanupAvatar();
     if (audioContext) { audioContext.close().catch(() => {}); audioContext = null; }
     ws = null;
   }
@@ -506,6 +703,7 @@
         break;
       case 'input_audio_buffer.speech_started':
         orbEl.className = 'orb listening';
+        setAvatarListening(true);
         setStatus('Listening...', 'active');
         flushPlayback();
         if (ws && ws.readyState === WebSocket.OPEN) {
@@ -514,6 +712,7 @@
         break;
       case 'input_audio_buffer.speech_stopped':
         orbEl.className = 'orb';
+        setAvatarListening(false);
         setStatus('Processing...', '');
         break;
       case 'conversation.item.input_audio_transcription.completed':
@@ -525,18 +724,28 @@
         setStatus('Speaking...', 'active');
         break;
       case 'response.audio.delta':
-        if (event.delta) queueAudio(event.delta);
+        // Only play audio via WebSocket if avatar is NOT handling it
+        if (!avatarEnabled && event.delta) queueAudio(event.delta);
         break;
       case 'response.audio_transcript.delta':
         if (event.delta) activeResponseText += event.delta;
         break;
       case 'response.audio_transcript.done':
-        if (event.transcript) addTranscript('assistant', event.transcript);
-        else if (activeResponseText) addTranscript('assistant', activeResponseText);
+        if (event.transcript) {
+          addTranscript('assistant', event.transcript);
+          // Send completed text to avatar for lip-synced speech
+          if (avatarEnabled) avatarSpeak(event.transcript);
+        } else if (activeResponseText) {
+          addTranscript('assistant', activeResponseText);
+          if (avatarEnabled) avatarSpeak(activeResponseText);
+        }
         activeResponseText = '';
         break;
       case 'response.text.done':
-        if (event.text) addTranscript('assistant', event.text);
+        if (event.text) {
+          addTranscript('assistant', event.text);
+          if (avatarEnabled) avatarSpeak(event.text);
+        }
         break;
       case 'response.done':
         orbEl.className = 'orb';

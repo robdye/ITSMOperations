@@ -1,0 +1,151 @@
+{
+  "$schema": "https://schemas.microsoft.com/agents/v1/skill.json",
+  "id": "sla-manager",
+  "name": "SLA Manager",
+  "description": "Sets clear business-based targets for service levels and ensures delivery is properly assessed, monitored, and managed against targets.",
+  "version": "1.0.0",
+  "itilPractice": "Service Level Management",
+  "valueChainActivity": "Plan, Engage, Deliver and Support",
+  "triggers": [
+    {
+      "type": "intent",
+      "patterns": [
+        "SLA",
+        "breach",
+        "compliance\\s+rate",
+        "service level",
+        "OLA",
+        "response time",
+        "resolution time"
+      ],
+      "description": "Activates when user mentions SLAs, breaches, service levels, OLAs, or response/resolution times"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "*/30 * * * *",
+      "description": "sla-breach-prediction — Predicts upcoming SLA breaches every 30 minutes"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "*/30 * * * *",
+      "description": "sla-breach-escalation — Escalates active SLA breaches every 30 minutes"
+    }
+  ],
+  "actions": [
+    {
+      "name": "manage-sla-record",
+      "description": "Create, update, query, and manage SLA records and targets",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: create, update, query" },
+        { "name": "slaId", "type": "string", "required": false, "description": "SLA record identifier" },
+        { "name": "details", "type": "object", "required": false, "description": "SLA details (targets, service, customer)" }
+      ],
+      "outputs": [
+        { "name": "slaRecord", "type": "object", "description": "SLA record with targets and current status" }
+      ]
+    },
+    {
+      "name": "monitor-service-performance",
+      "description": "Real-time monitoring of service metrics against SLA targets",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "serviceFilter", "type": "string", "required": false, "description": "Filter by service name" },
+        { "name": "timeRange", "type": "string", "required": false, "description": "Reporting period" }
+      ],
+      "outputs": [
+        { "name": "performanceData", "type": "object", "description": "Service performance metrics vs SLA targets" }
+      ]
+    },
+    {
+      "name": "detect-breach",
+      "description": "Automated SLA breach detection and alerting",
+      "sideEffects": "notify",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "scope", "type": "string", "required": false, "description": "Breach detection scope: all, service, customer" }
+      ],
+      "outputs": [
+        { "name": "breaches", "type": "array", "description": "Active and predicted SLA breaches" },
+        { "name": "alerts", "type": "array", "description": "Generated breach alerts" }
+      ]
+    },
+    {
+      "name": "generate-sla-report",
+      "description": "Generate service performance reports and trend analysis",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "reportType", "type": "string", "required": true, "description": "Type: compliance, trend, breach-summary, customer-report" },
+        { "name": "period", "type": "string", "required": true, "description": "Reporting period" }
+      ],
+      "outputs": [
+        { "name": "report", "type": "object", "description": "SLA performance report data" }
+      ]
+    },
+    {
+      "name": "manage-ola-uc",
+      "description": "Manage and monitor operational level agreements and underpinning contracts",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: query, update, track" },
+        { "name": "agreementId", "type": "string", "required": false, "description": "OLA/UC identifier" }
+      ],
+      "outputs": [
+        { "name": "agreement", "type": "object", "description": "OLA/UC record with compliance status" }
+      ]
+    },
+    {
+      "name": "collect-csat",
+      "description": "Collect and analyze customer satisfaction feedback",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "serviceFilter", "type": "string", "required": false, "description": "Filter by service" },
+        { "name": "period", "type": "string", "required": false, "description": "Survey period" }
+      ],
+      "outputs": [
+        { "name": "csatData", "type": "object", "description": "Customer satisfaction scores and feedback" }
+      ]
+    },
+    {
+      "name": "schedule-service-review",
+      "description": "Schedule and manage service review meetings and agendas",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "serviceId", "type": "string", "required": true, "description": "Service to review" },
+        { "name": "reviewDate", "type": "string", "required": true, "description": "Proposed review date" }
+      ],
+      "outputs": [
+        { "name": "reviewMeeting", "type": "object", "description": "Scheduled review meeting details" }
+      ]
+    }
+  ],
+  "crossPracticeIntegrations": [
+    { "practice": "Incident Management", "direction": "sends", "description": "SLA targets drive incident prioritization and escalation timers" },
+    { "practice": "Change Enablement", "direction": "bidirectional", "description": "SLA impact assessment for proposed changes; maintenance windows aligned to SLA terms" },
+    { "practice": "Problem Management", "direction": "sends", "description": "Chronic SLA breaches trigger problem investigation" },
+    { "practice": "IT Asset & Configuration Management", "direction": "receives", "description": "Service-to-CI mapping enables SLA impact analysis" },
+    { "practice": "Knowledge Management", "direction": "sends", "description": "SLA documentation and service descriptions published as knowledge articles" },
+    { "practice": "Supplier Management", "direction": "bidirectional", "description": "Underpinning contracts aligned with SLA targets; supplier performance feeds SLA reporting" },
+    { "practice": "Continual Improvement", "direction": "sends", "description": "SLA performance data drives improvement initiatives" }
+  ],
+  "hitlControls": [
+    { "action": "SLA creation/modification", "level": "write", "reason": "New or changed SLAs require human negotiation and sign-off" },
+    { "action": "SLA target adjustments", "level": "write", "reason": "Modifying agreed service level targets requires customer and provider approval" },
+    { "action": "Service review outcomes", "level": "write", "reason": "Review findings and action items require human validation" },
+    { "action": "Breach escalation to management", "level": "notify", "reason": "Escalating SLA breaches to senior management requires human judgment" },
+    { "action": "Customer communication", "level": "notify", "reason": "Formal SLA breach notifications to customers require human review" },
+    { "action": "Improvement initiative prioritization", "level": "write", "reason": "SLA-driven improvement recommendations require human prioritization" }
+  ],
+  "knowledgeSources": [
+    { "source": "SLA Registry", "type": "api", "description": "SLA records, targets, and compliance history" },
+    { "source": "Service Performance Monitor", "type": "api", "description": "Real-time service metrics and availability data" },
+    { "source": "Customer Satisfaction Surveys", "type": "api", "description": "CSAT feedback and scores" },
+    { "source": "OLA/UC Repository", "type": "document", "description": "Operational level agreements and underpinning contracts" }
+  ]
+}

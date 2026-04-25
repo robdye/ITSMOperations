@@ -1,0 +1,155 @@
+{
+  "$schema": "https://schemas.microsoft.com/agents/v1/skill.json",
+  "id": "problem-manager",
+  "name": "Problem Manager",
+  "description": "Reduces the likelihood and impact of incidents by identifying actual and potential causes, managing workarounds and known errors.",
+  "version": "1.0.0",
+  "itilPractice": "Problem Management",
+  "valueChainActivity": "Deliver and Support, Improve",
+  "triggers": [
+    {
+      "type": "intent",
+      "patterns": [
+        "problem",
+        "known error",
+        "root cause",
+        "RCA",
+        "workaround",
+        "KEDB",
+        "recurring",
+        "pattern"
+      ],
+      "description": "Activates when user mentions problems, root cause analysis, known errors, or recurring patterns"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "0 9 * * 4",
+      "description": "problem-kedb-review — Reviews KEDB for stale or outdated entries every Thursday at 09:00"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "0 */2 * * *",
+      "description": "incident-to-problem-promotion — Analyzes recurring incidents for problem promotion every 2 hours"
+    }
+  ],
+  "actions": [
+    {
+      "name": "manage-problem-record",
+      "description": "Create, update, query, or close problem records",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: create, update, query, or close" },
+        { "name": "problemId", "type": "string", "required": false, "description": "Problem ID for update/query/close operations" },
+        { "name": "details", "type": "object", "required": false, "description": "Problem details (category, priority, description, related incidents)" }
+      ],
+      "outputs": [
+        { "name": "problemRecord", "type": "object", "description": "The problem record with current state" },
+        { "name": "problemId", "type": "string", "description": "The problem identifier" }
+      ]
+    },
+    {
+      "name": "manage-kedb",
+      "description": "Create, query, and maintain known error records and workarounds",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: create, query, update, retire" },
+        { "name": "knownErrorId", "type": "string", "required": false, "description": "Known error ID" },
+        { "name": "details", "type": "object", "required": false, "description": "Known error details and workaround instructions" }
+      ],
+      "outputs": [
+        { "name": "knownError", "type": "object", "description": "Known error record with workaround" }
+      ]
+    },
+    {
+      "name": "correlate-incidents",
+      "description": "Analyze incident patterns and identify recurring issues",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "timeWindow", "type": "string", "required": false, "description": "Time range for pattern analysis" },
+        { "name": "categoryFilter", "type": "string", "required": false, "description": "Filter by incident category" }
+      ],
+      "outputs": [
+        { "name": "patterns", "type": "array", "description": "Identified recurring incident patterns" },
+        { "name": "recommendations", "type": "array", "description": "Recommended problem investigations" }
+      ]
+    },
+    {
+      "name": "run-rca",
+      "description": "Execute structured root cause analysis using 5 Whys, Ishikawa, Fault Tree, or Kepner-Tregoe templates",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "problemId", "type": "string", "required": true, "description": "Problem to investigate" },
+        { "name": "method", "type": "string", "required": true, "description": "RCA method: 5-whys, ishikawa, fault-tree, kepner-tregoe" },
+        { "name": "data", "type": "object", "required": false, "description": "Input data for analysis" }
+      ],
+      "outputs": [
+        { "name": "rcaResult", "type": "object", "description": "Root cause analysis findings and conclusions" }
+      ]
+    },
+    {
+      "name": "query-ci-dependencies",
+      "description": "Query CI relationships and service dependencies for impact analysis",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "ciName", "type": "string", "required": true, "description": "Configuration item to analyze" }
+      ],
+      "outputs": [
+        { "name": "dependencies", "type": "object", "description": "CI dependency map and service impact" }
+      ]
+    },
+    {
+      "name": "view-trend-analysis",
+      "description": "Visualize incident trends, frequencies, and patterns",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "timeRange", "type": "string", "required": true, "description": "Period for trend analysis" },
+        { "name": "groupBy", "type": "string", "required": false, "description": "Group by: category, CI, service, priority" }
+      ],
+      "outputs": [
+        { "name": "trendData", "type": "object", "description": "Trend analysis data and visualizations" }
+      ]
+    },
+    {
+      "name": "raise-rfc",
+      "description": "Raise RFCs for permanent problem resolution via the Change Request Interface",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "problemId", "type": "string", "required": true, "description": "Problem requiring permanent fix" },
+        { "name": "changeDetails", "type": "object", "required": true, "description": "Proposed change details for resolution" }
+      ],
+      "outputs": [
+        { "name": "changeId", "type": "string", "description": "Created change request ID" }
+      ]
+    }
+  ],
+  "crossPracticeIntegrations": [
+    { "practice": "Incident Management", "direction": "bidirectional", "description": "Recurring incidents trigger problem investigation; workarounds feed back to incident resolution" },
+    { "practice": "Change Enablement", "direction": "sends", "description": "Problem resolution drives RFCs; failed changes may create new problems" },
+    { "practice": "Service Level Management", "direction": "receives", "description": "Problem impact assessment considers SLA implications" },
+    { "practice": "IT Asset & Configuration Management", "direction": "receives", "description": "CMDB provides CI context for RCA; problem resolution may update CI records" },
+    { "practice": "Knowledge Management", "direction": "sends", "description": "RCA findings and workarounds published as knowledge articles" },
+    { "practice": "Supplier Management", "direction": "sends", "description": "Vendor-related root causes require supplier engagement" },
+    { "practice": "Continual Improvement", "direction": "sends", "description": "Problem trends feed the CSI register and improvement initiatives" }
+  ],
+  "hitlControls": [
+    { "action": "Root cause determination", "level": "write", "reason": "Human must validate and approve identified root cause" },
+    { "action": "Workaround publication", "level": "write", "reason": "Workarounds must be reviewed by SME before KEDB publication" },
+    { "action": "RFC submission for permanent fix", "level": "write", "reason": "Human approval required before raising change requests" },
+    { "action": "Problem prioritization override", "level": "write", "reason": "Changing priority of critical problems requires human review" },
+    { "action": "Problem closure", "level": "write", "reason": "Human must confirm that permanent fix resolved the root cause" },
+    { "action": "Proactive problem initiation", "level": "write", "reason": "Auto-detected potential problems require human validation before investigation" }
+  ],
+  "knowledgeSources": [
+    { "source": "ServiceNow Problem Table", "type": "api", "description": "Problem records, RCA findings, and resolution history" },
+    { "source": "KEDB", "type": "index", "description": "Known error database with workarounds" },
+    { "source": "Incident Correlation Data", "type": "api", "description": "Incident patterns and trend data for root cause analysis" },
+    { "source": "CMDB", "type": "api", "description": "CI relationships and service dependency maps" }
+  ]
+}

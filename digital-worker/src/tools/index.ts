@@ -14,6 +14,14 @@ import { briefingTools } from './briefing-tools';
 import { serviceDeskTools } from './service-desk-tools';
 import { monitoringTools } from './monitoring-tools';
 import { releaseTools } from './release-tools';
+import { requestTools } from './request-tools';
+import { catalogueTools } from './catalogue-tools';
+import { riskTools } from './risk-tools';
+import { deploymentTools } from './deployment-tools';
+import { availabilityTools } from './availability-tools';
+import { reportingTools } from './reporting-tools';
+import { finopsTools } from './finops-tools';
+import { advancedTools } from './advanced-tools';
 
 // ── Domain tool sets (practice-specific) ──
 export {
@@ -29,6 +37,14 @@ export {
   serviceDeskTools,
   monitoringTools,
   releaseTools,
+  requestTools,
+  catalogueTools,
+  riskTools,
+  deploymentTools,
+  availabilityTools,
+  reportingTools,
+  finopsTools,
+  advancedTools,
 };
 
 // ── Shared capability packs (available to all workers) ──
@@ -58,6 +74,7 @@ export function getIncidentManagerTools() {
     ...slaTools,         // SLA impact
     ...sharedReadTools,
     ...sharedWriteTools,
+    ...advancedTools,    // Vision processing, RCA, adaptive cards
   ];
 }
 
@@ -67,6 +84,7 @@ export function getChangeManagerTools() {
     ...assetCmdbTools,   // CI context for blast radius
     ...sharedReadTools,
     ...sharedWriteTools,
+    ...advancedTools,    // CAB voting cards, approvals
   ];
 }
 
@@ -77,6 +95,7 @@ export function getProblemManagerTools() {
     ...assetCmdbTools,   // CI context
     ...sharedReadTools,
     ...sharedWriteTools,
+    ...advancedTools,    // Reasoning RCA, five-whys, PIR generation
   ];
 }
 
@@ -123,6 +142,7 @@ export function getServiceDeskManagerTools() {
     ...incidentTools,     // Create incidents from service desk
     ...knowledgeTools,    // KB search for first-contact resolution
     ...sharedWriteTools,
+    ...advancedTools,     // Screenshot/document processing for triage
   ];
 }
 
@@ -176,6 +196,45 @@ export function getSecurityManagerTools() {
   ];
 }
 
+// ── Tier 4: Governance, Fulfilment & Improvement Workers ──
+
+export function getRequestFulfilmentManagerTools() {
+  return [...requestTools, ...catalogueTools, ...knowledgeTools, ...sharedWriteTools];
+}
+
+export function getCatalogueManagerTools() {
+  return [...catalogueTools, ...requestTools, ...sharedReadTools, ...sharedWriteTools];
+}
+
+export function getRiskManagerTools() {
+  return [...riskTools, ...changeTools, ...incidentTools, ...assetCmdbTools, ...sharedReadTools, ...sharedWriteTools];
+}
+
+export function getDeploymentManagerTools() {
+  return [...deploymentTools, ...changeTools, ...releaseTools, ...assetCmdbTools, ...sharedReadTools, ...sharedWriteTools];
+}
+
+export function getAvailabilityManagerTools() {
+  return [...availabilityTools, ...slaTools, ...monitoringTools, ...sharedReadTools, ...sharedWriteTools];
+}
+
+export function getReportingManagerTools() {
+  return [...reportingTools, ...slaTools, ...incidentTools, ...changeTools, ...problemTools, ...sharedReadTools, ...sharedWriteTools];
+}
+
+export function getRelationshipManagerTools() {
+  // Uses comms, SLA, and incident tools to manage business relationships
+  return [...slaTools, ...incidentTools, ...sharedReadTools, ...sharedWriteTools];
+}
+
+export function getFinOpsManagerTools() {
+  return [...finopsTools, ...assetCmdbTools, ...changeTools, ...sharedReadTools, ...sharedWriteTools];
+}
+
+export function getContinuousImprovementManagerTools() {
+  return [...reportingTools, ...problemTools, ...incidentTools, ...slaTools, ...sharedReadTools, ...sharedWriteTools];
+}
+
 // ── Orchestrator (Command Center) gets everything ──
 export function getOrchestratorTools() {
   return [
@@ -191,8 +250,16 @@ export function getOrchestratorTools() {
     ...serviceDeskTools,
     ...monitoringTools,
     ...releaseTools,
+    ...requestTools,
+    ...catalogueTools,
+    ...riskTools,
+    ...deploymentTools,
+    ...availabilityTools,
+    ...reportingTools,
+    ...finopsTools,
+    ...advancedTools,    // All advanced capabilities
   ];
 }
 
-// ── All tools (backward compatibility with monolithic agent) ──
+// ── All tools(backward compatibility with monolithic agent) ──
 export const allTools = getOrchestratorTools();

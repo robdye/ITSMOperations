@@ -1,5 +1,22 @@
 {
-  "version": "1.0",
+  "$schema": "https://schemas.microsoft.com/agents/v1/tooling-manifest.json",
+  "version": "1.0.0",
+  "agent_id": "itsm-operations",
+  "skills": [
+    { "id": "incident-manager", "path": "../cowork-skills/incident-manager/skill.json" },
+    { "id": "change-manager", "path": "../cowork-skills/change-manager/skill.json" },
+    { "id": "problem-manager", "path": "../cowork-skills/problem-manager/skill.json" },
+    { "id": "asset-cmdb-manager", "path": "../cowork-skills/asset-cmdb-manager/skill.json" },
+    { "id": "sla-manager", "path": "../cowork-skills/sla-manager/skill.json" },
+    { "id": "knowledge-manager", "path": "../cowork-skills/knowledge-manager/skill.json" },
+    { "id": "vendor-manager", "path": "../cowork-skills/vendor-manager/skill.json" },
+    { "id": "service-desk-manager", "path": "../cowork-skills/service-desk-manager/skill.json" },
+    { "id": "monitoring-manager", "path": "../cowork-skills/monitoring-manager/skill.json" },
+    { "id": "release-manager", "path": "../cowork-skills/release-manager/skill.json" },
+    { "id": "capacity-manager", "path": "../cowork-skills/capacity-manager/skill.json" },
+    { "id": "continuity-manager", "path": "../cowork-skills/continuity-manager/skill.json" },
+    { "id": "security-manager", "path": "../cowork-skills/security-manager/skill.json" }
+  ],
   "mcpServers": [
     {
       "mcpServerName": "mcp_MailTools",
@@ -74,6 +91,255 @@
       "audience": "api://05879165-0320-489e-b644-f72b33f3edf0",
       "enabled": false,
       "description": "PowerPoint presentation generation — pending MCP server availability. Target workers: Change Manager (CAB presentations), Command Center (executive briefings), Incident Manager (PIR presentations)."
+    }
+  ],
+  "purview": {
+    "sensitivity_label": "confidential",
+    "data_categories": ["infrastructure", "service-management"],
+    "purview_scope": "itsm-operations"
+  },
+  "workers": [
+    {
+      "id": "incident-manager",
+      "name": "Incident Manager",
+      "description": "Manages the full incident lifecycle from detection through resolution, minimising business impact and restoring normal service operation.",
+      "itil_practice": "Incident Management",
+      "tools": [
+        { "name": "show-incident-dashboard", "description": "Display active incidents by priority with real-time status", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" },
+        { "name": "get-incidents", "description": "Query incidents by state, priority, category, or assignment group", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" },
+        { "name": "create-incident", "description": "Create a new incident record in ServiceNow", "sideEffects": true, "requiredScopes": ["ServiceNow.Write"], "sensitivityLevel": "medium", "blastRadius": "single", "hitl": "optional" },
+        { "name": "update-incident", "description": "Update an existing incident record fields or state", "sideEffects": true, "requiredScopes": ["ServiceNow.Write"], "sensitivityLevel": "medium", "blastRadius": "single", "hitl": "required" },
+        { "name": "correlate-incidents", "description": "Find related incidents by CI, time window, or symptoms", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" },
+        { "name": "escalate-incident", "description": "Escalate incident priority or assignment group", "sideEffects": true, "requiredScopes": ["ServiceNow.Write"], "sensitivityLevel": "high", "blastRadius": "single", "hitl": "required" }
+      ],
+      "knowledgeSources": ["ServiceNow Incident Table", "CMDB", "KEDB", "Azure Monitor"]
+    },
+    {
+      "id": "change-manager",
+      "name": "Change Manager",
+      "description": "Controls the lifecycle of all changes to IT services, ensuring beneficial changes are made with minimum disruption through standardised methods and procedures.",
+      "itil_practice": "Change Enablement",
+      "tools": [
+        { "name": "show-change-dashboard", "description": "Display change request pipeline with status and risk scores", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" },
+        { "name": "get-change-requests", "description": "Query change requests by state, type, risk, or schedule", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" },
+        { "name": "create-change-request", "description": "Create a new RFC in ServiceNow with risk assessment", "sideEffects": true, "requiredScopes": ["ServiceNow.Write"], "sensitivityLevel": "high", "blastRadius": "multi", "hitl": "required" },
+        { "name": "update-change-request", "description": "Update an existing change request record", "sideEffects": true, "requiredScopes": ["ServiceNow.Write"], "sensitivityLevel": "high", "blastRadius": "multi", "hitl": "required" },
+        { "name": "prepare-change-request", "description": "Draft a change request with auto-populated risk and impact fields", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "medium", "blastRadius": "none" },
+        { "name": "detect-change-collisions", "description": "Identify scheduling conflicts with other planned changes", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "medium", "blastRadius": "none" },
+        { "name": "generate-cab-agenda", "description": "Generate CAB meeting agenda from pending change requests", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "medium", "blastRadius": "none" },
+        { "name": "post-implementation-review", "description": "Generate PIR report comparing planned vs actual outcomes", "sideEffects": true, "requiredScopes": ["ServiceNow.Write"], "sensitivityLevel": "high", "blastRadius": "multi", "hitl": "required" },
+        { "name": "show-change-briefing", "description": "Display executive briefing for upcoming change window", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "medium", "blastRadius": "none" },
+        { "name": "show-change-metrics", "description": "Display change success rate, lead time, and failure metrics", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" }
+      ],
+      "knowledgeSources": ["ServiceNow Change Request Table", "CMDB", "CI Relationships", "Incident Table"]
+    },
+    {
+      "id": "problem-manager",
+      "name": "Problem Manager",
+      "description": "Identifies root causes of incidents and drives permanent fixes through structured investigation, reducing recurring incidents and improving service stability.",
+      "itil_practice": "Problem Management",
+      "tools": [
+        { "name": "get-problems", "description": "Query problem records by state, priority, or category", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" },
+        { "name": "create-problem", "description": "Create a new problem record from incident trend analysis", "sideEffects": true, "requiredScopes": ["ServiceNow.Write"], "sensitivityLevel": "medium", "blastRadius": "single", "hitl": "optional" },
+        { "name": "update-problem", "description": "Update problem record with root cause or workaround", "sideEffects": true, "requiredScopes": ["ServiceNow.Write"], "sensitivityLevel": "medium", "blastRadius": "single", "hitl": "required" },
+        { "name": "search-known-errors", "description": "Search the Known Error Database for matching issues", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" },
+        { "name": "trend-analysis", "description": "Analyse incident patterns to identify potential problem candidates", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" }
+      ],
+      "knowledgeSources": ["ServiceNow Problem Table", "Incident Table", "KEDB", "Knowledge Base"]
+    },
+    {
+      "id": "knowledge-manager",
+      "name": "Knowledge Manager",
+      "description": "Curates and maintains the organisational knowledge base, ensuring articles are accurate, discoverable, and aligned with operational needs.",
+      "itil_practice": "Knowledge Management",
+      "tools": [
+        { "name": "search-knowledge", "description": "Full-text search across the knowledge base", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" },
+        { "name": "create-kb-article", "description": "Create a new knowledge base article", "sideEffects": true, "requiredScopes": ["ServiceNow.Write"], "sensitivityLevel": "medium", "blastRadius": "single", "hitl": "optional" },
+        { "name": "update-kb-article", "description": "Update an existing knowledge base article", "sideEffects": true, "requiredScopes": ["ServiceNow.Write"], "sensitivityLevel": "medium", "blastRadius": "single", "hitl": "required" },
+        { "name": "kb-gap-analysis", "description": "Identify knowledge gaps from unresolved incident patterns", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" },
+        { "name": "kb-quality-audit", "description": "Audit knowledge articles for staleness and accuracy", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" }
+      ],
+      "knowledgeSources": ["ServiceNow Knowledge Base", "KB Categories", "Incident Table"]
+    },
+    {
+      "id": "asset-cmdb-manager",
+      "name": "Asset & CMDB Manager",
+      "description": "Maintains the configuration management database and IT asset inventory, ensuring accurate records of all CIs, their attributes, and relationships.",
+      "itil_practice": "IT Asset Management & Service Configuration Management",
+      "tools": [
+        { "name": "get-cmdb-ci", "description": "Get configuration item details and attributes", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" },
+        { "name": "get-ci-relationships", "description": "Map CI dependency graph and upstream/downstream impacts", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "medium", "blastRadius": "none" },
+        { "name": "update-cmdb-ci", "description": "Update a configuration item record in the CMDB", "sideEffects": true, "requiredScopes": ["ServiceNow.Write"], "sensitivityLevel": "high", "blastRadius": "global", "hitl": "required" },
+        { "name": "get-assets", "description": "Query IT asset inventory with lifecycle status", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" },
+        { "name": "expired-warranty-report", "description": "Find assets with expired or expiring warranties", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" }
+      ],
+      "knowledgeSources": ["CMDB CI Table", "CI Relationships", "Asset Table", "Hardware Assets"]
+    },
+    {
+      "id": "sla-manager",
+      "name": "SLA Manager",
+      "description": "Monitors and manages service level agreements, tracking compliance, identifying breaches, and ensuring IT services meet agreed performance targets.",
+      "itil_practice": "Service Level Management",
+      "tools": [
+        { "name": "get-sla-status", "description": "Query SLA compliance records and breach status", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" },
+        { "name": "sla-breach-forecast", "description": "Predict SLA breaches based on current ticket velocity", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "medium", "blastRadius": "none" },
+        { "name": "sla-compliance-report", "description": "Generate SLA compliance report by service or team", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" },
+        { "name": "notify-sla-risk", "description": "Send proactive SLA breach warning notifications", "sideEffects": true, "requiredScopes": ["ServiceNow.Read", "Mail.Send"], "sensitivityLevel": "medium", "blastRadius": "multi", "hitl": "optional" }
+      ],
+      "knowledgeSources": ["ServiceNow Task SLA Table", "Incident Table", "SLA Definitions"]
+    },
+    {
+      "id": "security-manager",
+      "name": "Security Manager",
+      "description": "Manages information security incidents and ensures security considerations are embedded in change and service management processes.",
+      "itil_practice": "Information Security Management",
+      "tools": [
+        { "name": "get-security-incidents", "description": "Query security-related incidents and threat data", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "critical", "blastRadius": "none" },
+        { "name": "create-security-incident", "description": "Create a security incident with threat classification", "sideEffects": true, "requiredScopes": ["ServiceNow.Write"], "sensitivityLevel": "critical", "blastRadius": "multi", "hitl": "required" },
+        { "name": "security-change-review", "description": "Review changes for security compliance and vulnerabilities", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "critical", "blastRadius": "none" },
+        { "name": "vulnerability-scan-report", "description": "Correlate vulnerability scan results with CMDB data", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "critical", "blastRadius": "none" },
+        { "name": "security-posture-dashboard", "description": "Display security posture metrics and threat landscape", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "critical", "blastRadius": "none" }
+      ],
+      "knowledgeSources": ["Incident Table", "Change Request Table", "CMDB", "Vulnerability Database"]
+    },
+    {
+      "id": "finops-manager",
+      "name": "FinOps Manager",
+      "description": "Manages IT financial operations including asset costs, license expenditure, and contract value analysis to optimise IT spending.",
+      "itil_practice": "IT Asset Financial Management (FinOps)",
+      "tools": [
+        { "name": "cost-analysis", "description": "Analyse IT asset costs by category, department, or lifecycle stage", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "medium", "blastRadius": "none" },
+        { "name": "license-optimisation", "description": "Identify unused or under-utilised software licenses", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "medium", "blastRadius": "none" },
+        { "name": "budget-forecast", "description": "Forecast IT spending based on asset lifecycle and contracts", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "medium", "blastRadius": "none" },
+        { "name": "chargeback-report", "description": "Generate IT cost chargeback reports by business unit", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "medium", "blastRadius": "none" }
+      ],
+      "knowledgeSources": ["Asset Table", "License Table", "Contract Table"]
+    },
+    {
+      "id": "release-manager",
+      "name": "Release Manager",
+      "description": "Plans, schedules, and controls the movement of releases to test and live environments, coordinating change deployments across the release pipeline.",
+      "itil_practice": "Release Management",
+      "tools": [
+        { "name": "get-release-plan", "description": "Query release schedule and linked change requests", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" },
+        { "name": "create-release", "description": "Create a new release record with linked changes", "sideEffects": true, "requiredScopes": ["ServiceNow.Write"], "sensitivityLevel": "high", "blastRadius": "multi", "hitl": "required" },
+        { "name": "release-readiness-check", "description": "Validate release readiness across all linked changes", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "medium", "blastRadius": "none" },
+        { "name": "deploy-release", "description": "Trigger release deployment and update status tracking", "sideEffects": true, "requiredScopes": ["ServiceNow.Write"], "sensitivityLevel": "high", "blastRadius": "multi", "hitl": "required" }
+      ],
+      "knowledgeSources": ["Change Request Table", "Release Table", "CMDB"]
+    },
+    {
+      "id": "monitoring-manager",
+      "name": "Monitoring Manager",
+      "description": "Correlates monitoring events and alerts with ITSM data, enabling proactive incident creation and change-aware event analysis.",
+      "itil_practice": "Monitoring and Event Management",
+      "tools": [
+        { "name": "get-active-alerts", "description": "Query active monitoring alerts from Azure Monitor and integrations", "sideEffects": false, "requiredScopes": ["ServiceNow.Read", "AzureMonitor.Read"], "sensitivityLevel": "low", "blastRadius": "none" },
+        { "name": "correlate-alerts", "description": "Correlate alerts with recent changes and known incidents", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "medium", "blastRadius": "none" },
+        { "name": "auto-create-incident", "description": "Auto-create incident from monitoring alert threshold breach", "sideEffects": true, "requiredScopes": ["ServiceNow.Write"], "sensitivityLevel": "high", "blastRadius": "single", "hitl": "optional" },
+        { "name": "health-dashboard", "description": "Display infrastructure health overview with alert trends", "sideEffects": false, "requiredScopes": ["ServiceNow.Read", "AzureMonitor.Read"], "sensitivityLevel": "low", "blastRadius": "none" }
+      ],
+      "knowledgeSources": ["Azure Monitor", "Incident Table", "Change Request Table", "CMDB"]
+    },
+    {
+      "id": "service-catalog-manager",
+      "name": "Service Catalog Manager",
+      "description": "Manages the service catalogue, ensuring service offerings are well-defined, discoverable, and aligned with business needs and request patterns.",
+      "itil_practice": "Service Catalogue Management",
+      "tools": [
+        { "name": "get-catalog-items", "description": "Query service catalogue items and categories", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" },
+        { "name": "catalog-usage-analytics", "description": "Analyse catalogue item popularity and fulfilment metrics", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" },
+        { "name": "update-catalog-item", "description": "Update service catalogue item details or availability", "sideEffects": true, "requiredScopes": ["ServiceNow.Write"], "sensitivityLevel": "medium", "blastRadius": "multi", "hitl": "required" }
+      ],
+      "knowledgeSources": ["Service Catalogue Table", "Service Request Table"]
+    },
+    {
+      "id": "shift-handover-manager",
+      "name": "Shift Handover Manager",
+      "description": "Facilitates structured shift handovers between operations teams, ensuring continuity of service and complete transfer of operational context.",
+      "itil_practice": "IT Operations Management",
+      "tools": [
+        { "name": "generate-handover-report", "description": "Generate shift handover report with open items and context", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "medium", "blastRadius": "none" },
+        { "name": "create-handover-log", "description": "Create a shift handover log entry with notes and action items", "sideEffects": true, "requiredScopes": ["ServiceNow.Write"], "sensitivityLevel": "low", "blastRadius": "single", "hitl": "optional" },
+        { "name": "get-shift-status", "description": "Get current shift status and pending handover items", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" }
+      ],
+      "knowledgeSources": ["Incident Table", "Change Request Table", "Problem Table"]
+    },
+    {
+      "id": "vendor-manager",
+      "name": "Vendor Manager",
+      "description": "Manages vendor relationships, software licensing, and contracts, ensuring compliance and optimising third-party service delivery.",
+      "itil_practice": "Supplier Management",
+      "tools": [
+        { "name": "get-vendors", "description": "Query vendor records and contract status", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" },
+        { "name": "contract-renewal-tracker", "description": "Track contract renewals and expiration dates", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "medium", "blastRadius": "none" },
+        { "name": "vendor-performance-report", "description": "Generate vendor SLA compliance and performance report", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "medium", "blastRadius": "none" },
+        { "name": "license-compliance-check", "description": "Audit software license compliance across the estate", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "medium", "blastRadius": "none" }
+      ],
+      "knowledgeSources": ["Vendor Table", "License Table", "Contract Table"]
+    },
+    {
+      "id": "service-desk-manager",
+      "name": "Service Desk Manager",
+      "description": "Manages the service desk as the single point of contact for users, handling service requests, catalogue fulfilment, and first-line support.",
+      "itil_practice": "Service Desk",
+      "tools": [
+        { "name": "get-service-requests", "description": "Query service requests by status, requester, or category", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" },
+        { "name": "create-service-request", "description": "Create a new service request from catalogue item", "sideEffects": true, "requiredScopes": ["ServiceNow.Write"], "sensitivityLevel": "medium", "blastRadius": "single", "hitl": "optional" },
+        { "name": "queue-analytics", "description": "Display service desk queue depth and wait times", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" },
+        { "name": "first-call-resolution", "description": "Search knowledge base and suggest resolutions for tickets", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" }
+      ],
+      "knowledgeSources": ["Service Request Table", "Catalogue Items", "Knowledge Base"]
+    },
+    {
+      "id": "capacity-manager",
+      "name": "Capacity Manager",
+      "description": "Ensures IT infrastructure capacity meets current and future business demands through monitoring, planning, and optimisation of resources.",
+      "itil_practice": "Capacity and Performance Management",
+      "tools": [
+        { "name": "capacity-report", "description": "Generate capacity utilisation report across infrastructure", "sideEffects": false, "requiredScopes": ["ServiceNow.Read", "AzureMonitor.Read"], "sensitivityLevel": "low", "blastRadius": "none" },
+        { "name": "capacity-forecast", "description": "Forecast capacity needs based on growth trends", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "medium", "blastRadius": "none" },
+        { "name": "rightsizing-recommendations", "description": "Identify over- and under-provisioned resources", "sideEffects": false, "requiredScopes": ["ServiceNow.Read", "AzureMonitor.Read"], "sensitivityLevel": "medium", "blastRadius": "none" }
+      ],
+      "knowledgeSources": ["CMDB CI Table", "Asset Table", "Azure Monitor"]
+    },
+    {
+      "id": "continuity-manager",
+      "name": "Continuity Manager",
+      "description": "Manages IT service continuity planning, ensuring critical services can be recovered and maintained during and after major disruptions.",
+      "itil_practice": "Service Continuity Management",
+      "tools": [
+        { "name": "get-continuity-plans", "description": "Query business continuity and disaster recovery plans", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "medium", "blastRadius": "none" },
+        { "name": "impact-analysis", "description": "Analyse business impact of CI failures using dependency mapping", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "medium", "blastRadius": "none" },
+        { "name": "dr-readiness-check", "description": "Validate disaster recovery readiness for critical services", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "high", "blastRadius": "none" },
+        { "name": "invoke-failover", "description": "Initiate service failover to disaster recovery environment", "sideEffects": true, "requiredScopes": ["ServiceNow.Write"], "sensitivityLevel": "critical", "blastRadius": "global", "hitl": "required" }
+      ],
+      "knowledgeSources": ["CMDB CI Table", "CI Relationships", "Continuity Plans"]
+    },
+    {
+      "id": "knowledge-harvester",
+      "name": "Knowledge Harvester",
+      "description": "Automatically harvests knowledge from resolved incidents, problem resolutions, and change outcomes to populate and enrich the knowledge base.",
+      "itil_practice": "Knowledge Management",
+      "tools": [
+        { "name": "harvest-from-incidents", "description": "Extract resolution knowledge from recently closed incidents", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" },
+        { "name": "draft-kb-article", "description": "Auto-draft a knowledge article from incident resolution data", "sideEffects": true, "requiredScopes": ["ServiceNow.Write"], "sensitivityLevel": "medium", "blastRadius": "single", "hitl": "required" },
+        { "name": "identify-duplicates", "description": "Find duplicate or overlapping knowledge articles", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" }
+      ],
+      "knowledgeSources": ["Incident Table", "Problem Table", "Knowledge Base"]
+    },
+    {
+      "id": "computer-use-operator",
+      "name": "Computer Use Operator",
+      "description": "Operates browser-based and desktop applications through computer-use automation for tasks that lack API integration, such as legacy portals and vendor consoles.",
+      "itil_practice": "IT Operations Management",
+      "tools": [
+        { "name": "browser-navigate", "description": "Navigate to a URL and interact with web-based applications", "sideEffects": true, "requiredScopes": ["ComputerUse.Execute"], "sensitivityLevel": "critical", "blastRadius": "global", "hitl": "required" },
+        { "name": "form-fill", "description": "Fill out forms in web applications using structured data", "sideEffects": true, "requiredScopes": ["ComputerUse.Execute"], "sensitivityLevel": "critical", "blastRadius": "global", "hitl": "required" },
+        { "name": "screen-capture", "description": "Capture screenshots for audit trail and verification", "sideEffects": false, "requiredScopes": ["ComputerUse.Read"], "sensitivityLevel": "critical", "blastRadius": "none", "hitl": "required" },
+        { "name": "execute-workflow", "description": "Execute multi-step workflow in legacy applications", "sideEffects": true, "requiredScopes": ["ComputerUse.Execute"], "sensitivityLevel": "critical", "blastRadius": "global", "hitl": "required" }
+      ],
+      "knowledgeSources": ["Workflow Definitions", "Application Inventory"]
     }
   ]
 }

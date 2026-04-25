@@ -1,0 +1,109 @@
+{
+  "$schema": "https://schemas.microsoft.com/agents/v1/skill.json",
+  "id": "computer-use-operator",
+  "name": "Computer Use Operator",
+  "description": "Operates legacy consoles, terminal interfaces, and mainframe systems via Computer Use Agent (CUA) capabilities for ITSM operations that require direct UI interaction.",
+  "version": "1.0.0",
+  "itilPractice": "Infrastructure and Platform Management",
+  "valueChainActivity": "Deliver and Support",
+  "triggers": [
+    {
+      "type": "intent",
+      "patterns": [
+        "legacy console",
+        "CUA",
+        "computer use",
+        "terminal",
+        "mainframe",
+        "green screen",
+        "remote desktop",
+        "RDP",
+        "legacy UI",
+        "terminal emulator",
+        "3270",
+        "legacy system"
+      ],
+      "description": "Activates when user mentions legacy consoles, CUA, terminal interaction, or mainframe operations"
+    },
+    {
+      "type": "event",
+      "source": "legacy-system-monitor",
+      "description": "Triggered when automated remediation requires legacy console interaction"
+    }
+  ],
+  "actions": [
+    {
+      "name": "open-legacy-session",
+      "description": "Establish a CUA session to a legacy console or terminal interface",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "targetSystem", "type": "string", "required": true, "description": "Target system identifier or hostname" },
+        { "name": "sessionType", "type": "string", "required": true, "description": "Session type: terminal, RDP, 3270, web-console" },
+        { "name": "credentials", "type": "string", "required": false, "description": "Credential vault reference (never raw credentials)" }
+      ],
+      "outputs": [
+        { "name": "sessionId", "type": "string", "description": "CUA session identifier" },
+        { "name": "sessionStatus", "type": "string", "description": "Connection status" }
+      ]
+    },
+    {
+      "name": "execute-console-action",
+      "description": "Execute a predefined action sequence on a legacy console via CUA",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "sessionId", "type": "string", "required": true, "description": "Active CUA session identifier" },
+        { "name": "actionSequence", "type": "array", "required": true, "description": "Ordered list of UI actions to perform" },
+        { "name": "verificationStep", "type": "object", "required": false, "description": "Expected output or screen state to verify success" }
+      ],
+      "outputs": [
+        { "name": "executionResult", "type": "object", "description": "Action execution result with screenshots" },
+        { "name": "screenCapture", "type": "string", "description": "Base64-encoded screenshot of final state" }
+      ]
+    },
+    {
+      "name": "capture-screen-state",
+      "description": "Capture and analyze the current screen state of a legacy console",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "sessionId", "type": "string", "required": true, "description": "Active CUA session identifier" },
+        { "name": "extractData", "type": "boolean", "required": false, "description": "Whether to OCR and extract structured data from the screen" }
+      ],
+      "outputs": [
+        { "name": "screenCapture", "type": "string", "description": "Base64-encoded screenshot" },
+        { "name": "extractedData", "type": "object", "description": "Structured data extracted from the screen" }
+      ]
+    },
+    {
+      "name": "close-legacy-session",
+      "description": "Gracefully close a CUA session and log the activity",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "sessionId", "type": "string", "required": true, "description": "CUA session to close" }
+      ],
+      "outputs": [
+        { "name": "auditLog", "type": "object", "description": "Session audit log with all actions performed" }
+      ]
+    }
+  ],
+  "crossPracticeIntegrations": [
+    { "practice": "Incident Management", "direction": "receives", "description": "Incident remediation may require legacy console interaction" },
+    { "practice": "Change Enablement", "direction": "receives", "description": "Change implementation on legacy systems requires CUA" },
+    { "practice": "IT Asset & Configuration Management", "direction": "receives", "description": "CMDB provides legacy system connection details" },
+    { "practice": "Monitoring and Event Management", "direction": "receives", "description": "Monitoring alerts on legacy systems may trigger CUA actions" }
+  ],
+  "hitlControls": [
+    { "action": "Open legacy session", "level": "write", "reason": "All CUA sessions require human authorization before connecting" },
+    { "action": "Execute console action", "level": "write", "reason": "Write operations on legacy systems require explicit approval" },
+    { "action": "Credential access", "level": "write", "reason": "Accessing credential vault requires human approval" }
+  ],
+  "knowledgeSources": [
+    { "source": "Legacy System Registry", "type": "api", "description": "Inventory of legacy systems with connection parameters" },
+    { "source": "Runbook Library", "type": "document", "description": "Approved CUA action sequences and procedures" },
+    { "source": "CMDB", "type": "api", "description": "Configuration items for legacy infrastructure" },
+    { "source": "Credential Vault", "type": "api", "description": "Secure credential references for legacy system access" }
+  ]
+}

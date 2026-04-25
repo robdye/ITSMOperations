@@ -1,0 +1,142 @@
+{
+  "$schema": "https://schemas.microsoft.com/agents/v1/skill.json",
+  "id": "vendor-manager",
+  "name": "Vendor Manager",
+  "description": "Ensures the organization's suppliers and their performance are managed appropriately to support seamless provision of quality products and services.",
+  "version": "1.0.0",
+  "itilPractice": "Supplier Management",
+  "valueChainActivity": "Engage, Plan, Obtain/Build",
+  "triggers": [
+    {
+      "type": "intent",
+      "patterns": [
+        "vendor",
+        "licen[sc]",
+        "contract",
+        "supplier",
+        "renewal",
+        "software.*compliance",
+        "over.deployed",
+        "under.utiliz"
+      ],
+      "description": "Activates when user mentions vendors, contracts, licenses, suppliers, or renewals"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "0 8 * * 1",
+      "description": "vendor-contract-expiry — Checks for contracts approaching expiry every Monday at 08:00"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "0 8 1 * *",
+      "description": "vendor-license-compliance — Audits license compliance on the 1st of each month at 08:00"
+    }
+  ],
+  "actions": [
+    {
+      "name": "manage-supplier-record",
+      "description": "Create, update, query, and manage supplier records and profiles",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: create, update, query, onboard, offboard" },
+        { "name": "supplierId", "type": "string", "required": false, "description": "Supplier record ID" },
+        { "name": "details", "type": "object", "required": false, "description": "Supplier profile details" }
+      ],
+      "outputs": [
+        { "name": "supplierRecord", "type": "object", "description": "Supplier record with profile and status" }
+      ]
+    },
+    {
+      "name": "manage-contract",
+      "description": "Track contracts, terms, renewals, and compliance",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: query, create, update, renew" },
+        { "name": "contractId", "type": "string", "required": false, "description": "Contract identifier" },
+        { "name": "details", "type": "object", "required": false, "description": "Contract terms and conditions" }
+      ],
+      "outputs": [
+        { "name": "contractRecord", "type": "object", "description": "Contract record with terms and renewal status" }
+      ]
+    },
+    {
+      "name": "generate-scorecard",
+      "description": "Generate supplier scorecards and KPI dashboards",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "supplierId", "type": "string", "required": true, "description": "Supplier to score" },
+        { "name": "period", "type": "string", "required": false, "description": "Scoring period" }
+      ],
+      "outputs": [
+        { "name": "scorecard", "type": "object", "description": "Supplier performance scorecard with KPIs" }
+      ]
+    },
+    {
+      "name": "assess-supplier-risk",
+      "description": "Evaluate and track supplier risks with mitigation plans",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "supplierId", "type": "string", "required": true, "description": "Supplier to assess" }
+      ],
+      "outputs": [
+        { "name": "riskAssessment", "type": "object", "description": "Supplier risk profile and mitigation plans" }
+      ]
+    },
+    {
+      "name": "send-vendor-notification",
+      "description": "Send contract renewal alerts, performance alerts, and escalations",
+      "sideEffects": "notify",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "notificationType", "type": "string", "required": true, "description": "Type: renewal-alert, performance-alert, escalation" },
+        { "name": "recipients", "type": "array", "required": true, "description": "Notification recipients" },
+        { "name": "supplierId", "type": "string", "required": true, "description": "Related supplier" }
+      ],
+      "outputs": [
+        { "name": "notificationId", "type": "string", "description": "Notification tracking identifier" }
+      ]
+    },
+    {
+      "name": "manage-vendor-documents",
+      "description": "Manage supplier documentation, certifications, and audit evidence",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "action", "type": "string", "required": true, "description": "Operation: upload, query, verify" },
+        { "name": "supplierId", "type": "string", "required": true, "description": "Supplier record" },
+        { "name": "documentType", "type": "string", "required": false, "description": "Type: certification, audit-evidence, contract" }
+      ],
+      "outputs": [
+        { "name": "documents", "type": "array", "description": "Supplier documents and their status" }
+      ]
+    }
+  ],
+  "crossPracticeIntegrations": [
+    { "practice": "Incident Management", "direction": "receives", "description": "Supplier escalation for vendor-managed CI incidents; vendor response times feed SLA tracking" },
+    { "practice": "Change Enablement", "direction": "receives", "description": "Vendor-managed changes require supplier coordination and scheduling" },
+    { "practice": "Problem Management", "direction": "receives", "description": "Vendor-related root causes require supplier investigation and engagement" },
+    { "practice": "Service Level Management", "direction": "bidirectional", "description": "Underpinning contracts aligned with SLAs; supplier performance feeds SLA compliance" },
+    { "practice": "IT Asset & Configuration Management", "direction": "bidirectional", "description": "Vendor-managed CIs linked to supplier contracts; asset warranty and support tracking" },
+    { "practice": "Knowledge Management", "direction": "sends", "description": "Vendor documentation and support procedures maintained in knowledge base" },
+    { "practice": "Financial Management", "direction": "sends", "description": "Supplier costs feed IT financial management and cost optimization" }
+  ],
+  "hitlControls": [
+    { "action": "Supplier onboarding/offboarding", "level": "write", "reason": "Adding or removing suppliers requires human approval" },
+    { "action": "Contract execution/modification", "level": "write", "reason": "Contract changes require legal and management review" },
+    { "action": "Supplier performance escalation", "level": "notify", "reason": "Escalating critical supplier issues requires human judgment" },
+    { "action": "Risk mitigation actions", "level": "write", "reason": "Activating contingency plans for supplier risks requires human decision" },
+    { "action": "Dispute resolution decisions", "level": "write", "reason": "Formal dispute outcomes require human negotiation and approval" },
+    { "action": "Strategic supplier tier changes", "level": "write", "reason": "Reclassifying supplier strategic importance requires management review" },
+    { "action": "Data sharing with suppliers", "level": "write", "reason": "Sharing organizational data with suppliers requires human authorization" }
+  ],
+  "knowledgeSources": [
+    { "source": "Supplier Registry", "type": "api", "description": "Supplier profiles, contacts, and relationship data" },
+    { "source": "Contract Management System", "type": "api", "description": "Contract terms, renewals, and compliance data" },
+    { "source": "Procurement System", "type": "api", "description": "Purchase orders and financial transaction data" },
+    { "source": "Vendor Certification Repository", "type": "document", "description": "Supplier certifications and audit evidence" }
+  ]
+}

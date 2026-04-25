@@ -1,0 +1,152 @@
+{
+  "$schema": "https://schemas.microsoft.com/agents/v1/skill.json",
+  "id": "capacity-manager",
+  "name": "Capacity Manager",
+  "description": "Ensures services achieve agreed performance satisfying current and future demand in a cost-effective manner.",
+  "version": "1.0.0",
+  "itilPractice": "Capacity and Performance Management",
+  "valueChainActivity": "Plan, Design and Transition, Deliver and Support",
+  "triggers": [
+    {
+      "type": "intent",
+      "patterns": [
+        "capacity",
+        "performance",
+        "utilization",
+        "throughput",
+        "scaling",
+        "demand"
+      ],
+      "description": "Activates when user mentions capacity, performance, utilization, throughput, scaling, or demand"
+    }
+  ],
+  "actions": [
+    {
+      "name": "analyze-capacity",
+      "description": "Collect, analyze, and visualize capacity and performance data",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "scope", "type": "string", "required": false, "description": "Analysis scope: service, infrastructure, cloud" },
+        { "name": "timeRange", "type": "string", "required": false, "description": "Analysis period" }
+      ],
+      "outputs": [
+        { "name": "capacityData", "type": "object", "description": "Capacity and performance analytics" }
+      ]
+    },
+    {
+      "name": "query-performance-monitoring",
+      "description": "Interface with APM and infrastructure monitoring tools for performance data",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "metricType", "type": "string", "required": false, "description": "Metric: CPU, memory, disk, network, response-time" },
+        { "name": "ciFilter", "type": "string", "required": false, "description": "Filter by CI or service" }
+      ],
+      "outputs": [
+        { "name": "performanceMetrics", "type": "object", "description": "Performance monitoring data and trends" }
+      ]
+    },
+    {
+      "name": "run-capacity-model",
+      "description": "Build models, run simulations, and forecast capacity requirements",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "modelType", "type": "string", "required": true, "description": "Model: baseline, what-if, forecast" },
+        { "name": "parameters", "type": "object", "required": false, "description": "Simulation parameters and assumptions" }
+      ],
+      "outputs": [
+        { "name": "modelResult", "type": "object", "description": "Capacity model results and forecasts" }
+      ]
+    },
+    {
+      "name": "optimize-cloud-costs",
+      "description": "Analyze cloud resource utilization and generate right-sizing recommendations",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "cloudProvider", "type": "string", "required": false, "description": "Cloud provider filter" },
+        { "name": "resourceType", "type": "string", "required": false, "description": "Resource type: compute, storage, database" }
+      ],
+      "outputs": [
+        { "name": "recommendations", "type": "array", "description": "Right-sizing and cost optimization recommendations" },
+        { "name": "potentialSavings", "type": "number", "description": "Estimated monthly savings" }
+      ]
+    },
+    {
+      "name": "query-service-topology",
+      "description": "Query service maps, CI specifications, and infrastructure topology from CMDB",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "serviceName", "type": "string", "required": true, "description": "Service to query" }
+      ],
+      "outputs": [
+        { "name": "topology", "type": "object", "description": "Service topology and infrastructure specs" }
+      ]
+    },
+    {
+      "name": "generate-capacity-report",
+      "description": "Generate capacity plans, performance reports, and trend analyses",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "reportType", "type": "string", "required": true, "description": "Type: capacity-plan, performance-report, trend-analysis" },
+        { "name": "scope", "type": "string", "required": false, "description": "Report scope" }
+      ],
+      "outputs": [
+        { "name": "report", "type": "object", "description": "Generated capacity report" }
+      ]
+    },
+    {
+      "name": "forecast-demand",
+      "description": "Analyze historical patterns and project future demand",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "serviceName", "type": "string", "required": true, "description": "Service to forecast" },
+        { "name": "forecastHorizon", "type": "string", "required": false, "description": "Forecast period: 30d, 90d, 6m, 1y" }
+      ],
+      "outputs": [
+        { "name": "forecast", "type": "object", "description": "Demand forecast with confidence intervals" }
+      ]
+    },
+    {
+      "name": "submit-capacity-change",
+      "description": "Submit capacity change requests to Change Enablement",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "changeDetails", "type": "object", "required": true, "description": "Capacity change request details" },
+        { "name": "justification", "type": "string", "required": true, "description": "Business justification for capacity change" }
+      ],
+      "outputs": [
+        { "name": "changeId", "type": "string", "description": "Created change request ID" }
+      ]
+    }
+  ],
+  "crossPracticeIntegrations": [
+    { "practice": "Change Enablement", "direction": "sends", "description": "Capacity changes follow change enablement process; change impact assessed for capacity" },
+    { "practice": "Incident Management", "direction": "bidirectional", "description": "Performance incidents trigger capacity investigation; capacity constraints may cause incidents" },
+    { "practice": "Service Level Management", "direction": "bidirectional", "description": "Capacity plans ensure SLA performance targets are achievable; SLA breaches trigger review" },
+    { "practice": "Monitoring and Event Management", "direction": "receives", "description": "Monitoring provides performance data; capacity thresholds feed alerting rules" },
+    { "practice": "Service Continuity Management", "direction": "bidirectional", "description": "Capacity plans include DR sizing; continuity requirements drive capacity reservations" },
+    { "practice": "IT Asset & Configuration Management", "direction": "receives", "description": "CMDB provides infrastructure topology; asset lifecycle feeds capacity planning" },
+    { "practice": "Problem Management", "direction": "sends", "description": "Recurring performance issues trigger problem investigation; capacity constraints as root causes" }
+  ],
+  "hitlControls": [
+    { "action": "Capacity plan approval", "level": "write", "reason": "Capacity plans and investment recommendations require management sign-off" },
+    { "action": "Right-sizing execution", "level": "write", "reason": "Resource downsizing or decommissioning actions require human authorization" },
+    { "action": "Demand throttling activation", "level": "write", "reason": "Implementing demand management controls requires human approval" },
+    { "action": "Cost-optimization actions", "level": "write", "reason": "Changes affecting service performance for cost savings require human review" },
+    { "action": "Capacity emergency response", "level": "write", "reason": "Immediate capacity augmentation during critical shortages requires human decision" },
+    { "action": "Forecasting model changes", "level": "write", "reason": "Modifying capacity models or assumptions requires human validation" }
+  ],
+  "knowledgeSources": [
+    { "source": "Capacity Analytics Platform", "type": "api", "description": "Capacity and performance metrics and historical data" },
+    { "source": "APM and Infrastructure Monitoring", "type": "api", "description": "Real-time performance monitoring data" },
+    { "source": "Cloud Provider APIs", "type": "api", "description": "Cloud resource utilization and cost data" },
+    { "source": "CMDB", "type": "api", "description": "Infrastructure topology and CI specifications" }
+  ]
+}

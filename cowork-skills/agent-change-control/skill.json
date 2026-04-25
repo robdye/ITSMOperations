@@ -1,0 +1,72 @@
+{
+  "$schema": "https://schemas.microsoft.com/agents/v1/skill.json",
+  "id": "agent-change-control",
+  "name": "Agent Change Control",
+  "description": "Creates ITIL-compliant Change Requests for agent lifecycle events with risk scoring, CAB notification, and post-implementation review scheduling. Enforces NIST CM-3.",
+  "version": "1.0.0",
+  "itilPractice": "Change Enablement",
+  "valueChainActivity": "Design and Transition",
+  "triggers": [
+    {
+      "type": "intent",
+      "patterns": [
+        "agent change",
+        "agent deploy",
+        "agent update",
+        "agent block",
+        "agent lifecycle",
+        "agent rollback",
+        "agent version"
+      ],
+      "description": "Activates when user mentions agent deployment, update, blocking, or lifecycle change events"
+    },
+    {
+      "type": "event",
+      "source": "agent-lifecycle-events",
+      "description": "Triggered when an agent package is deployed, updated, or blocked in the tenant"
+    }
+  ],
+  "actions": [
+    {
+      "name": "create-agent-change-request",
+      "description": "Create an ITIL-compliant change request for an agent lifecycle event",
+      "sideEffects": "write",
+      "requiresConfirmation": true,
+      "inputs": [
+        { "name": "agentId", "type": "string", "required": true, "description": "Agent package identifier" },
+        { "name": "changeType", "type": "string", "required": true, "description": "Event type: deploy, update, block, rollback, decommission" },
+        { "name": "justification", "type": "string", "required": true, "description": "Business justification for the change" }
+      ],
+      "outputs": [
+        { "name": "changeRequestId", "type": "string", "description": "Created change request number" },
+        { "name": "riskScore", "type": "object", "description": "Calculated risk score with breakdown" }
+      ]
+    },
+    {
+      "name": "assess-agent-change-risk",
+      "description": "Calculate risk score for an agent lifecycle change based on NIST CM-3 and organizational policy",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "agentId", "type": "string", "required": true, "description": "Agent package identifier" },
+        { "name": "changeType", "type": "string", "required": true, "description": "Type of change being assessed" }
+      ],
+      "outputs": [
+        { "name": "riskAssessment", "type": "object", "description": "Risk score, factors, and recommended change type (standard/normal/emergency)" }
+      ]
+    }
+  ],
+  "crossPracticeIntegrations": [
+    { "practice": "Change Enablement", "direction": "sends", "description": "Creates change requests in the ITSM change process" },
+    { "practice": "IT Asset & Configuration Management", "direction": "receives", "description": "Agent inventory provides package metadata for risk assessment" }
+  ],
+  "hitlControls": [
+    { "action": "Create agent change request", "level": "write", "reason": "All agent lifecycle changes require formal change request approval" },
+    { "action": "Emergency agent block", "level": "write", "reason": "Blocking an agent requires ECAB authorization" }
+  ],
+  "knowledgeSources": [
+    { "source": "Tenant Agent Inventory", "type": "document", "description": "Agent packages from Package Management API" },
+    { "source": "Agent Governance Policy", "type": "document", "description": "AGP-001 organizational policy for agent governance" },
+    { "source": "NIST CM-3 Controls", "type": "document", "description": "Configuration change control requirements" }
+  ]
+}

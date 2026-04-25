@@ -1,0 +1,11 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "DIGITAL_WORKER_URL": "http://localhost:3978",
+    "SNOW_INSTANCE": "",
+    "SNOW_USER": "",
+    "SNOW_PASSWORD": ""
+  }
+}

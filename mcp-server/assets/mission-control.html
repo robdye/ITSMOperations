@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Mission Control</title>
+<style>
+:root{--colorBrandBackground:#1976d2;--colorNeutralBackground1:#fff;--colorNeutralBackground2:#fafafa;--colorNeutralBackground3:#f5f5f5;--colorNeutralForeground1:#242424;--colorNeutralForeground2:#616161;--colorNeutralForeground3:#757575;--colorNeutralStroke1:#e0e0e0;--colorNeutralStroke2:#f0f0f0;--colorPaletteRedBackground3:#d32f2f;--colorPaletteRedBackground1:#ffebee;--colorPaletteGreenBackground3:#2e7d32;--colorPaletteGreenBackground1:#e8f5e9;--colorPaletteYellowBackground3:#f57f17;--colorPaletteYellowBackground1:#fff8e1;--colorPaletteBlueForeground2:#1565c0;--colorPaletteRedForeground1:#c62828;--colorPaletteGreenForeground1:#2e7d32;--colorPaletteYellowForeground1:#e65100}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--colorNeutralBackground3);color:var(--colorNeutralForeground1);padding:20px;line-height:1.5}
+.widget{background:var(--colorNeutralBackground1);border-radius:12px;border:1px solid var(--colorNeutralStroke1);overflow:hidden;max-width:960px;margin:0 auto}
+.widget-header{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid var(--colorNeutralStroke2)}
+.widget-icon{width:36px;height:36px;border-radius:8px;background:#e3f2fd;display:flex;align-items:center;justify-content:center;font-size:18px}
+.widget-title h2{font-size:16px;font-weight:600}.widget-title p{font-size:12px;color:var(--colorNeutralForeground2)}
+.sections{padding:16px;display:flex;flex-direction:column;gap:16px}
+.section{background:var(--colorNeutralBackground2);border:1px solid var(--colorNeutralStroke1);border-radius:10px;overflow:hidden}
+.section-header{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--colorNeutralStroke2);font-size:13px;font-weight:600}
+.section-header .icon{font-size:16px}
+.section-body{padding:12px 16px}
+/* Waterfall table */
+.wf-table{width:100%;border-collapse:collapse;font-size:12px}
+.wf-table th{text-align:left;font-size:10px;font-weight:600;color:var(--colorNeutralForeground2);text-transform:uppercase;letter-spacing:.3px;padding:6px 8px;border-bottom:1px solid var(--colorNeutralStroke2)}
+.wf-table td{padding:6px 8px;border-bottom:1px solid var(--colorNeutralStroke2);vertical-align:middle}
+.wf-table tr:last-child td{border-bottom:none}
+.wf-table tr:focus{outline:2px solid var(--colorBrandBackground);outline-offset:-2px;border-radius:4px}
+.wf-table tr:hover td{background:rgba(25,118,210,.04)}
+.status-badge{display:inline-flex;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600}
+.status-success{background:var(--colorPaletteGreenBackground1);color:var(--colorPaletteGreenForeground1)}
+.status-error,.status-failure{background:var(--colorPaletteRedBackground1);color:var(--colorPaletteRedForeground1)}
+.status-running{background:#e3f2fd;color:var(--colorPaletteBlueForeground2)}
+.status-pending{background:var(--colorPaletteYellowBackground1);color:var(--colorPaletteYellowForeground1)}
+.dur-bar{display:inline-block;height:6px;border-radius:3px;background:var(--colorBrandBackground);min-width:4px;vertical-align:middle;margin-right:6px;transition:width .3s}
+/* Worker cards */
+.worker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.worker-card{background:var(--colorNeutralBackground1);border:1px solid var(--colorNeutralStroke1);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:6px;transition:border-color .15s}
+.worker-card:hover{border-color:var(--colorBrandBackground)}
+.worker-card:focus{outline:2px solid var(--colorBrandBackground);outline-offset:2px}
+.worker-name{font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px}
+.worker-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.worker-dot.active{background:var(--colorPaletteGreenBackground3);box-shadow:0 0 6px rgba(46,125,50,.4);animation:pulse 2s infinite}
+.worker-dot.idle{background:var(--colorNeutralForeground3)}
+.worker-dot.error{background:var(--colorPaletteRedBackground3)}
+.worker-meta{font-size:11px;color:var(--colorNeutralForeground3)}
+/* HITL queue */
+.hitl-list{display:flex;flex-direction:column;gap:8px}
+.hitl-item{display:flex;align-items:center;gap:12px;background:var(--colorNeutralBackground1);border:1px solid var(--colorNeutralStroke1);border-radius:8px;padding:10px 14px;transition:border-color .15s}
+.hitl-item:hover{border-color:var(--colorBrandBackground)}
+.hitl-item:focus-within{outline:2px solid var(--colorBrandBackground);outline-offset:2px}
+.hitl-info{flex:1;min-width:0}
+.hitl-action{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hitl-meta{font-size:11px;color:var(--colorNeutralForeground3);display:flex;gap:8px;flex-wrap:wrap}
+.urgency-badge{padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}
+.urgency-high{background:var(--colorPaletteRedBackground1);color:var(--colorPaletteRedForeground1)}
+.urgency-medium{background:var(--colorPaletteYellowBackground1);color:var(--colorPaletteYellowForeground1)}
+.urgency-low{background:#e3f2fd;color:var(--colorPaletteBlueForeground2)}
+.hitl-actions{display:flex;gap:6px;flex-shrink:0}
+.btn{padding:6px 14px;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit}
+.btn:focus{outline:2px solid var(--colorBrandBackground);outline-offset:2px}
+.btn-approve{background:var(--colorPaletteGreenBackground1);color:var(--colorPaletteGreenForeground1)}.btn-approve:hover{background:#c8e6c9}
+.btn-reject{background:var(--colorPaletteRedBackground1);color:var(--colorPaletteRedForeground1)}.btn-reject:hover{background:#ffcdd2}
+/* Schedule */
+.sched-list{display:flex;flex-direction:column;gap:6px}
+.sched-item{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:8px 4px;border-bottom:1px solid var(--colorNeutralStroke2);font-size:12px}
+.sched-item:last-child{border-bottom:none}
+.sched-name{font-weight:600;font-size:13px}
+.sched-detail{color:var(--colorNeutralForeground3);font-size:11px}
+.sched-status{padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600}
+.sched-active{background:var(--colorPaletteGreenBackground1);color:var(--colorPaletteGreenForeground1)}
+.sched-paused{background:var(--colorPaletteYellowBackground1);color:var(--colorPaletteYellowForeground1)}
+.empty{text-align:center;color:#9e9e9e;padding:32px 20px;font-size:13px}
+.footer{padding:10px 16px;border-top:1px solid var(--colorNeutralStroke2);text-align:right;font-size:10px;color:#bdbdbd}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.worker-dot.active{box-shadow:none}}
+@media(max-width:600px){.worker-grid{grid-template-columns:1fr}.hitl-item{flex-direction:column;align-items:flex-start}.hitl-actions{width:100%}.sched-item{grid-template-columns:1fr;gap:4px}}
+</style>
+</head>
+<body>
+<div class="widget" role="region" aria-label="Mission Control Dashboard">
+  <div class="widget-header"><div class="widget-icon">🎯</div><div class="widget-title"><h2>Mission Control</h2><p>ITSM Operations · Live Overview</p></div></div>
+  <div class="sections">
+    <div class="section" id="sec-waterfall"><div class="section-header"><span class="icon">📊</span> Tool-Call Waterfall</div><div class="section-body" id="waterfall"></div></div>
+    <div class="section" id="sec-workers"><div class="section-header"><span class="icon">🤖</span> Active Worker Delegations</div><div class="section-body" id="workers"></div></div>
+    <div class="section" id="sec-hitl"><div class="section-header"><span class="icon">✋</span> HITL Approval Queue</div><div class="section-body" id="hitl"></div></div>
+    <div class="section" id="sec-schedule"><div class="section-header"><span class="icon">⏰</span> Schedule Heartbeat</div><div class="section-body" id="schedule"></div></div>
+  </div>
+  <div class="footer" id="footer"></div>
+</div>
+<script>
+var D=window.__TOOL_DATA__||{};
+var invocations=D.recentInvocations||[];
+var workers=D.activeWorkers||[];
+var hitlQueue=D.hitlQueue||[];
+var jobs=D.scheduledJobs||[];
+function fmtTime(ts){if(!ts)return'—';var d=new Date(ts);return d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
+function fmtDate(ts){if(!ts)return'—';var d=new Date(ts);return d.toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' '+fmtTime(ts)}
+function esc(s){var el=document.createElement('span');el.textContent=s||'';return el.innerHTML}
+function renderWaterfall(){
+  var items=invocations.slice(-10);
+  if(!items.length){document.getElementById('waterfall').innerHTML='<div class="empty">No recent tool invocations.</div>';return}
+  var maxDur=1;for(var i=0;i<items.length;i++){if((items[i].duration||0)>maxDur)maxDur=items[i].duration}
+  var h='<table class="wf-table" role="table" aria-label="Recent tool invocations"><thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col">Time</th><th role="columnheader" scope="col">Tool</th><th role="columnheader" scope="col">Worker</th><th role="columnheader" scope="col">Duration</th><th role="columnheader" scope="col">Status</th></tr></thead><tbody role="rowgroup">';
+  for(var i=0;i<items.length;i++){var it=items[i];var sc=it.status||'success';var pct=Math.max(8,Math.round((it.duration||0)/maxDur*100));
+    h+='<tr role="row" tabindex="0" aria-label="'+esc(it.tool)+' invocation">';
+    h+='<td>'+fmtTime(it.timestamp)+'</td>';
+    h+='<td><strong>'+esc(it.tool)+'</strong></td>';
+    h+='<td>'+esc(it.worker)+'</td>';
+    h+='<td><span class="dur-bar" style="width:'+pct+'px"></span>'+(it.duration!=null?(it.duration>=1000?(it.duration/1000).toFixed(1)+'s':it.duration+'ms'):'—')+'</td>';
+    h+='<td><span class="status-badge status-'+sc+'">'+sc+'</span></td></tr>';}
+  h+='</tbody></table>';
+  document.getElementById('waterfall').innerHTML=h}
+function renderWorkers(){
+  if(!workers.length){document.getElementById('workers').innerHTML='<div class="empty">No active workers.</div>';return}
+  var h='<div class="worker-grid" role="list" aria-label="Active workers">';
+  for(var i=0;i<workers.length;i++){var w=workers[i];var st=w.status||'idle';
+    h+='<div class="worker-card" role="listitem" tabindex="0" aria-label="Worker '+esc(w.name)+'">';
+    h+='<div class="worker-name"><span class="worker-dot '+st+'" aria-hidden="true"></span>'+esc(w.name)+'</div>';
+    h+='<div class="worker-meta">'+esc(w.type||'worker')+'</div>';
+    h+='<div class="worker-meta">'+esc(w.lastAction||'—')+'</div>';
+    if(w.delegatedAt)h+='<div class="worker-meta">Since '+fmtDate(w.delegatedAt)+'</div>';
+    h+='</div>';}
+  h+='</div>';
+  document.getElementById('workers').innerHTML=h}
+function renderHitl(){
+  if(!hitlQueue.length){document.getElementById('hitl').innerHTML='<div class="empty">No pending approvals.</div>';return}
+  var h='<div class="hitl-list" role="list" aria-label="Pending approvals">';
+  for(var i=0;i<hitlQueue.length;i++){var q=hitlQueue[i];var urg=q.urgency||'medium';
+    h+='<div class="hitl-item" role="listitem">';
+    h+='<span class="urgency-badge urgency-'+urg+'">'+urg.toUpperCase()+'</span>';
+    h+='<div class="hitl-info"><div class="hitl-action">'+esc(q.action)+'</div>';
+    h+='<div class="hitl-meta"><span>👤 '+esc(q.requestedBy)+'</span><span>🎯 '+esc(q.resource)+'</span>';
+    if(q.requestedAt)h+='<span>🕐 '+fmtDate(q.requestedAt)+'</span>';
+    h+='</div></div>';
+    h+='<div class="hitl-actions"><button class="btn btn-approve" aria-label="Approve '+esc(q.action)+'" onclick="handleAction(\'approve\',\''+esc(q.id)+'\',this)">✓ Approve</button>';
+    h+='<button class="btn btn-reject" aria-label="Reject '+esc(q.action)+'" onclick="handleAction(\'reject\',\''+esc(q.id)+'\',this)">✕ Reject</button></div>';
+    h+='</div>';}
+  h+='</div>';
+  document.getElementById('hitl').innerHTML=h}
+function renderSchedule(){
+  if(!jobs.length){document.getElementById('schedule').innerHTML='<div class="empty">No scheduled jobs.</div>';return}
+  var h='<div class="sched-list" role="list" aria-label="Scheduled jobs">';
+  for(var i=0;i<jobs.length;i++){var j=jobs[i];var st=j.status||'active';
+    h+='<div class="sched-item" role="listitem" tabindex="0">';
+    h+='<div><div class="sched-name">'+esc(j.name)+'</div><div class="sched-detail">'+esc(j.schedule||'—')+'</div></div>';
+    h+='<div class="sched-detail">Next: '+fmtDate(j.nextFire)+'</div>';
+    h+='<span class="sched-status sched-'+st+'">'+st+'</span>';
+    h+='</div>';}
+  h+='</div>';
+  document.getElementById('schedule').innerHTML=h}
+function handleAction(type,id,btn){
+  var row=btn.closest('.hitl-item');
+  if(row){row.style.opacity='.5';row.querySelectorAll('button').forEach(function(b){b.disabled=true})}
+}
+renderWaterfall();renderWorkers();renderHitl();renderSchedule();
+document.getElementById('footer').textContent='Generated '+(D.generatedAt?new Date(D.generatedAt).toLocaleString('en-GB'):'—');
+</script>
+</body>
+</html>

@@ -71,9 +71,9 @@ export const assetCmdbTools = [
     name: 'create_asset',
     description: 'Create a new hardware asset in ServiceNow. WRITE OPERATION — confirm with user before executing.',
     parameters: z.object({
-      data: z.record(z.string(), z.string()).describe('Asset fields such as display_name, asset_tag, serial_number, model, etc.'),
+      data: z.string().describe('JSON object of asset fields, e.g. {"display_name":"Server-01","asset_tag":"A001","serial_number":"SN123"}'),
     }),
-    execute: async ({ data }) => stringify(await mcp.createAsset(data)),
+    execute: async ({ data }) => stringify(await mcp.createAsset(JSON.parse(data))),
   }),
 
   tool({
@@ -81,8 +81,8 @@ export const assetCmdbTools = [
     description: 'Update an existing hardware asset in ServiceNow. WRITE OPERATION — confirm with user before executing.',
     parameters: z.object({
       sys_id: z.string().describe('sys_id of the asset to update'),
-      fields: z.record(z.string(), z.string()).describe('Fields to update'),
+      fields: z.string().describe('JSON object of fields to update, e.g. {"install_status":"retired","assigned_to":"user123"}'),
     }),
-    execute: async ({ sys_id, fields }) => stringify(await mcp.updateAsset(sys_id, fields)),
+    execute: async ({ sys_id, fields }) => stringify(await mcp.updateAsset(sys_id, JSON.parse(fields))),
   }),
 ];

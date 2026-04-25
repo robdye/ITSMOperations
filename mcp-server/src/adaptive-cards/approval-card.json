@@ -1,0 +1,150 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.6",
+  "fallbackText": "This card requires Adaptive Card version 1.6 or higher. Please update your client to view the Approval form.",
+  "msTeams": {
+    "width": "full"
+  },
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "⚠️ Approval Required",
+      "weight": "bolder",
+      "size": "large",
+      "style": "heading",
+      "spacing": "none"
+    },
+    {
+      "type": "TextBlock",
+      "text": "${action_description}",
+      "wrap": true,
+      "spacing": "small"
+    },
+    {
+      "type": "ColumnSet",
+      "spacing": "medium",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "Risk Level",
+              "isSubtle": true,
+              "spacing": "none"
+            },
+            {
+              "type": "TextBlock",
+              "text": "${risk_level}",
+              "weight": "bolder",
+              "color": "${risk_color}",
+              "spacing": "none"
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "Requesting Worker",
+              "isSubtle": true,
+              "spacing": "none"
+            },
+            {
+              "type": "TextBlock",
+              "text": "${requesting_worker}",
+              "weight": "bolder",
+              "spacing": "none"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "FactSet",
+      "spacing": "medium",
+      "separator": true,
+      "facts": [
+        { "title": "Action Type", "value": "${action_type}" },
+        { "title": "Target Record", "value": "${target_record}" },
+        { "title": "Target System", "value": "${target_system}" },
+        { "title": "Blast Radius", "value": "${blast_radius}" },
+        { "title": "Sensitivity", "value": "${sensitivity_level}" },
+        { "title": "Requested At", "value": "${requested_at}" }
+      ]
+    },
+    {
+      "type": "TextBlock",
+      "text": "Proposed Changes",
+      "weight": "bolder",
+      "size": "medium",
+      "spacing": "medium",
+      "separator": true
+    },
+    {
+      "type": "TextBlock",
+      "text": "${proposed_changes}",
+      "wrap": true,
+      "spacing": "small",
+      "fontType": "monospace"
+    },
+    {
+      "type": "TextBlock",
+      "text": "Your Decision",
+      "weight": "bolder",
+      "size": "medium",
+      "spacing": "large",
+      "separator": true
+    },
+    {
+      "type": "Input.ChoiceSet",
+      "id": "decision",
+      "label": "Decision",
+      "isRequired": true,
+      "errorMessage": "Please select a decision",
+      "style": "expanded",
+      "choices": [
+        { "title": "✅ Approve", "value": "approve" },
+        { "title": "❌ Reject", "value": "reject" }
+      ],
+      "spacing": "small"
+    },
+    {
+      "type": "Input.Text",
+      "id": "comments",
+      "label": "Comments",
+      "placeholder": "Provide rationale for your decision or additional conditions",
+      "isMultiline": true,
+      "spacing": "small"
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.Execute",
+      "title": "Submit Decision",
+      "verb": "submitApproval",
+      "style": "positive",
+      "data": {
+        "approval_id": "${approval_id}",
+        "action_type": "${action_type}",
+        "target_record": "${target_record}",
+        "requesting_worker": "${requesting_worker}",
+        "decision": "${decision}",
+        "comments": "${comments}"
+      }
+    },
+    {
+      "type": "Action.Execute",
+      "title": "Request Clarification",
+      "verb": "requestClarification",
+      "data": {
+        "approval_id": "${approval_id}",
+        "requesting_worker": "${requesting_worker}"
+      }
+    }
+  ]
+}

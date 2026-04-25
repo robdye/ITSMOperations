@@ -5,22 +5,19 @@
  * by the M365 Copilot connector via Azure APIM — not by this server directly.
  */
 
-const SNOW_INSTANCE = process.env.SNOW_INSTANCE || "";
-const SNOW_USER = process.env.SNOW_USER || "";
-const SNOW_PASSWORD = process.env.SNOW_PASSWORD || "";
+import { SnowQuery, sanitizeSnowValue } from './snow-query.js';
+import { getAuthHeaders } from './snow-auth.js';
 
-/** Sanitize a value for use in ServiceNow encoded queries. Strips operators that could inject query logic. */
-export function sanitizeSnowValue(val: string): string {
-  return val.replace(/[\^=<>!%]/g, '').replace(/\b(OR|NQ|LIKE|IN|ORDERBY|GROUPBY|STARTSWITH|ENDSWITH|BETWEEN)\b/gi, '').trim();
-}
+/**
+ * @deprecated Use SnowQuery builder instead of manual sanitization.
+ * Kept for backward compatibility during migration.
+ */
+export { sanitizeSnowValue };
+
+const SNOW_INSTANCE = process.env.SNOW_INSTANCE || "";
 
 async function authHeader(): Promise<Record<string, string>> {
-  const encoded = Buffer.from(`${SNOW_USER}:${SNOW_PASSWORD}`).toString("base64");
-  return {
-    Authorization: `Basic ${encoded}`,
-    "Content-Type": "application/json",
-    Accept: "application/json",
-  };
+  return getAuthHeaders();
 }
 
 /** Generic ServiceNow Table API GET */
@@ -91,18 +88,18 @@ export async function getChangeRequests(filters?: {
   assignment_group?: string;
   limit?: number;
 }): Promise<any[]> {
-  const parts: string[] = [];
-  if (filters?.state) parts.push(`state=${sanitizeSnowValue(filters.state)}`);
-  if (filters?.priority) parts.push(`priority=${sanitizeSnowValue(filters.priority)}`);
-  if (filters?.category) parts.push(`category=${sanitizeSnowValue(filters.category)}`);
-  if (filters?.assignment_group) parts.push(`assignment_group.name=${sanitizeSnowValue(filters.assignment_group)}`);
-  parts.push("ORDERBYDESCopened_at");
-  return snowGet("change_request", parts.join("^"), CR_FIELDS, filters?.limit ?? 20);
+  const q = new SnowQuery();
+  if (filters?.state) q.eq('state', filters.state);
+  if (filters?.priority) q.eq('priority', filters.priority);
+  if (filters?.category) q.eq('category', filters.category);
+  if (filters?.assignment_group) q.eq('assignment_group.name', filters.assignment_group);
+  q.orderByDesc('opened_at');
+  return snowGet("change_request", q.build(), CR_FIELDS, filters?.limit ?? 20);
 }
 
 export async function getChangeRequest(number?: string, sysId?: string): Promise<any> {
-  const query = number ? `number=${sanitizeSnowValue(number)}` : `sys_id=${sanitizeSnowValue(sysId || '')}`;
-  const results = await snowGet("change_request", query, CR_FIELDS, 1);
+  const q = number ? SnowQuery.eq('number', number) : SnowQuery.eq('sys_id', sysId || '');
+  const results = await snowGet("change_request", q.build(), CR_FIELDS, 1);
   return results[0] ?? null;
 }
 
@@ -116,29 +113,30 @@ export async function updateChangeRequest(sysId: string, fields: Record<string, 
 
 /** Get ALL change requests (for metrics, collision detection) */
 export async function getAllChangeRequests(limit = 200): Promise<any[]> {
-  return snowGet("change_request", "ORDERBYDESCopened_at", CR_FIELDS, limit);
+  return snowGet("change_request", new SnowQuery().orderByDesc('opened_at').build(), CR_FIELDS, limit);
 }
 
 /** Get open/pending change requests (New, Assess, Authorize, Scheduled) */
 export async function getOpenChangeRequests(limit = 100): Promise<any[]> {
-  return snowGet("change_request", "stateIN-5,-4,-3,-2,-1,1,2^ORDERBYDESCopened_at", CR_FIELDS, limit);
+  return snowGet("change_request", new SnowQuery().in('state', ['-5', '-4', '-3', '-2', '-1', '1', '2']).orderByDesc('opened_at').build(), CR_FIELDS, limit);
 }
 
 /** Get changes targeting a specific CI */
 export async function getChangesByCi(ciSysId: string, limit = 20): Promise<any[]> {
-  return snowGet("change_request", `cmdb_ci=${ciSysId}^ORDERBYDESCopened_at`, CR_FIELDS, limit);
+  return snowGet("change_request", SnowQuery.eq('cmdb_ci', ciSysId).orderByDesc('opened_at').build(), CR_FIELDS, limit);
 }
 
 /** Get closed changes for historical analysis */
 export async function getClosedChanges(limit = 100): Promise<any[]> {
-  return snowGet("change_request", "state=3^ORDERBYDESCclosed_at", CR_FIELDS, limit);
+  return snowGet("change_request", SnowQuery.eq('state', '3').orderByDesc('closed_at').build(), CR_FIELDS, limit);
 }
 
 /** Get incidents opened after a specific date for PIR correlation */
 export async function getIncidentsAfterDate(afterDate: string, ciSysId?: string, limit = 20): Promise<any[]> {
-  let query = `opened_at>${afterDate}^ORDERBYDESCopened_at`;
-  if (ciSysId) query = `cmdb_ci=${ciSysId}^${query}`;
-  return snowGet("incident", query, INCIDENT_FIELDS, limit);
+  const q = new SnowQuery();
+  if (ciSysId) q.eq('cmdb_ci', ciSysId);
+  q.gt('opened_at', afterDate).orderByDesc('opened_at');
+  return snowGet("incident", q.build(), INCIDENT_FIELDS, limit);
 }
 
 // ── CMDB operations ──
@@ -154,14 +152,14 @@ const CI_FIELDS = [
 
 export async function getCmdbCi(name?: string, sysId?: string, ciClass?: string): Promise<any> {
   const table = ciClass || "cmdb_ci";
-  const query = name ? `name=${name}` : `sys_id=${sysId}`;
-  const results = await snowGet(table, query, CI_FIELDS, 1);
+  const query = name ? SnowQuery.eq('name', name) : SnowQuery.eq('sys_id', sysId!);
+  const results = await snowGet(table, query.build(), CI_FIELDS, 1);
   return results[0] ?? null;
 }
 
 export async function getCmdbCiList(ciClass?: string, limit = 50): Promise<any[]> {
   const table = ciClass || "cmdb_ci";
-  return snowGet(table, "ORDERBYname", CI_FIELDS, limit);
+  return snowGet(table, new SnowQuery().orderBy('name').build(), CI_FIELDS, limit);
 }
 
 export async function updateCmdbCi(sysId: string, fields: Record<string, unknown>): Promise<any> {
@@ -195,13 +193,13 @@ export async function getCiRelationships(ciSysId: string, depth = 2): Promise<an
   // Get direct relationships — use sysparm_display_value=true so we get names
   const downstream = await snowGet(
     "cmdb_rel_ci",
-    `parent=${ciSysId}`,
+    SnowQuery.eq('parent', ciSysId).build(),
     ["sys_id", "parent", "child", "type"],
     100,
   );
   const upstream = await snowGet(
     "cmdb_rel_ci",
-    `child=${ciSysId}`,
+    SnowQuery.eq('child', ciSysId).build(),
     ["sys_id", "parent", "child", "type"],
     100,
   );
@@ -288,7 +286,7 @@ export async function getCiRelationships(ciSysId: string, depth = 2): Promise<an
     const nextIds = nodes.filter((n) => !n.isCentral).map((n) => n.id);
     for (const nextId of nextIds.slice(0, 20)) {
       try {
-        const nextDown = await snowGet("cmdb_rel_ci", `parent=${nextId}`, ["sys_id", "parent", "child", "type"], 50);
+        const nextDown = await snowGet("cmdb_rel_ci", SnowQuery.eq('parent', nextId).build(), ["sys_id", "parent", "child", "type"], 50);
         for (const rel of nextDown) {
           const childId = extractSysId(rel.child);
           const childName = extractDisplayName(rel.child);
@@ -297,7 +295,7 @@ export async function getCiRelationships(ciSysId: string, depth = 2): Promise<an
           addNode(childId);
           edges.push({ from: nextId, to: childId, type: extractDisplayName(rel.type) || "Depends on", direction: "downstream" });
         }
-        const nextUp = await snowGet("cmdb_rel_ci", `child=${nextId}`, ["sys_id", "parent", "child", "type"], 50);
+        const nextUp = await snowGet("cmdb_rel_ci", SnowQuery.eq('child', nextId).build(), ["sys_id", "parent", "child", "type"], 50);
         for (const rel of nextUp) {
           const parentId = extractSysId(rel.parent);
           const parentName = extractDisplayName(rel.parent);
@@ -323,11 +321,11 @@ const INCIDENT_FIELDS = [
 ];
 
 export async function getIncidentsByCi(ciSysId: string, limit = 20): Promise<any[]> {
-  return snowGet("incident", `cmdb_ci=${ciSysId}^stateNOT IN6,7^ORDERBYDESCopened_at`, INCIDENT_FIELDS, limit);
+  return snowGet("incident", SnowQuery.eq('cmdb_ci', ciSysId).notIn('state', ['6', '7']).orderByDesc('opened_at').build(), INCIDENT_FIELDS, limit);
 }
 
 export async function getIncidentsByName(ciName: string, limit = 20): Promise<any[]> {
-  return snowGet("incident", `cmdb_ci.name=${ciName}^stateNOT IN6,7^ORDERBYDESCopened_at`, INCIDENT_FIELDS, limit);
+  return snowGet("incident", SnowQuery.eq('cmdb_ci.name', ciName).notIn('state', ['6', '7']).orderByDesc('opened_at').build(), INCIDENT_FIELDS, limit);
 }
 
 /** Get all incidents with optional filters */
@@ -335,18 +333,18 @@ export async function getIncidents(filters?: {
   state?: string; priority?: string; category?: string;
   assignment_group?: string; limit?: number;
 }): Promise<any[]> {
-  const parts: string[] = [];
-  if (filters?.state) parts.push(`state=${sanitizeSnowValue(filters.state)}`);
-  if (filters?.priority) parts.push(`priority=${sanitizeSnowValue(filters.priority)}`);
-  if (filters?.category) parts.push(`category=${sanitizeSnowValue(filters.category)}`);
-  if (filters?.assignment_group) parts.push(`assignment_group.name=${sanitizeSnowValue(filters.assignment_group)}`);
-  parts.push("ORDERBYDESCopened_at");
-  return snowGet("incident", parts.join("^"), INCIDENT_FIELDS, filters?.limit ?? 50);
+  const q = new SnowQuery();
+  if (filters?.state) q.eq('state', filters.state);
+  if (filters?.priority) q.eq('priority', filters.priority);
+  if (filters?.category) q.eq('category', filters.category);
+  if (filters?.assignment_group) q.eq('assignment_group.name', filters.assignment_group);
+  q.orderByDesc('opened_at');
+  return snowGet("incident", q.build(), INCIDENT_FIELDS, filters?.limit ?? 50);
 }
 
 /** Get all incidents including closed (for metrics) */
 export async function getAllIncidents(limit = 200): Promise<any[]> {
-  return snowGet("incident", "ORDERBYDESCopened_at", INCIDENT_FIELDS, limit);
+  return snowGet("incident", new SnowQuery().orderByDesc('opened_at').build(), INCIDENT_FIELDS, limit);
 }
 
 /** Create an incident */
@@ -372,16 +370,16 @@ const PROBLEM_FIELDS = [
 export async function getProblems(filters?: {
   state?: string; priority?: string; limit?: number;
 }): Promise<any[]> {
-  const parts: string[] = [];
-  if (filters?.state) parts.push(`state=${sanitizeSnowValue(filters.state)}`);
-  if (filters?.priority) parts.push(`priority=${sanitizeSnowValue(filters.priority)}`);
-  parts.push("ORDERBYDESCopened_at");
-  return snowGet("problem", parts.join("^"), PROBLEM_FIELDS, filters?.limit ?? 50);
+  const q = new SnowQuery();
+  if (filters?.state) q.eq('state', filters.state);
+  if (filters?.priority) q.eq('priority', filters.priority);
+  q.orderByDesc('opened_at');
+  return snowGet("problem", q.build(), PROBLEM_FIELDS, filters?.limit ?? 50);
 }
 
 export async function getProblem(number?: string, sysId?: string): Promise<any> {
-  const query = number ? `number=${number}` : `sys_id=${sysId}`;
-  const results = await snowGet("problem", query, PROBLEM_FIELDS, 1);
+  const query = number ? SnowQuery.eq('number', number) : SnowQuery.eq('sys_id', sysId!);
+  const results = await snowGet("problem", query.build(), PROBLEM_FIELDS, 1);
   return results[0] ?? null;
 }
 
@@ -404,10 +402,10 @@ const SR_FIELDS = [
 export async function getServiceRequests(filters?: {
   state?: string; limit?: number;
 }): Promise<any[]> {
-  const parts: string[] = [];
-  if (filters?.state) parts.push(`state=${sanitizeSnowValue(filters.state)}`);
-  parts.push("ORDERBYDESCopened_at");
-  return snowGet("sc_request", parts.join("^"), SR_FIELDS, filters?.limit ?? 50);
+  const q = new SnowQuery();
+  if (filters?.state) q.eq('state', filters.state);
+  q.orderByDesc('opened_at');
+  return snowGet("sc_request", q.build(), SR_FIELDS, filters?.limit ?? 50);
 }
 
 export async function createServiceRequest(data: Record<string, unknown>): Promise<any> {
@@ -427,12 +425,16 @@ const KB_FIELDS = [
 ];
 
 export async function searchKnowledge(query: string, limit = 10): Promise<any[]> {
-  return snowGet("kb_knowledge", `workflow_state=published^short_descriptionLIKE${query}^ORtextLIKE${query}^ORDERBYDESCsys_view_count`, KB_FIELDS, limit);
+  // Mixed AND/OR: workflow_state=published AND (short_description LIKE query OR text LIKE query)
+  const andPart = SnowQuery.eq('workflow_state', 'published');
+  const orPart = new SnowQuery().or().like('short_description', query).like('text', query);
+  const fullQuery = andPart.build() + '^' + orPart.build();
+  return snowGet("kb_knowledge", fullQuery + '^' + new SnowQuery().orderByDesc('sys_view_count').build(), KB_FIELDS, limit);
 }
 
 export async function getKnowledgeArticle(number?: string, sysId?: string): Promise<any> {
-  const query = number ? `number=${number}` : `sys_id=${sysId}`;
-  const results = await snowGet("kb_knowledge", query, KB_FIELDS, 1);
+  const query = number ? SnowQuery.eq('number', number) : SnowQuery.eq('sys_id', sysId!);
+  const results = await snowGet("kb_knowledge", query.build(), KB_FIELDS, 1);
   return results[0] ?? null;
 }
 
@@ -447,11 +449,11 @@ const SLA_FIELDS = [
 export async function getTaskSLAs(filters?: {
   stage?: string; has_breached?: string; limit?: number;
 }): Promise<any[]> {
-  const parts: string[] = [];
-  if (filters?.stage) parts.push(`stage=${sanitizeSnowValue(filters.stage)}`);
-  if (filters?.has_breached) parts.push(`has_breached=${sanitizeSnowValue(filters.has_breached)}`);
-  parts.push("ORDERBYplanned_end_time");
-  return snowGet("task_sla", parts.join("^"), SLA_FIELDS, filters?.limit ?? 50);
+  const q = new SnowQuery();
+  if (filters?.stage) q.eq('stage', filters.stage);
+  if (filters?.has_breached) q.eq('has_breached', filters.has_breached);
+  q.orderBy('planned_end_time');
+  return snowGet("task_sla", q.build(), SLA_FIELDS, filters?.limit ?? 50);
 }
 
 // ── Service Catalog ──
@@ -462,7 +464,7 @@ const CATALOG_FIELDS = [
 ];
 
 export async function getCatalogItems(limit = 50): Promise<any[]> {
-  return snowGet("sc_cat_item", "active=true^ORDERBYorder", CATALOG_FIELDS, limit);
+  return snowGet("sc_cat_item", SnowQuery.eq('active', 'true').orderBy('order').build(), CATALOG_FIELDS, limit);
 }
 
 // ── IT Asset Management ──
@@ -477,11 +479,11 @@ const ASSET_FIELDS = [
 export async function getAssets(filters?: {
   install_status?: string; model_category?: string; limit?: number;
 }): Promise<any[]> {
-  const parts: string[] = [];
-  if (filters?.install_status) parts.push(`install_status=${sanitizeSnowValue(filters.install_status)}`);
-  if (filters?.model_category) parts.push(`model_category.name=${sanitizeSnowValue(filters.model_category)}`);
-  parts.push("ORDERBYdisplay_name");
-  return snowGet("alm_asset", parts.join("^"), ASSET_FIELDS, filters?.limit ?? 100);
+  const q = new SnowQuery();
+  if (filters?.install_status) q.eq('install_status', filters.install_status);
+  if (filters?.model_category) q.eq('model_category.name', filters.model_category);
+  q.orderBy('display_name');
+  return snowGet("alm_asset", q.build(), ASSET_FIELDS, filters?.limit ?? 100);
 }
 
 /** Create a hardware asset */
@@ -497,7 +499,7 @@ export async function updateAsset(sysId: string, fields: Record<string, unknown>
 /** Get assets with expired warranties */
 export async function getExpiredWarrantyAssets(limit = 50): Promise<any[]> {
   const today = new Date().toISOString().split("T")[0];
-  return snowGet("alm_asset", `warranty_expiration<${today}^warranty_expirationISNOTEMPTY^ORDERBYwarranty_expiration`, ASSET_FIELDS, limit);
+  return snowGet("alm_asset", new SnowQuery().lt('warranty_expiration', today).isNotEmpty('warranty_expiration').orderBy('warranty_expiration').build(), ASSET_FIELDS, limit);
 }
 
 /** ServiceNow instance URL for linking */
@@ -507,12 +509,12 @@ export function snowUrl(table: string, sysId: string): string {
 
 /** Lookup assignment groups by name (for typeahead) */
 export async function lookupAssignmentGroups(query: string, limit = 10): Promise<any[]> {
-  return snowGet("sys_user_group", `nameLIKE${query}^active=true^ORDERBYname`, ["sys_id", "name", "description"], limit);
+  return snowGet("sys_user_group", new SnowQuery().like('name', query).eq('active', 'true').orderBy('name').build(), ["sys_id", "name", "description"], limit);
 }
 
 /** Lookup CMDB CIs by name (for typeahead) */
 export async function lookupCmdbCis(query: string, limit = 10): Promise<any[]> {
-  return snowGet("cmdb_ci", `nameLIKE${query}^ORDERBYname`, ["sys_id", "name", "sys_class_name", "environment", "operational_status"], limit);
+  return snowGet("cmdb_ci", new SnowQuery().like('name', query).orderBy('name').build(), ["sys_id", "name", "sys_class_name", "environment", "operational_status"], limit);
 }
 
 /** Create a knowledge article */
@@ -537,11 +539,11 @@ const VENDOR_FIELDS = [
 export async function getVendors(filters?: {
   query?: string; vendor_type?: string; limit?: number;
 }): Promise<any[]> {
-  const parts: string[] = ["vendor=true"];
-  if (filters?.query) parts.push(`nameLIKE${sanitizeSnowValue(filters.query)}`);
-  if (filters?.vendor_type) parts.push(`vendor_type=${sanitizeSnowValue(filters.vendor_type)}`);
-  parts.push("ORDERBYname");
-  return snowGet("core_company", parts.join("^"), VENDOR_FIELDS, filters?.limit ?? 50);
+  const q = SnowQuery.eq('vendor', 'true');
+  if (filters?.query) q.like('name', filters.query);
+  if (filters?.vendor_type) q.eq('vendor_type', filters.vendor_type);
+  q.orderBy('name');
+  return snowGet("core_company", q.build(), VENDOR_FIELDS, filters?.limit ?? 50);
 }
 
 /** Create a vendor */
@@ -556,8 +558,9 @@ export async function updateVendor(sysId: string, fields: Record<string, unknown
 
 /** Get a single vendor by name or sys_id */
 export async function getVendor(name?: string, sysId?: string): Promise<any> {
-  const query = name ? `vendor=true^name=${name}` : `vendor=true^sys_id=${sysId}`;
-  const results = await snowGet("core_company", query, VENDOR_FIELDS, 1);
+  const q = SnowQuery.eq('vendor', 'true');
+  if (name) q.eq('name', name); else q.eq('sys_id', sysId!);
+  const results = await snowGet("core_company", q.build(), VENDOR_FIELDS, 1);
   return results[0] ?? null;
 }
 
@@ -572,12 +575,12 @@ const LICENSE_FIELDS = [
 export async function getSoftwareLicenses(filters?: {
   product?: string; publisher?: string; state?: string; limit?: number;
 }): Promise<any[]> {
-  const parts: string[] = [];
-  if (filters?.product) parts.push(`product_nameLIKE${filters.product}`);
-  if (filters?.publisher) parts.push(`publisherLIKE${filters.publisher}`);
-  if (filters?.state) parts.push(`state=${filters.state}`);
-  parts.push("ORDERBYproduct_name");
-  return snowGet("alm_license", parts.join("^"), LICENSE_FIELDS, filters?.limit ?? 100);
+  const q = new SnowQuery();
+  if (filters?.product) q.like('product_name', filters.product);
+  if (filters?.publisher) q.like('publisher', filters.publisher);
+  if (filters?.state) q.eq('state', filters.state);
+  q.orderBy('product_name');
+  return snowGet("alm_license", q.build(), LICENSE_FIELDS, filters?.limit ?? 100);
 }
 
 /** Get license compliance summary — compare rights vs installed */
@@ -587,7 +590,7 @@ export async function getLicenseCompliance(limit = 100): Promise<{
   overDeployed: number;
   underUtilized: number;
 }> {
-  const licenses = await snowGet("alm_license", "ORDERBYproduct_name", LICENSE_FIELDS, limit);
+  const licenses = await snowGet("alm_license", new SnowQuery().orderBy('product_name').build(), LICENSE_FIELDS, limit);
   let compliant = 0, overDeployed = 0, underUtilized = 0;
   for (const lic of licenses) {
     const rights = parseInt(lic.rights) || 0;
@@ -610,12 +613,12 @@ const CONTRACT_FIELDS = [
 export async function getContracts(filters?: {
   vendor?: string; state?: string; contract_type?: string; limit?: number;
 }): Promise<any[]> {
-  const parts: string[] = [];
-  if (filters?.vendor) parts.push(`vendor.nameLIKE${filters.vendor}`);
-  if (filters?.state) parts.push(`state=${filters.state}`);
-  if (filters?.contract_type) parts.push(`contract_type=${filters.contract_type}`);
-  parts.push("ORDERBYends");
-  return snowGet("ast_contract", parts.join("^"), CONTRACT_FIELDS, filters?.limit ?? 50);
+  const q = new SnowQuery();
+  if (filters?.vendor) q.like('vendor.name', filters.vendor);
+  if (filters?.state) q.eq('state', filters.state);
+  if (filters?.contract_type) q.eq('contract_type', filters.contract_type);
+  q.orderBy('ends');
+  return snowGet("ast_contract", q.build(), CONTRACT_FIELDS, filters?.limit ?? 50);
 }
 
 /** Create a contract */
@@ -636,7 +639,7 @@ export async function getExpiringContracts(withinDays = 90, limit = 50): Promise
   const futureStr = future.toISOString().split("T")[0];
   return snowGet(
     "ast_contract",
-    `ends>=${todayStr}^ends<=${futureStr}^stateINactive,auto_renew^ORDERBYends`,
+    new SnowQuery().gte('ends', todayStr).lte('ends', futureStr).in('state', ['active', 'auto_renew']).orderBy('ends').build(),
     CONTRACT_FIELDS,
     limit,
   );
@@ -648,7 +651,7 @@ export async function getExpiringContracts(withinDays = 90, limit = 50): Promise
 export async function getKbCategories(limit = 50): Promise<any[]> {
   return snowGet(
     "kb_category",
-    "active=true^ORDERBYlabel",
+    SnowQuery.eq('active', 'true').orderBy('label').build(),
     ["sys_id", "label", "description", "parent_id", "active"],
     limit,
   );
@@ -658,7 +661,7 @@ export async function getKbCategories(limit = 50): Promise<any[]> {
 export async function getTopKbArticles(limit = 20): Promise<any[]> {
   return snowGet(
     "kb_knowledge",
-    "workflow_state=published^ORDERBYDESCsys_view_count",
+    SnowQuery.eq('workflow_state', 'published').orderByDesc('sys_view_count').build(),
     KB_FIELDS,
     limit,
   );
@@ -668,7 +671,7 @@ export async function getTopKbArticles(limit = 20): Promise<any[]> {
 export async function getRecentKbArticles(limit = 20): Promise<any[]> {
   return snowGet(
     "kb_knowledge",
-    "workflow_state=published^ORDERBYDESCsys_created_on",
+    SnowQuery.eq('workflow_state', 'published').orderByDesc('sys_created_on').build(),
     KB_FIELDS,
     limit,
   );
@@ -680,9 +683,9 @@ export async function getKbStats(): Promise<{
   avgViews: number; topCategories: { category: string; count: number }[];
 }> {
   const [published, draft, retired] = await Promise.all([
-    snowGet("kb_knowledge", "workflow_state=published", ["sys_id", "sys_view_count", "kb_category"], 500),
-    snowGet("kb_knowledge", "workflow_state=draft", ["sys_id"], 500),
-    snowGet("kb_knowledge", "workflow_state=retired", ["sys_id"], 500),
+    snowGet("kb_knowledge", SnowQuery.eq('workflow_state', 'published').build(), ["sys_id", "sys_view_count", "kb_category"], 500),
+    snowGet("kb_knowledge", SnowQuery.eq('workflow_state', 'draft').build(), ["sys_id"], 500),
+    snowGet("kb_knowledge", SnowQuery.eq('workflow_state', 'retired').build(), ["sys_id"], 500),
   ]);
   const totalViews = published.reduce((sum: number, a: any) => sum + (parseInt(a.sys_view_count) || 0), 0);
   const avgViews = published.length > 0 ? Math.round(totalViews / published.length) : 0;
@@ -715,7 +718,7 @@ export async function getKbGapAnalysis(limit = 50): Promise<{
 }> {
   const incidents = await snowGet(
     "incident",
-    "stateNOT IN6,7^ORDERBYDESCopened_at",
+    new SnowQuery().notIn('state', ['6', '7']).orderByDesc('opened_at').build(),
     ["sys_id", "category", "short_description"],
     200,
   );
@@ -732,9 +735,12 @@ export async function getKbGapAnalysis(limit = 50): Promise<{
   let totalWithout = 0;
 
   for (const [cat, count] of Object.entries(incidentCategories)) {
+    // Mixed AND/OR: workflow_state=published AND (category LIKE cat OR short_description LIKE cat)
+    const kbAndPart = SnowQuery.eq('workflow_state', 'published');
+    const kbOrPart = new SnowQuery().or().like('category', cat).like('short_description', cat);
     const kbArticles = await snowGet(
       "kb_knowledge",
-      `workflow_state=published^categoryLIKE${cat}^ORshort_descriptionLIKE${cat}`,
+      kbAndPart.build() + '^' + kbOrPart.build(),
       ["sys_id"],
       10,
     );

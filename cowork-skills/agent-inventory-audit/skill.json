@@ -1,0 +1,67 @@
+{
+  "$schema": "https://schemas.microsoft.com/agents/v1/skill.json",
+  "id": "agent-inventory-audit",
+  "name": "Agent Inventory Audit",
+  "description": "Generates a tenant-wide agent and app inventory report from Package Management API data. Produces an Excel audit workbook, risk-scored dashboard, and governance email.",
+  "version": "1.0.0",
+  "itilPractice": "IT Asset Management",
+  "valueChainActivity": "Deliver and Support",
+  "triggers": [
+    {
+      "type": "intent",
+      "patterns": [
+        "agent inventory",
+        "agent audit",
+        "agent list",
+        "tenant agents",
+        "app inventory",
+        "how many agents"
+      ],
+      "description": "Activates when user requests an agent or app inventory, audit, or listing"
+    },
+    {
+      "type": "scheduled",
+      "schedule": "0 5 1 * *",
+      "description": "monthly-inventory-audit — Full tenant inventory audit on the 1st of each month"
+    }
+  ],
+  "actions": [
+    {
+      "name": "run-inventory-audit",
+      "description": "Generate a complete tenant-wide agent and app inventory with risk scoring",
+      "sideEffects": "read",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "scope", "type": "string", "required": false, "description": "Scope: all, custom-agents, store-apps, or specific department" },
+        { "name": "includeRiskScoring", "type": "boolean", "required": false, "description": "Include risk classification for each agent" }
+      ],
+      "outputs": [
+        { "name": "inventoryReport", "type": "object", "description": "Complete agent inventory with metadata and classifications" },
+        { "name": "riskDashboard", "type": "object", "description": "Risk-scored dashboard summary" }
+      ]
+    },
+    {
+      "name": "export-audit-workbook",
+      "description": "Export the inventory audit as an Excel workbook",
+      "sideEffects": "write",
+      "requiresConfirmation": false,
+      "inputs": [
+        { "name": "auditId", "type": "string", "required": true, "description": "Audit report identifier" }
+      ],
+      "outputs": [
+        { "name": "workbookUrl", "type": "string", "description": "URL to the exported Excel workbook" }
+      ]
+    }
+  ],
+  "crossPracticeIntegrations": [
+    { "practice": "IT Asset & Configuration Management", "direction": "bidirectional", "description": "Inventory feeds CMDB; CMDB provides CI context for agents" },
+    { "practice": "Change Enablement", "direction": "sends", "description": "New or unregistered agents may trigger change requests" }
+  ],
+  "hitlControls": [
+    { "action": "Governance email distribution", "level": "notify", "reason": "Audit reports sent to governance stakeholders require approval" }
+  ],
+  "knowledgeSources": [
+    { "source": "Tenant Agent Inventory", "type": "document", "description": "Agent packages from Package Management API" },
+    { "source": "CMDB", "type": "api", "description": "Configuration items for cross-referencing agent infrastructure" }
+  ]
+}
