@@ -4,28 +4,69 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Change Request Form</title>
 <style>
+:root {
+  --colorBrandBackground: #0078d4;
+  --colorBrandBackgroundHover: #106ebe;
+  --colorNeutralBackground1: #ffffff;
+  --colorNeutralBackground2: #fafafa;
+  --colorNeutralBackground3: #f5f5f5;
+  --colorNeutralForeground1: #242424;
+  --colorNeutralForeground2: #616161;
+  --colorNeutralStroke1: #e0e0e0;
+  --colorPaletteRedBackground3: #fde7e9;
+  --colorPaletteRedForeground1: #c4314b;
+  --colorPaletteGreenBackground3: #e1f7e8;
+  --colorPaletteGreenForeground1: #107c10;
+  --colorPaletteYellowBackground3: #fff4ce;
+  --colorPaletteYellowForeground1: #835b00;
+  --colorPaletteBlueForeground1: #0078d4;
+  --colorNeutralShadowAmbient: rgba(0,0,0,0.12);
+  --colorNeutralShadowKey: rgba(0,0,0,0.14);
+  --borderRadiusMedium: 8px;
+  --fontSizeBase300: 14px;
+  --fontSizeBase400: 16px;
+  --fontSizeBase500: 20px;
+  --fontWeightSemibold: 600;
+  --spacingHorizontalM: 12px;
+  --spacingVerticalM: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --colorNeutralBackground1: #1f1f1f;
+    --colorNeutralBackground2: #2d2d2d;
+    --colorNeutralBackground3: #3d3d3d;
+    --colorNeutralForeground1: #e0e0e0;
+    --colorNeutralForeground2: #b0b0b0;
+    --colorNeutralStroke1: #404040;
+    --colorPaletteRedBackground3: #3b1519;
+    --colorPaletteGreenBackground3: #0b2e10;
+    --colorPaletteYellowBackground3: #3b2e00;
+  }
+}
+
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f5f5f5;color:#242424;padding:20px;line-height:1.5}
-.widget{background:#fff;border-radius:12px;border:1px solid #e0e0e0;overflow:hidden;max-width:720px;margin:0 auto}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--colorNeutralBackground3);color:var(--colorNeutralForeground1);padding:20px;line-height:1.5}
+.widget{background:var(--colorNeutralBackground1);border-radius:12px;border:1px solid var(--colorNeutralStroke1);overflow:hidden;max-width:720px;margin:0 auto}
 .widget-header{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid #f0f0f0}
 .widget-icon{width:36px;height:36px;border-radius:8px;background:#e3f2fd;display:flex;align-items:center;justify-content:center;font-size:18px}
-.widget-title h2{font-size:16px;font-weight:600}.widget-title p{font-size:12px;color:#616161}
+.widget-title h2{font-size:16px;font-weight:600}.widget-title p{font-size:12px;color:var(--colorNeutralForeground2)}
 .info-banner{margin:16px 20px 0;padding:10px 14px;background:#e3f2fd;border:1px solid #90caf9;border-radius:8px;font-size:12px;color:#1565c0;display:flex;align-items:flex-start;gap:8px}
 .info-banner .icon{font-size:14px;margin-top:1px}
 .nist-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .nist-tag{background:#bbdefb;color:#0d47a1;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600}
 .form-body{padding:20px}
-.section-label{font-size:12px;font-weight:600;color:#616161;text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px;margin-top:20px;padding-top:16px;border-top:1px solid #f0f0f0}
+.section-label{font-size:12px;font-weight:600;color:var(--colorNeutralForeground2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px;margin-top:20px;padding-top:16px;border-top:1px solid #f0f0f0}
 .section-label:first-child{margin-top:0;padding-top:0;border-top:none}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px}
 .field{display:flex;flex-direction:column;gap:4px;position:relative}
 .field.full{grid-column:1/-1}
 .field label{font-size:11px;font-weight:600;color:#424242;text-transform:uppercase;letter-spacing:.3px}
 .field label .req{color:#d32f2f}
-.field input,.field select,.field textarea{background:#fafafa;border:1px solid #e0e0e0;color:#242424;padding:10px 12px;border-radius:8px;font-size:13px;font-family:inherit;transition:border-color .15s}
-.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:#1976d2;background:#fff;box-shadow:0 0 0 3px rgba(25,118,210,.1)}
+.field input,.field select,.field textarea{background:var(--colorNeutralBackground2);border:1px solid var(--colorNeutralStroke1);color:var(--colorNeutralForeground1);padding:10px 12px;border-radius:8px;font-size:13px;font-family:inherit;transition:border-color .15s}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:#1976d2;background:var(--colorNeutralBackground1);box-shadow:0 0 0 3px rgba(25,118,210,.1)}
 .field textarea{min-height:80px;resize:vertical}
-.lookup-results{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #e0e0e0;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:10;max-height:180px;overflow-y:auto;display:none}
+.lookup-results{position:absolute;top:100%;left:0;right:0;background:var(--colorNeutralBackground1);border:1px solid var(--colorNeutralStroke1);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:10;max-height:180px;overflow-y:auto;display:none}
 .lookup-results.show{display:block}
 .lookup-item{padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #f5f5f5;transition:background .1s}
 .lookup-item:hover{background:#e3f2fd}
@@ -34,18 +75,27 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f5f5f
 .btn-row{display:flex;gap:12px;margin-top:24px;padding-top:16px;border-top:1px solid #f0f0f0}
 .btn{padding:10px 24px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s}
 .btn-primary{background:#1976d2;color:#fff}.btn-primary:hover{background:#1565c0}
-.btn-secondary{background:#f5f5f5;color:#616161;border:1px solid #e0e0e0}.btn-secondary:hover{background:#eee}
+.btn-secondary{background:var(--colorNeutralBackground3);color:var(--colorNeutralForeground2);border:1px solid var(--colorNeutralStroke1)}.btn-secondary:hover{background:#eee}
 .success-msg{display:none;margin:16px 20px;padding:14px 16px;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;font-size:13px;color:#2e7d32;text-align:center}
+:focus-visible{outline:2px solid var(--colorBrandBackground);outline-offset:2px}
+a:focus-visible,button:focus-visible,[tabindex="0"]:focus-visible{outline:2px solid var(--colorBrandBackground);outline-offset:2px}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 </style>
 </head>
 <body>
-<div class="widget">
+<a href="#main-content" class="skip-link" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;z-index:9999;padding:8px 16px;background:var(--colorBrandBackground);color:#fff;text-decoration:none;font-weight:600;font-size:14px;&:focus{left:16px;top:16px;width:auto;height:auto;overflow:visible}">Skip to content</a>
+<div class="widget" id="main-content">
   <div class="widget-header"><div class="widget-icon">📝</div><div class="widget-title"><h2>Create Change Request</h2><p>ServiceNow · New Change</p></div></div>
   <div class="info-banner"><span class="icon">ℹ️</span><div>All change requests follow <strong>ITIL V4 Change Enablement</strong> and require Business Justification, Risk Assessment, Backout Plan, and Test Plan per <strong>NIST 800-53 CM-3</strong>.
   <div class="nist-tags"><span class="nist-tag">CM-3</span><span class="nist-tag">CM-4</span><span class="nist-tag">CM-5</span></div></div></div>
   <div class="form-body" id="form-body">
     <div class="section-label">General Information</div>
-    <div class="field full" style="margin-bottom:14px"><label>Short Description <span class="req">*</span></label><input type="text" id="short_description" placeholder="Brief description of the change"></div>
+    <div class="field full" style="margin-bottom:14px"><label>Short Description <span class="req">*</span></label><input type="text" id="short_description" placeholder="Brief description of the change" aria-required="true"></div>
     <div class="field full" style="margin-bottom:14px"><label>Description</label><textarea id="description" placeholder="Detailed description including scope and objectives"></textarea></div>
     <div class="row">
       <div class="field"><label>Change Type (ITIL)</label><select id="type"><option value="Normal">Normal</option><option value="Standard">Standard</option><option value="Emergency">Emergency</option></select></div>
@@ -61,8 +111,8 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f5f5f
       <div class="field"><label>Affected CI (CMDB)</label><input type="text" id="cmdb_ci" placeholder="Start typing to search..." autocomplete="off" oninput="lookupCIs(this.value)"><div class="lookup-results" id="ci-results"></div></div>
     </div>
     <div class="section-label">Governance</div>
-    <div class="field full" style="margin-bottom:14px"><label>Business Justification <span class="req">*</span></label><textarea id="justification" placeholder="Why is this change needed?"></textarea></div>
-    <div class="field full" style="margin-bottom:14px"><label>Backout Plan <span class="req">*</span></label><textarea id="backout_plan" placeholder="Steps to rollback if the change fails"></textarea></div>
+    <div class="field full" style="margin-bottom:14px"><label>Business Justification <span class="req">*</span></label><textarea id="justification" placeholder="Why is this change needed?" aria-required="true"></textarea></div>
+    <div class="field full" style="margin-bottom:14px"><label>Backout Plan <span class="req">*</span></label><textarea id="backout_plan" placeholder="Steps to rollback if the change fails" aria-required="true"></textarea></div>
     <div class="field full" style="margin-bottom:14px"><label>Test Plan</label><textarea id="test_plan" placeholder="How will success be validated?"></textarea></div>
     <div class="section-label">Schedule</div>
     <div class="row">

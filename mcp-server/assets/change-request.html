@@ -4,40 +4,90 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Change Request Detail</title>
 <style>
+:root {
+  --colorBrandBackground: #0078d4;
+  --colorBrandBackgroundHover: #106ebe;
+  --colorNeutralBackground1: #ffffff;
+  --colorNeutralBackground2: #fafafa;
+  --colorNeutralBackground3: #f5f5f5;
+  --colorNeutralForeground1: #242424;
+  --colorNeutralForeground2: #616161;
+  --colorNeutralStroke1: #e0e0e0;
+  --colorPaletteRedBackground3: #fde7e9;
+  --colorPaletteRedForeground1: #c4314b;
+  --colorPaletteGreenBackground3: #e1f7e8;
+  --colorPaletteGreenForeground1: #107c10;
+  --colorPaletteYellowBackground3: #fff4ce;
+  --colorPaletteYellowForeground1: #835b00;
+  --colorPaletteBlueForeground1: #0078d4;
+  --colorNeutralShadowAmbient: rgba(0,0,0,0.12);
+  --colorNeutralShadowKey: rgba(0,0,0,0.14);
+  --borderRadiusMedium: 8px;
+  --fontSizeBase300: 14px;
+  --fontSizeBase400: 16px;
+  --fontSizeBase500: 20px;
+  --fontWeightSemibold: 600;
+  --spacingHorizontalM: 12px;
+  --spacingVerticalM: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --colorNeutralBackground1: #1f1f1f;
+    --colorNeutralBackground2: #2d2d2d;
+    --colorNeutralBackground3: #3d3d3d;
+    --colorNeutralForeground1: #e0e0e0;
+    --colorNeutralForeground2: #b0b0b0;
+    --colorNeutralStroke1: #404040;
+    --colorPaletteRedBackground3: #3b1519;
+    --colorPaletteGreenBackground3: #0b2e10;
+    --colorPaletteYellowBackground3: #3b2e00;
+  }
+}
+
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f5f5f5;color:#242424;padding:20px;line-height:1.5}
-.widget{background:#fff;border-radius:12px;border:1px solid #e0e0e0;overflow:hidden;max-width:800px;margin:0 auto}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--colorNeutralBackground3);color:var(--colorNeutralForeground1);padding:20px;line-height:1.5}
+.widget{background:var(--colorNeutralBackground1);border-radius:12px;border:1px solid var(--colorNeutralStroke1);overflow:hidden;max-width:800px;margin:0 auto}
 .widget-header{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid #f0f0f0}
 .widget-icon{width:36px;height:36px;border-radius:8px;background:#e3f2fd;display:flex;align-items:center;justify-content:center;font-size:18px}
-.widget-title h2{font-size:16px;font-weight:600;color:#242424}
-.widget-title p{font-size:12px;color:#616161}
+.widget-title h2{font-size:16px;font-weight:600;color:var(--colorNeutralForeground1)}
+.widget-title p{font-size:12px;color:var(--colorNeutralForeground2)}
 .risk-banner{margin:16px 20px 0;padding:14px 16px;border-radius:10px;display:flex;align-items:center;gap:12px}
 .risk-low{background:#e8f5e9;border:1px solid #a5d6a7}.risk-med{background:#fff3e0;border:1px solid #ffcc80}.risk-high{background:#fbe9e7;border:1px solid #ffab91}.risk-crit{background:#ffebee;border:1px solid #ef9a9a}
 .risk-score-circle{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#fff}
-.risk-text h3{font-size:14px;font-weight:600}.risk-text p{font-size:12px;color:#616161}
+.risk-text h3{font-size:14px;font-weight:600}.risk-text p{font-size:12px;color:var(--colorNeutralForeground2)}
 .detail-body{padding:20px}
-.section-label{font-size:12px;font-weight:600;color:#616161;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;margin-top:20px;padding-top:14px;border-top:1px solid #f0f0f0}
+.section-label{font-size:12px;font-weight:600;color:var(--colorNeutralForeground2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;margin-top:20px;padding-top:14px;border-top:1px solid #f0f0f0}
 .section-label:first-child{margin-top:0;padding-top:0;border-top:none}
 .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .detail-item{display:flex;flex-direction:column;gap:2px}
 .detail-item .lbl{font-size:11px;color:#757575;text-transform:uppercase;letter-spacing:0.3px}
-.detail-item .val{font-size:13px;font-weight:500;color:#242424}
+.detail-item .val{font-size:13px;font-weight:500;color:var(--colorNeutralForeground1)}
 .detail-full{grid-column:1/-1}
 .state-tag{display:inline-flex;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
 .sNew{background:#e8f5e9;color:#2e7d32}.sAssess{background:#fff3e0;color:#e65100}.sImpl{background:#e3f2fd;color:#1565c0}.sClosed{background:#f5f5f5;color:#757575}
 .nist-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
 .nist-tag{background:#e3f2fd;color:#1565c0;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600}
 .incidents-section{margin-top:16px}
-.inc-mini{background:#fafafa;border:1px solid #e8e8e8;border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:12px;cursor:pointer;transition:border-color .15s}
+.inc-mini{background:var(--colorNeutralBackground2);border:1px solid #e8e8e8;border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:12px;cursor:pointer;transition:border-color .15s}
 .inc-mini:hover{border-color:#1976d2}
 .inc-mini strong{color:#c62828}
 .btn-open{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;background:#1976d2;color:#fff;margin-top:16px;transition:background .15s}
 .btn-open:hover{background:#1565c0}
 .footer{padding:10px 16px;border-top:1px solid #f0f0f0;text-align:right;font-size:10px;color:#bdbdbd}
+:focus-visible{outline:2px solid var(--colorBrandBackground);outline-offset:2px}
+a:focus-visible,button:focus-visible,[tabindex="0"]:focus-visible{outline:2px solid var(--colorBrandBackground);outline-offset:2px}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 </style>
 </head>
 <body>
-<div class="widget">
+<a href="#main-content" class="skip-link" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;z-index:9999;padding:8px 16px;background:var(--colorBrandBackground);color:#fff;text-decoration:none;font-weight:600;font-size:14px;&:focus{left:16px;top:16px;width:auto;height:auto;overflow:visible}">Skip to content</a>
+<div class="widget" id="main-content">
   <div class="widget-header">
     <div class="widget-icon">📋</div>
     <div class="widget-title"><h2 id="cr-title">Change Request</h2><p id="cr-sub">ServiceNow · Change Detail</p></div>
@@ -77,7 +127,7 @@ for(var i=0;i<incidents.length;i++){var inc=incidents[i];var iLink=si+'/nav_to.d
 html+='<div class="inc-mini" onclick="window.open(\''+iLink+'\',\'_blank\')"><strong>'+inc.number+'</strong> — '+(inc.short_description||'')+' · '+(inc.priority||'')+'</div>';}
 html+='</div>';}
 var crLink=si+'/nav_to.do?uri=change_request.do?sys_id='+(cr.sys_id||'');
-html+='<button class="btn-open" onclick="window.open(\''+crLink+'\',\'_blank\')">Open in ServiceNow →</button>';
+html+='<button class="btn-open" onclick="window.open(\''+crLink+'\',\'_blank\')" aria-label="Open change request in ServiceNow">Open in ServiceNow →</button>';
 document.getElementById('detail-body').innerHTML=html;
 document.getElementById('footer').textContent='Generated '+new Date(to.generatedAt||'').toLocaleString('en-GB')+' · Data from ServiceNow';
 </script>

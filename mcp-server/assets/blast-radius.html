@@ -4,12 +4,52 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Blast Radius</title>
 <style>
+:root {
+  --colorBrandBackground: #0078d4;
+  --colorBrandBackgroundHover: #106ebe;
+  --colorNeutralBackground1: #ffffff;
+  --colorNeutralBackground2: #fafafa;
+  --colorNeutralBackground3: #f5f5f5;
+  --colorNeutralForeground1: #242424;
+  --colorNeutralForeground2: #616161;
+  --colorNeutralStroke1: #e0e0e0;
+  --colorPaletteRedBackground3: #fde7e9;
+  --colorPaletteRedForeground1: #c4314b;
+  --colorPaletteGreenBackground3: #e1f7e8;
+  --colorPaletteGreenForeground1: #107c10;
+  --colorPaletteYellowBackground3: #fff4ce;
+  --colorPaletteYellowForeground1: #835b00;
+  --colorPaletteBlueForeground1: #0078d4;
+  --colorNeutralShadowAmbient: rgba(0,0,0,0.12);
+  --colorNeutralShadowKey: rgba(0,0,0,0.14);
+  --borderRadiusMedium: 8px;
+  --fontSizeBase300: 14px;
+  --fontSizeBase400: 16px;
+  --fontSizeBase500: 20px;
+  --fontWeightSemibold: 600;
+  --spacingHorizontalM: 12px;
+  --spacingVerticalM: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --colorNeutralBackground1: #1f1f1f;
+    --colorNeutralBackground2: #2d2d2d;
+    --colorNeutralBackground3: #3d3d3d;
+    --colorNeutralForeground1: #e0e0e0;
+    --colorNeutralForeground2: #b0b0b0;
+    --colorNeutralStroke1: #404040;
+    --colorPaletteRedBackground3: #3b1519;
+    --colorPaletteGreenBackground3: #0b2e10;
+    --colorPaletteYellowBackground3: #3b2e00;
+  }
+}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f5f5f5;color:#242424;padding:20px;line-height:1.5}
-.widget{background:#fff;border-radius:12px;border:1px solid #e0e0e0;overflow:hidden;max-width:900px;margin:0 auto}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--colorNeutralBackground3);color:var(--colorNeutralForeground1);padding:20px;line-height:1.5}
+.widget{background:var(--colorNeutralBackground1);border-radius:12px;border:1px solid var(--colorNeutralStroke1);overflow:hidden;max-width:900px;margin:0 auto}
 .widget-header{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid #f0f0f0}
 .widget-icon{width:36px;height:36px;border-radius:8px;background:#fce4ec;display:flex;align-items:center;justify-content:center;font-size:18px}
-.widget-title h2{font-size:16px;font-weight:600}.widget-title p{font-size:12px;color:#616161}
+.widget-title h2{font-size:16px;font-weight:600}.widget-title p{font-size:12px;color:var(--colorNeutralForeground2)}
 .graph-area{padding:20px;min-height:340px;position:relative}
 .graph-svg{width:100%;height:400px}
 .node{cursor:pointer}
@@ -21,16 +61,28 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f5f5f
 @keyframes flowUp{0%{stroke-dashoffset:0}100%{stroke-dashoffset:20}}
 .edge-downstream{stroke:#ef5350;stroke-width:2;fill:none;stroke-dasharray:10 10;animation:flowDown 1s linear infinite}
 .edge-upstream{stroke:#42a5f5;stroke-width:2;fill:none;stroke-dasharray:10 10;animation:flowUp 1s linear infinite}
-.legend{display:flex;gap:20px;padding:12px 20px;border-top:1px solid #f0f0f0;font-size:11px;color:#616161;flex-wrap:wrap;align-items:center}
+.legend{display:flex;gap:20px;padding:12px 20px;border-top:1px solid #f0f0f0;font-size:11px;color:var(--colorNeutralForeground2);flex-wrap:wrap;align-items:center}
 .legend-item{display:flex;align-items:center;gap:6px}
 .legend-icon{font-size:16px}
 .footer{padding:10px 16px;border-top:1px solid #f0f0f0;text-align:right;font-size:10px;color:#bdbdbd}
+:focus-visible{outline:2px solid var(--colorBrandBackground);outline-offset:2px}
+a:focus-visible,button:focus-visible,[tabindex="0"]:focus-visible{outline:2px solid var(--colorBrandBackground);outline-offset:2px}
+.ci-tooltip{position:absolute;background:var(--colorNeutralBackground1);border:1px solid var(--colorNeutralStroke1);border-radius:8px;padding:10px 14px;font-size:12px;box-shadow:0 4px 12px var(--colorNeutralShadowAmbient);z-index:100;pointer-events:none;display:none;max-width:220px}
+.ci-tooltip.show{display:block}
+.ci-tooltip strong{display:block;margin-bottom:4px;font-size:13px}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 </style>
 </head>
 <body>
-<div class="widget">
+<a href="#main-content" class="skip-link" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;z-index:9999;padding:8px 16px;background:var(--colorBrandBackground);color:#fff;text-decoration:none;font-weight:600;font-size:14px;&:focus{left:16px;top:16px;width:auto;height:auto;overflow:visible}">Skip to content</a>
+<div class="widget" id="main-content">
   <div class="widget-header"><div class="widget-icon">💥</div><div class="widget-title"><h2>Blast Radius</h2><p id="subtitle">ServiceNow · Dependency Graph</p></div></div>
-  <div class="graph-area"><svg class="graph-svg" id="graph"></svg></div>
+  <div class="graph-area"><canvas id="graph-canvas" style="width:100%;height:400px;display:block"></canvas><div class="ci-tooltip" id="ci-tooltip"></div></div>
   <div class="legend">
     <div class="legend-item"><span class="legend-icon">🔴</span> Central CI (impacted)</div>
     <div class="legend-item"><span class="legend-icon">🔵</span> Upstream (feeds into)</div>
@@ -46,48 +98,158 @@ var graph=to.graph||{nodes:[],edges:[]};
 var si=to.snowInstance||'';
 var central=graph.nodes.find(function(n){return n.isCentral})||graph.nodes[0]||{};
 document.getElementById('subtitle').textContent='ServiceNow · '+(central.name||'CI Dependencies');
-function getIcon(name,cls){
-var n=(name||'').toLowerCase();var c=(cls||'').toLowerCase();
-if(c.includes('server')||n.includes('server'))return'🖥️';
-if(c.includes('app')||n.includes('app')||n.includes('application'))return'📱';
-if(c.includes('database')||c.includes('db')||n.includes('oracle')||n.includes('mysql')||n.includes('sql'))return'🗄️';
-if(c.includes('network')||n.includes('switch')||n.includes('router')||n.includes('firewall'))return'🌐';
-if(c.includes('workstation')||c.includes('desktop')||c.includes('laptop'))return'💻';
-if(n.includes('web')||n.includes('http'))return'🌍';
-if(n.includes('mail')||n.includes('email')||n.includes('exchange'))return'📧';
-if(n.includes('storage')||n.includes('nas')||n.includes('san'))return'💾';
-if(n.includes('load')||n.includes('balancer'))return'⚖️';
-return'🔧';}
-var svg=document.getElementById('graph');var W=svg.clientWidth||800;var H=400;
-svg.setAttribute('viewBox','0 0 '+W+' '+H);
-var nodes=graph.nodes;var edges=graph.edges;
-var cx=W/2;var cy=H/2;var radius=Math.min(W,H)*0.32;
-var positions={};
-var nonCentral=nodes.filter(function(n){return!n.isCentral});
-for(var i=0;i<nodes.length;i++){var n=nodes[i];
-if(n.isCentral){positions[n.id]={x:cx,y:cy};}
-else{var idx=nonCentral.indexOf(n);var angle=(2*Math.PI*idx)/Math.max(nonCentral.length,1)-Math.PI/2;
-positions[n.id]={x:cx+radius*Math.cos(angle),y:cy+radius*Math.sin(angle)};}}
-var edgeSvg='';
-for(var i=0;i<edges.length;i++){var e=edges[i];var from=positions[e.source]||positions[e.from];var to2=positions[e.target]||positions[e.to];
-if(!from||!to2)continue;var cls=e.direction==='upstream'?'edge-upstream':'edge-downstream';
-var dx=to2.x-from.x;var dy=to2.y-from.y;var len=Math.sqrt(dx*dx+dy*dy);
-var ux=dx/len;var uy=dy/len;var offset=30;
-edgeSvg+='<line class="'+cls+'" x1="'+(from.x+ux*offset)+'" y1="'+(from.y+uy*offset)+'" x2="'+(to2.x-ux*offset)+'" y2="'+(to2.y-uy*offset)+'"/>';}
-var nodeSvg='';
-for(var i=0;i<nodes.length;i++){var n=nodes[i];var pos=positions[n.id];if(!pos)continue;
-var icon=getIcon(n.name,n.sys_class_name);
-var isDown=edges.some(function(e){return(e.target===n.id||e.to===n.id)&&e.direction==='downstream'});
-var bgColor=n.isCentral?'#ffcdd2':isDown?'#ffe0b2':'#bbdefb';
-var borderColor=n.isCentral?'#e53935':isDown?'#e65100':'#1565c0';
-var sz=n.isCentral?32:26;
-var link=si+'/nav_to.do?uri=cmdb_ci.do?sys_id='+(n.sys_id||n.id||'');
-var lblCls=n.isCentral?'node-label node-label-central':'node-label';
-nodeSvg+='<g class="node" onclick="window.open(\''+link+'\',\'_blank\')" role="button" tabindex="0">'+
-'<circle class="node-bg" cx="'+pos.x+'" cy="'+pos.y+'" r="'+sz+'" fill="'+bgColor+'" stroke="'+borderColor+'" stroke-width="2"/>'+
-'<text class="node-icon" x="'+pos.x+'" y="'+(pos.y+5)+'" text-anchor="middle" font-size="'+(n.isCentral?24:20)+'">'+icon+'</text>'+
-'<text class="'+lblCls+'" x="'+pos.x+'" y="'+(pos.y+sz+16)+'" text-anchor="middle">'+(n.name||n.id)+'</text></g>';}
-svg.innerHTML=edgeSvg+nodeSvg;
+
+var canvas=document.getElementById('graph-canvas');
+var ctx=canvas.getContext('2d');
+var tooltip=document.getElementById('ci-tooltip');
+var dpr=window.devicePixelRatio||1;
+
+function resizeCanvas(){
+  var rect=canvas.parentElement.getBoundingClientRect();
+  canvas.width=rect.width*dpr;canvas.height=400*dpr;
+  canvas.style.width=rect.width+'px';canvas.style.height='400px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+resizeCanvas();
+window.addEventListener('resize',resizeCanvas);
+
+var W=canvas.width/dpr,H=400;
+var nodes=graph.nodes.map(function(n,i){
+  var angle=(2*Math.PI*i)/Math.max(graph.nodes.length,1);
+  var r=Math.min(W,H)*0.3;
+  return{id:n.id,name:n.name||n.id,isCentral:n.isCentral,sys_id:n.sys_id,
+    sys_class_name:n.sys_class_name||'',
+    x:n.isCentral?W/2:W/2+r*Math.cos(angle),
+    y:n.isCentral?H/2:H/2+r*Math.sin(angle),
+    vx:0,vy:0,radius:n.isCentral?30:22};
+});
+var edges=graph.edges;
+var nodeMap={};nodes.forEach(function(n){nodeMap[n.id]=n;});
+
+// Force simulation
+var hoveredNode=null;var selectedNode=null;
+function simulate(){
+  for(var i=0;i<nodes.length;i++){
+    for(var j=i+1;j<nodes.length;j++){
+      var dx=nodes[j].x-nodes[i].x,dy=nodes[j].y-nodes[i].y;
+      var dist=Math.sqrt(dx*dx+dy*dy)||1;
+      var force=800/(dist*dist);
+      var fx=dx/dist*force,fy=dy/dist*force;
+      nodes[i].vx-=fx;nodes[i].vy-=fy;
+      nodes[j].vx+=fx;nodes[j].vy+=fy;
+    }
+  }
+  for(var i=0;i<edges.length;i++){
+    var src=nodeMap[edges[i].source]||nodeMap[edges[i].from];
+    var tgt=nodeMap[edges[i].target]||nodeMap[edges[i].to];
+    if(!src||!tgt)continue;
+    var dx=tgt.x-src.x,dy=tgt.y-src.y;
+    var dist=Math.sqrt(dx*dx+dy*dy)||1;
+    var force=(dist-150)*0.01;
+    var fx=dx/dist*force,fy=dy/dist*force;
+    src.vx+=fx;src.vy+=fy;tgt.vx-=fx;tgt.vy-=fy;
+  }
+  // Center gravity
+  for(var i=0;i<nodes.length;i++){
+    nodes[i].vx+=(W/2-nodes[i].x)*0.001;
+    nodes[i].vy+=(H/2-nodes[i].y)*0.001;
+    nodes[i].vx*=0.9;nodes[i].vy*=0.9;
+    if(!nodes[i].isCentral){
+      nodes[i].x+=nodes[i].vx;nodes[i].y+=nodes[i].vy;
+    }
+    nodes[i].x=Math.max(40,Math.min(W-40,nodes[i].x));
+    nodes[i].y=Math.max(40,Math.min(H-40,nodes[i].y));
+  }
+}
+
+function isDownstream(nodeId){
+  return edges.some(function(e){return(e.target===nodeId||e.to===nodeId)&&e.direction==='downstream';});
+}
+
+function draw(){
+  W=canvas.width/dpr;
+  ctx.clearRect(0,0,W,H);
+  // Draw edges
+  for(var i=0;i<edges.length;i++){
+    var e=edges[i];
+    var src=nodeMap[e.source]||nodeMap[e.from];
+    var tgt=nodeMap[e.target]||nodeMap[e.to];
+    if(!src||!tgt)continue;
+    var isHl=hoveredNode&&(hoveredNode.id===src.id||hoveredNode.id===tgt.id);
+    ctx.beginPath();ctx.moveTo(src.x,src.y);ctx.lineTo(tgt.x,tgt.y);
+    ctx.strokeStyle=e.direction==='upstream'?'rgba(66,165,245,'+(isHl?1:0.4)+')':'rgba(239,83,80,'+(isHl?1:0.4)+')';
+    ctx.lineWidth=isHl?3:1.5;
+    ctx.setLineDash([6,4]);ctx.stroke();ctx.setLineDash([]);
+  }
+  // Draw nodes
+  for(var i=0;i<nodes.length;i++){
+    var n=nodes[i];
+    var isHl=!hoveredNode||hoveredNode.id===n.id||edges.some(function(e){
+      var s=e.source||e.from,t=e.target||e.to;
+      return hoveredNode&&((s===hoveredNode.id&&t===n.id)||(t===hoveredNode.id&&s===n.id));
+    });
+    var alpha=hoveredNode?(isHl?1:0.2):1;
+    var isDown=isDownstream(n.id);
+    var bgColor=n.isCentral?'rgba(255,205,210,'+alpha+')':isDown?'rgba(255,224,178,'+alpha+')':'rgba(187,222,251,'+alpha+')';
+    var borderColor=n.isCentral?'rgba(229,57,53,'+alpha+')':isDown?'rgba(230,81,0,'+alpha+')':'rgba(21,101,192,'+alpha+')';
+    ctx.beginPath();ctx.arc(n.x,n.y,n.radius,0,Math.PI*2);
+    ctx.fillStyle=bgColor;ctx.fill();
+    ctx.strokeStyle=borderColor;ctx.lineWidth=2;ctx.stroke();
+    // Label
+    ctx.fillStyle='rgba(36,36,36,'+alpha+')';
+    ctx.font=(n.isCentral?'bold 11px':'11px')+' "Segoe UI",system-ui,sans-serif';
+    ctx.textAlign='center';
+    ctx.fillText(n.name,n.x,n.y+n.radius+14);
+    // Icon text
+    ctx.font=(n.isCentral?'18px':'14px')+' serif';
+    var icon=n.sys_class_name&&n.sys_class_name.toLowerCase().includes('server')?'🖥️':n.name.toLowerCase().includes('db')||n.name.toLowerCase().includes('sql')?'🗄️':'🔧';
+    ctx.fillText(icon,n.x,n.y+5);
+  }
+}
+
+function getNodeAt(mx,my){
+  for(var i=nodes.length-1;i>=0;i--){
+    var n=nodes[i];var dx=mx-n.x,dy=my-n.y;
+    if(dx*dx+dy*dy<=n.radius*n.radius)return n;
+  }
+  return null;
+}
+
+canvas.addEventListener('mousemove',function(e){
+  var rect=canvas.getBoundingClientRect();
+  var mx=e.clientX-rect.left,my=e.clientY-rect.top;
+  var node=getNodeAt(mx,my);
+  hoveredNode=node;
+  canvas.style.cursor=node?'pointer':'default';
+  if(node){
+    tooltip.innerHTML='<strong>'+node.name+'</strong>'+(node.sys_class_name?'<br>Type: '+node.sys_class_name:'')+(node.isCentral?'<br><em>Central CI (impacted)</em>':isDownstream(node.id)?'<br><em>Downstream dependency</em>':'<br><em>Upstream service</em>');
+    tooltip.style.left=(mx+16)+'px';tooltip.style.top=(my-10)+'px';
+    tooltip.classList.add('show');
+  } else { tooltip.classList.remove('show'); }
+  draw();
+});
+
+canvas.addEventListener('click',function(e){
+  var rect=canvas.getBoundingClientRect();
+  var mx=e.clientX-rect.left,my=e.clientY-rect.top;
+  var node=getNodeAt(mx,my);
+  if(node){
+    var link=si+'/nav_to.do?uri=cmdb_ci.do?sys_id='+(node.sys_id||node.id||'');
+    window.open(link,'_blank');
+  }
+});
+
+canvas.addEventListener('mouseleave',function(){hoveredNode=null;tooltip.classList.remove('show');draw();});
+
+// Animate
+var frameCount=0;
+function animate(){
+  if(frameCount<200)simulate();
+  draw();frameCount++;
+  requestAnimationFrame(animate);
+}
+animate();
+
 var ds=edges.filter(function(e){return e.direction==='downstream'}).length;
 var us=edges.filter(function(e){return e.direction==='upstream'}).length;
 document.getElementById('footer').textContent=nodes.length+' systems · '+ds+' downstream · '+us+' upstream dependencies';

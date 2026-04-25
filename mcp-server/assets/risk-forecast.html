@@ -4,23 +4,63 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>EOL Risk Forecast</title>
 <style>
+:root {
+  --colorBrandBackground: #0078d4;
+  --colorBrandBackgroundHover: #106ebe;
+  --colorNeutralBackground1: #ffffff;
+  --colorNeutralBackground2: #fafafa;
+  --colorNeutralBackground3: #f5f5f5;
+  --colorNeutralForeground1: #242424;
+  --colorNeutralForeground2: #616161;
+  --colorNeutralStroke1: #e0e0e0;
+  --colorPaletteRedBackground3: #fde7e9;
+  --colorPaletteRedForeground1: #c4314b;
+  --colorPaletteGreenBackground3: #e1f7e8;
+  --colorPaletteGreenForeground1: #107c10;
+  --colorPaletteYellowBackground3: #fff4ce;
+  --colorPaletteYellowForeground1: #835b00;
+  --colorPaletteBlueForeground1: #0078d4;
+  --colorNeutralShadowAmbient: rgba(0,0,0,0.12);
+  --colorNeutralShadowKey: rgba(0,0,0,0.14);
+  --borderRadiusMedium: 8px;
+  --fontSizeBase300: 14px;
+  --fontSizeBase400: 16px;
+  --fontSizeBase500: 20px;
+  --fontWeightSemibold: 600;
+  --spacingHorizontalM: 12px;
+  --spacingVerticalM: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --colorNeutralBackground1: #1f1f1f;
+    --colorNeutralBackground2: #2d2d2d;
+    --colorNeutralBackground3: #3d3d3d;
+    --colorNeutralForeground1: #e0e0e0;
+    --colorNeutralForeground2: #b0b0b0;
+    --colorNeutralStroke1: #404040;
+    --colorPaletteRedBackground3: #3b1519;
+    --colorPaletteGreenBackground3: #0b2e10;
+    --colorPaletteYellowBackground3: #3b2e00;
+  }
+}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f5f5f5;color:#242424;padding:20px;line-height:1.5}
-.widget{background:#fff;border-radius:12px;border:1px solid #e0e0e0;overflow:hidden;max-width:900px;margin:0 auto}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--colorNeutralBackground3);color:var(--colorNeutralForeground1);padding:20px;line-height:1.5}
+.widget{background:var(--colorNeutralBackground1);border-radius:12px;border:1px solid var(--colorNeutralStroke1);overflow:hidden;max-width:900px;margin:0 auto}
 .widget-header{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid #f0f0f0}
 .widget-icon{width:36px;height:36px;border-radius:8px;background:#fff3e0;display:flex;align-items:center;justify-content:center;font-size:18px}
-.widget-title h2{font-size:16px;font-weight:600;color:#242424}
-.widget-title p{font-size:12px;color:#616161}
+.widget-title h2{font-size:16px;font-weight:600;color:var(--colorNeutralForeground1)}
+.widget-title p{font-size:12px;color:var(--colorNeutralForeground2)}
 .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#f0f0f0;border-bottom:1px solid #f0f0f0}
-.kpi{background:#fff;padding:16px 12px;text-align:center}
+.kpi{background:var(--colorNeutralBackground1);padding:16px 12px;text-align:center}
 .kpi .val{font-size:24px;font-weight:700;line-height:1.2}
-.kpi .lbl{font-size:11px;color:#616161;margin-top:2px;text-transform:uppercase;letter-spacing:0.3px}
+.kpi .lbl{font-size:11px;color:var(--colorNeutralForeground2);margin-top:2px;text-transform:uppercase;letter-spacing:0.3px}
 .list{padding:12px 16px;display:flex;flex-direction:column;gap:8px}
-.asset-card{display:grid;grid-template-columns:4px 1fr auto;gap:0;background:#fafafa;border:1px solid #e8e8e8;border-radius:10px;overflow:hidden;cursor:pointer;transition:all .15s}
+.asset-card{display:grid;grid-template-columns:4px 1fr auto;gap:0;background:var(--colorNeutralBackground2);border:1px solid #e8e8e8;border-radius:10px;overflow:hidden;cursor:pointer;transition:all .15s}
 .asset-card:hover{border-color:#1976d2;box-shadow:0 2px 8px rgba(25,118,210,.1)}
 .status-bar{border-radius:0}
 .asset-body{padding:12px;display:flex;flex-direction:column;gap:4px}
-.asset-body h3{font-size:13px;font-weight:600;color:#242424}
+.asset-body h3{font-size:13px;font-weight:600;color:var(--colorNeutralForeground1)}
 .asset-body .meta{font-size:11px;color:#757575}
 .asset-right{padding:12px 16px;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:4px}
 .status-tag{padding:3px 10px;border-radius:20px;font-size:10px;font-weight:600}
@@ -28,16 +68,41 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f5f5f
 .days-label{font-size:11px;color:#757575}
 .empty{text-align:center;color:#9e9e9e;padding:48px 20px;font-size:14px}
 .footer{padding:10px 16px;border-top:1px solid #f0f0f0;text-align:right;font-size:10px;color:#bdbdbd}
+:focus-visible{outline:2px solid var(--colorBrandBackground);outline-offset:2px}
+a:focus-visible,button:focus-visible,[tabindex="0"]:focus-visible{outline:2px solid var(--colorBrandBackground);outline-offset:2px}
+.timeline-container{position:relative;overflow:hidden;padding:16px;cursor:grab;user-select:none}
+.timeline-container.dragging{cursor:grabbing}
+.timeline-inner{position:relative;min-width:100%;height:120px}
+.timeline-track{position:absolute;top:50px;left:0;right:0;height:4px;background:var(--colorNeutralStroke1);border-radius:2px}
+.timeline-marker{position:absolute;top:20px;transform:translateX(-50%);text-align:center;cursor:pointer}
+.timeline-marker .marker-line{width:2px;height:60px;border-left:2px dashed var(--colorNeutralStroke1);margin:0 auto}
+.timeline-marker .marker-dot{width:12px;height:12px;border-radius:50%;margin:-2px auto 4px;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.timeline-marker .marker-label{font-size:10px;color:var(--colorNeutralForeground2);white-space:nowrap;max-width:80px;overflow:hidden;text-overflow:ellipsis}
+.timeline-tooltip{position:absolute;background:var(--colorNeutralBackground1);border:1px solid var(--colorNeutralStroke1);border-radius:8px;padding:10px 14px;font-size:12px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:100;pointer-events:none;display:none;white-space:nowrap}
+.timeline-tooltip.show{display:block}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 </style>
 </head>
 <body>
-<div class="widget">
+<a href="#main-content" class="skip-link" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;z-index:9999;padding:8px 16px;background:var(--colorBrandBackground);color:#fff;text-decoration:none;font-weight:600;font-size:14px;&:focus{left:16px;top:16px;width:auto;height:auto;overflow:visible}">Skip to content</a>
+<div class="widget" id="main-content">
   <div class="widget-header">
     <div class="widget-icon">📅</div>
     <div class="widget-title"><h2>EOL Risk Forecast</h2><p id="sub">ServiceNow + EndOfLife.date</p></div>
   </div>
-  <div class="kpis" id="kpis"></div>
+  <div class="kpis" id="kpis" role="group" aria-label="EOL risk summary"></div>
   <div class="list" id="list"></div>
+  <div class="timeline-container" id="timeline-container">
+    <div class="timeline-inner" id="timeline-inner">
+      <div class="timeline-track"></div>
+    </div>
+    <div class="timeline-tooltip" id="timeline-tooltip"></div>
+  </div>
   <div class="footer" id="footer"></div>
 </div>
 <script>
@@ -66,5 +131,81 @@ html+='<div class="asset-card" role="button" tabindex="0">'+
 '<span class="days-label">'+daysText+'</span></div></div>';}
 document.getElementById('list').innerHTML=html||'<div class="empty">No EOL data available.</div>';
 document.getElementById('footer').textContent=forecasts.length+' asset'+(forecasts.length!==1?'s':'')+' analyzed · Data from ServiceNow + EndOfLife.date';
+
+// Timeline with drag-to-pan
+var tlContainer = document.getElementById('timeline-container');
+var tlInner = document.getElementById('timeline-inner');
+var tlTooltip = document.getElementById('timeline-tooltip');
+
+// Build timeline markers from forecasts
+var today = new Date();
+var timelineForecasts = forecasts.filter(function(f) { return f.eolDate || (f.eolStatus && f.eolStatus.eolDate); });
+if (timelineForecasts.length > 0) {
+  var dates = timelineForecasts.map(function(f) {
+    var d = f.eolDate || (f.eolStatus && f.eolStatus.eolDate) || '';
+    return new Date(d);
+  });
+  var minDate = new Date(Math.min.apply(null, [today.getTime()].concat(dates.map(function(d){return d.getTime()}))));
+  var maxDate = new Date(Math.max.apply(null, dates.map(function(d){return d.getTime()})));
+  minDate.setMonth(minDate.getMonth() - 1);
+  maxDate.setMonth(maxDate.getMonth() + 3);
+  var totalRange = maxDate.getTime() - minDate.getTime();
+  var innerWidth = Math.max(timelineForecasts.length * 100, tlContainer.clientWidth);
+  tlInner.style.width = innerWidth + 'px';
+
+  // Today marker
+  var todayPct = (today.getTime() - minDate.getTime()) / totalRange;
+  var todayMarker = document.createElement('div');
+  todayMarker.className = 'timeline-marker';
+  todayMarker.style.left = (todayPct * innerWidth) + 'px';
+  todayMarker.innerHTML = '<div class="marker-dot" style="background:#0078d4"></div><div class="marker-line" style="border-color:#0078d4"></div><div class="marker-label" style="color:#0078d4;font-weight:600">Today</div>';
+  tlInner.appendChild(todayMarker);
+
+  for (var ti = 0; ti < timelineForecasts.length; ti++) {
+    var tf = timelineForecasts[ti];
+    var eolDateStr = tf.eolDate || (tf.eolStatus && tf.eolStatus.eolDate) || '';
+    var eolDate = new Date(eolDateStr);
+    var pct = (eolDate.getTime() - minDate.getTime()) / totalRange;
+    var status = tf.eolStatus ? tf.eolStatus.status : 'supported';
+    var dotColor = status === 'non-compliant' ? '#ef5350' : status === 'at-risk' ? '#ff9800' : '#66bb6a';
+    var daysRemaining = Math.round((eolDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    var marker = document.createElement('div');
+    marker.className = 'timeline-marker';
+    marker.style.left = (pct * innerWidth) + 'px';
+    marker.setAttribute('data-name', tf.ci_name || 'Unknown');
+    marker.setAttribute('data-eol', eolDateStr);
+    marker.setAttribute('data-days', daysRemaining);
+    marker.innerHTML = '<div class="marker-dot" style="background:' + dotColor + '"></div><div class="marker-line" style="border-color:' + dotColor + '"></div><div class="marker-label">' + (tf.ci_name || 'Unknown') + '</div>';
+    marker.addEventListener('mouseenter', function(e) {
+      var el = e.currentTarget;
+      tlTooltip.innerHTML = '<strong>' + el.getAttribute('data-name') + '</strong><br>EOL: ' + el.getAttribute('data-eol') + '<br>' + (parseInt(el.getAttribute('data-days')) < 0 ? Math.abs(parseInt(el.getAttribute('data-days'))) + ' days past EOL' : el.getAttribute('data-days') + ' days remaining');
+      tlTooltip.style.left = (el.offsetLeft + 10) + 'px';
+      tlTooltip.style.top = '0px';
+      tlTooltip.classList.add('show');
+    });
+    marker.addEventListener('mouseleave', function() { tlTooltip.classList.remove('show'); });
+    tlInner.appendChild(marker);
+  }
+}
+
+// Drag-to-pan
+var isDragging = false;
+var startX = 0;
+var scrollLeft = 0;
+tlContainer.addEventListener('mousedown', function(e) {
+  isDragging = true;
+  tlContainer.classList.add('dragging');
+  startX = e.pageX - tlContainer.offsetLeft;
+  scrollLeft = tlContainer.scrollLeft;
+});
+tlContainer.addEventListener('mouseleave', function() { isDragging = false; tlContainer.classList.remove('dragging'); });
+tlContainer.addEventListener('mouseup', function() { isDragging = false; tlContainer.classList.remove('dragging'); });
+tlContainer.addEventListener('mousemove', function(e) {
+  if (!isDragging) return;
+  e.preventDefault();
+  var x = e.pageX - tlContainer.offsetLeft;
+  var walk = (x - startX) * 2;
+  tlContainer.scrollLeft = scrollLeft - walk;
+});
 </script>
 </body></html>

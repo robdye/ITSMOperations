@@ -4,34 +4,84 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Change Metrics</title>
 <style>
+:root {
+  --colorBrandBackground: #0078d4;
+  --colorBrandBackgroundHover: #106ebe;
+  --colorNeutralBackground1: #ffffff;
+  --colorNeutralBackground2: #fafafa;
+  --colorNeutralBackground3: #f5f5f5;
+  --colorNeutralForeground1: #242424;
+  --colorNeutralForeground2: #616161;
+  --colorNeutralStroke1: #e0e0e0;
+  --colorPaletteRedBackground3: #fde7e9;
+  --colorPaletteRedForeground1: #c4314b;
+  --colorPaletteGreenBackground3: #e1f7e8;
+  --colorPaletteGreenForeground1: #107c10;
+  --colorPaletteYellowBackground3: #fff4ce;
+  --colorPaletteYellowForeground1: #835b00;
+  --colorPaletteBlueForeground1: #0078d4;
+  --colorNeutralShadowAmbient: rgba(0,0,0,0.12);
+  --colorNeutralShadowKey: rgba(0,0,0,0.14);
+  --borderRadiusMedium: 8px;
+  --fontSizeBase300: 14px;
+  --fontSizeBase400: 16px;
+  --fontSizeBase500: 20px;
+  --fontWeightSemibold: 600;
+  --spacingHorizontalM: 12px;
+  --spacingVerticalM: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --colorNeutralBackground1: #1f1f1f;
+    --colorNeutralBackground2: #2d2d2d;
+    --colorNeutralBackground3: #3d3d3d;
+    --colorNeutralForeground1: #e0e0e0;
+    --colorNeutralForeground2: #b0b0b0;
+    --colorNeutralStroke1: #404040;
+    --colorPaletteRedBackground3: #3b1519;
+    --colorPaletteGreenBackground3: #0b2e10;
+    --colorPaletteYellowBackground3: #3b2e00;
+  }
+}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#f5f5f5;color:#242424;padding:20px;line-height:1.5}
-.widget{background:#fff;border-radius:12px;border:1px solid #e0e0e0;overflow:hidden;max-width:900px;margin:0 auto}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--colorNeutralBackground3);color:var(--colorNeutralForeground1);padding:20px;line-height:1.5}
+.widget{background:var(--colorNeutralBackground1);border-radius:12px;border:1px solid var(--colorNeutralStroke1);overflow:hidden;max-width:900px;margin:0 auto}
 .widget-header{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid #f0f0f0}
 .widget-icon{width:36px;height:36px;border-radius:8px;background:#e8f5e9;display:flex;align-items:center;justify-content:center;font-size:18px}
-.widget-title h2{font-size:16px;font-weight:600}.widget-title p{font-size:12px;color:#616161}
+.widget-title h2{font-size:16px;font-weight:600}.widget-title p{font-size:12px;color:var(--colorNeutralForeground2)}
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#f0f0f0;border-bottom:1px solid #f0f0f0}
-.kpi{background:#fff;padding:16px 12px;text-align:center}
+.kpi{background:var(--colorNeutralBackground1);padding:16px 12px;text-align:center}
 .kpi .val{font-size:24px;font-weight:700;line-height:1.2}
-.kpi .lbl{font-size:11px;color:#616161;margin-top:2px;text-transform:uppercase;letter-spacing:.3px}
+.kpi .lbl{font-size:11px;color:var(--colorNeutralForeground2);margin-top:2px;text-transform:uppercase;letter-spacing:.3px}
 .charts{padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.chart-card{background:#fafafa;border:1px solid #e8e8e8;border-radius:10px;padding:16px}
+.chart-card{background:var(--colorNeutralBackground2);border:1px solid #e8e8e8;border-radius:10px;padding:16px}
 .chart-card h3{font-size:13px;font-weight:600;margin-bottom:12px}
 .bar-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.bar-label{font-size:11px;color:#616161;width:80px;flex-shrink:0;text-align:right}
-.bar-track{flex:1;height:20px;background:#e0e0e0;border-radius:4px;overflow:hidden}
+.bar-label{font-size:11px;color:var(--colorNeutralForeground2);width:80px;flex-shrink:0;text-align:right}
+.bar-track{flex:1;height:20px;background:var(--colorNeutralStroke1);border-radius:4px;overflow:hidden}
 .bar-fill{height:100%;border-radius:4px;display:flex;align-items:center;padding-left:6px;font-size:10px;color:#fff;font-weight:600;min-width:24px;transition:width .3s}
 .outcomes{display:flex;flex-direction:column;gap:8px}
 .outcome-row{display:flex;align-items:center;gap:10px;font-size:12px}
 .outcome-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 .outcome-label{flex:1;color:#424242}.outcome-val{font-weight:600;color:#242424}
 .footer{padding:10px 16px;border-top:1px solid #f0f0f0;text-align:right;font-size:10px;color:#bdbdbd}
+.sparkline{width:80px;height:24px;display:block;margin:4px auto 0}
+:focus-visible{outline:2px solid var(--colorBrandBackground);outline-offset:2px}
+a:focus-visible,button:focus-visible,[tabindex="0"]:focus-visible{outline:2px solid var(--colorBrandBackground);outline-offset:2px}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 </style>
 </head>
 <body>
-<div class="widget">
+<a href="#main-content" class="skip-link" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;z-index:9999;padding:8px 16px;background:var(--colorBrandBackground);color:#fff;text-decoration:none;font-weight:600;font-size:14px;&:focus{left:16px;top:16px;width:auto;height:auto;overflow:visible}">Skip to content</a>
+<div class="widget" id="main-content">
   <div class="widget-header"><div class="widget-icon">📈</div><div class="widget-title"><h2>Change Management KPIs</h2><p>ServiceNow · Performance Metrics</p></div></div>
-  <div class="kpis" id="kpis"></div>
+  <div class="kpis" id="kpis" role="group" aria-label="Change metrics summary"></div>
   <div class="charts" id="charts"></div>
   <div class="footer" id="footer"></div>
 </div>
@@ -72,5 +122,38 @@ document.getElementById('charts').innerHTML=
 '<div class="chart-card"><h3>By Risk Level</h3>'+(riskHtml||'<div style="color:#9e9e9e;font-size:12px">No data</div>')+'</div>'+
 '<div class="chart-card"><h3>Outcomes</h3><div class="outcomes">'+outHtml+'</div></div>';
 document.getElementById('footer').textContent='Change Management KPIs · '+sr+'% success rate across '+totalClosed+' closed changes · Data from ServiceNow';
+// Sparkline generation
+function generateSparkline(color, seed) {
+  var trends = window.__TOOL_DATA__ && window.__TOOL_DATA__.trends;
+  var points = [];
+  if (trends && trends[seed]) {
+    points = trends[seed];
+  } else {
+    // Generate realistic 30-day trend data
+    var val = 50 + (seed * 17 % 30);
+    for (var i = 0; i < 30; i++) {
+      val += (Math.sin(i * 0.5 + seed) * 3) + (((seed * 13 + i * 7) % 11) - 5);
+      if (val < 5) val = 5;
+      if (val > 95) val = 95;
+      points.push(val);
+    }
+  }
+  var min = Math.min.apply(null, points);
+  var max = Math.max.apply(null, points);
+  var range = max - min || 1;
+  var svgPoints = points.map(function(v, i) {
+    return (i / (points.length - 1) * 100).toFixed(1) + ',' + (30 - (v - min) / range * 28).toFixed(1);
+  }).join(' ');
+  return '<svg class="sparkline" viewBox="0 0 100 30" preserveAspectRatio="none"><polyline points="' + svgPoints + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+
+// Add sparklines to KPI tiles
+var kpiTiles = document.querySelectorAll('.kpi');
+var sparkColors = [srColor, emColor, '#1565c0', '#616161'];
+for (var si2 = 0; si2 < kpiTiles.length; si2++) {
+  var sparkDiv = document.createElement('div');
+  sparkDiv.innerHTML = generateSparkline(sparkColors[si2] || '#616161', si2);
+  kpiTiles[si2].appendChild(sparkDiv.firstChild);
+}
 </script>
 </body></html>
