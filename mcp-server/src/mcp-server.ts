@@ -1230,11 +1230,23 @@ export function createChangeServer(): Server {
       case "show-incident-dashboard": {
         const snowInstance = process.env.SNOW_INSTANCE || "";
         // Always show active incidents only (no LLM-controlled state filter)
-        const incidents = await snow.getIncidents({ limit: 100 });
-        const data = { incidents, snowInstance, generatedAt: new Date().toISOString() };
+        const incidents = await snow.getIncidents({ limit: 200 });
+        // Slim down payload for widget embedding — only fields the HTML uses
+        const slimIncidents = incidents.map((i: any) => ({
+          sys_id: i.sys_id, number: i.number,
+          short_description: i.short_description,
+          description: (i.description || "").slice(0, 200),
+          state: i.state, priority: i.priority,
+          impact: i.impact, urgency: i.urgency,
+          category: i.category, assignment_group: i.assignment_group,
+          assigned_to: i.assigned_to, cmdb_ci: i.cmdb_ci,
+          caller_id: i.caller_id, opened_at: i.opened_at,
+          resolved_at: i.resolved_at, closed_at: i.closed_at,
+        }));
+        const data = { incidents: slimIncidents, snowInstance, generatedAt: new Date().toISOString() };
         const p1 = incidents.filter((i: any) => (i.priority || "").includes("1")).length;
         return widgetResponse(INCIDENT_DASHBOARD, data,
-          `Incident Dashboard: ${incidents.length} incidents. P1: ${p1}, P2: ${incidents.filter((i: any) => (i.priority || "").includes("2")).length}`);
+          `Incident Dashboard: ${incidents.length} active incidents. P1: ${p1}, P2: ${incidents.filter((i: any) => (i.priority || "").includes("2")).length}`);
       }
 
       // ── Text: Get Incidents ──
@@ -1245,7 +1257,7 @@ export function createChangeServer(): Server {
           limit: args?.limit as number,
         });
         const dlpIncidents = applyDlpToRecords(incidents, 'incident', 'read');
-        return textResponse(JSON.stringify(dlpIncidents, null, 2));
+        return textResponse(`Total: ${dlpIncidents.length} incident(s)\n\n${JSON.stringify(dlpIncidents, null, 2)}`);
       }
 
       // ── Write: Create Incident ──
@@ -1272,7 +1284,21 @@ export function createChangeServer(): Server {
         const snowInstance = process.env.SNOW_INSTANCE || "";
         // Always show all open problems (no LLM-controlled filters)
         const problems = await snow.getProblems({ limit: 50 });
-        const data = { problems, snowInstance, generatedAt: new Date().toISOString() };
+        // Slim down payload — only fields the widget HTML uses
+        const slimProblems = problems.map((p: any) => ({
+          sys_id: p.sys_id, number: p.number,
+          short_description: p.short_description,
+          description: (p.description || "").slice(0, 200),
+          state: p.state, priority: p.priority,
+          impact: p.impact, urgency: p.urgency,
+          category: p.category, assignment_group: p.assignment_group,
+          assigned_to: p.assigned_to, cmdb_ci: p.cmdb_ci,
+          known_error: p.known_error, opened_at: p.opened_at,
+          workaround: (p.workaround || "").slice(0, 200),
+          cause_notes: (p.cause_notes || "").slice(0, 200),
+          fix_notes: (p.fix_notes || "").slice(0, 200),
+        }));
+        const data = { problems: slimProblems, snowInstance, generatedAt: new Date().toISOString() };
         return widgetResponse(PROBLEM_DASHBOARD, data,
           `Problem Dashboard: ${problems.length} problems. Known Errors: ${problems.filter((p: any) => p.known_error === "true").length}`);
       }

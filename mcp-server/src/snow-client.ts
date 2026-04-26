@@ -362,7 +362,7 @@ export async function getIncidents(filters?: {
   if (filters?.category) q.eq('category', filters.category);
   if (filters?.assignment_group) q.eq('assignment_group.name', filters.assignment_group);
   q.orderByDesc('opened_at');
-  return snowGet("incident", q.build(), INCIDENT_FIELDS, filters?.limit ?? 50);
+  return snowGet("incident", q.build(), INCIDENT_FIELDS, filters?.limit ?? 200);
 }
 
 /** Get all incidents including closed (for metrics) */
