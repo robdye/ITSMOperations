@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Shift Handover Briefing</title>
+<style>
+:root {
+  --fluent-colorNeutralBackground1: #ffffff;
+  --fluent-colorNeutralBackground2: #fafafa;
+  --fluent-colorNeutralBackground3: #f5f5f5;
+  --fluent-colorNeutralForeground1: #242424;
+  --fluent-colorNeutralForeground2: #616161;
+  --fluent-colorNeutralForeground3: #9e9e9e;
+  --fluent-colorNeutralStroke1: #e0e0e0;
+  --fluent-colorBrandBackground: #0f6cbd;
+  --fluent-colorBrandForeground1: #0f6cbd;
+  --fluent-colorPaletteRedBackground3: #c50f1f;
+  --fluent-colorPaletteRedForeground1: #c50f1f;
+  --fluent-colorPaletteGreenBackground3: #107c10;
+  --fluent-colorPaletteGreenForeground1: #107c10;
+  --fluent-colorPaletteYellowBackground3: #f7630c;
+  --fluent-colorPaletteYellowForeground1: #f7630c;
+  --fluent-colorNeutralShadowAmbient: rgba(0,0,0,0.12);
+  --fluent-colorNeutralShadowKey: rgba(0,0,0,0.14);
+  --fluent-borderRadiusMedium: 8px;
+  --fluent-borderRadiusLarge: 12px;
+  --fluent-fontFamilyBase: 'Segoe UI', -apple-system, system-ui, sans-serif;
+  --fluent-fontSizeBase300: 14px;
+  --fluent-fontSizeBase400: 16px;
+  --fluent-fontSizeBase500: 20px;
+  --fluent-fontSizeBase600: 24px;
+  --fluent-fontWeightSemibold: 600;
+  --fluent-spacingHorizontalM: 12px;
+  --fluent-spacingHorizontalL: 16px;
+  --fluent-spacingVerticalM: 12px;
+  --fluent-spacingVerticalL: 16px;
+  --fluent-shadow4: 0 2px 4px var(--fluent-colorNeutralShadowAmbient), 0 1px 2px var(--fluent-colorNeutralShadowKey);
+  --fluent-shadow8: 0 4px 8px var(--fluent-colorNeutralShadowAmbient), 0 2px 4px var(--fluent-colorNeutralShadowKey);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fluent-colorNeutralBackground1: #1f1f1f;
+    --fluent-colorNeutralBackground2: #292929;
+    --fluent-colorNeutralBackground3: #333333;
+    --fluent-colorNeutralForeground1: #ffffff;
+    --fluent-colorNeutralForeground2: #d6d6d6;
+    --fluent-colorNeutralForeground3: #adadad;
+    --fluent-colorNeutralStroke1: #404040;
+    --fluent-colorNeutralShadowAmbient: rgba(0,0,0,0.24);
+    --fluent-colorNeutralShadowKey: rgba(0,0,0,0.28);
+  }
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--fluent-fontFamilyBase);background:var(--fluent-colorNeutralBackground3);color:var(--fluent-colorNeutralForeground1);padding:20px;line-height:1.5}
+.widget{background:var(--fluent-colorNeutralBackground1);border-radius:var(--fluent-borderRadiusLarge);border:1px solid var(--fluent-colorNeutralStroke1);overflow:hidden;max-width:960px;margin:0 auto;box-shadow:var(--fluent-shadow8)}
+.widget-header{display:flex;align-items:center;gap:10px;padding:var(--fluent-spacingVerticalL) 20px;border-bottom:1px solid var(--fluent-colorNeutralStroke1)}
+.widget-icon{width:36px;height:36px;border-radius:var(--fluent-borderRadiusMedium);background:#e8f0fe;display:flex;align-items:center;justify-content:center;font-size:18px}
+.widget-title h2{font-size:var(--fluent-fontSizeBase400);font-weight:var(--fluent-fontWeightSemibold)}
+.widget-title p{font-size:12px;color:var(--fluent-colorNeutralForeground2)}
+.shift-bar{display:flex;gap:0;background:var(--fluent-colorNeutralStroke1);border-bottom:1px solid var(--fluent-colorNeutralStroke1)}
+.shift-bar .shift{flex:1;padding:14px 20px;background:var(--fluent-colorNeutralBackground1);text-align:center}
+.shift .shift-label{font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:var(--fluent-colorNeutralForeground3)}
+.shift .shift-val{font-size:var(--fluent-fontSizeBase300);font-weight:var(--fluent-fontWeightSemibold);margin-top:2px}
+.section{padding:20px;border-bottom:1px solid var(--fluent-colorNeutralStroke1)}
+.section:last-of-type{border-bottom:none}
+.section-header{display:flex;align-items:center;gap:8px;margin-bottom:var(--fluent-spacingVerticalM)}
+.section-header h3{font-size:var(--fluent-fontSizeBase300);font-weight:var(--fluent-fontWeightSemibold)}
+.section-header .count{background:var(--fluent-colorNeutralBackground3);padding:2px 8px;border-radius:12px;font-size:11px;font-weight:var(--fluent-fontWeightSemibold);color:var(--fluent-colorNeutralForeground2)}
+.item{padding:10px 14px;background:var(--fluent-colorNeutralBackground2);border-radius:var(--fluent-borderRadiusMedium);margin-bottom:8px;display:flex;gap:12px;align-items:flex-start}
+.item:focus{outline:2px solid var(--fluent-colorBrandBackground);outline-offset:1px}
+.item-icon{font-size:16px;flex-shrink:0;margin-top:2px}
+.item-body{flex:1}
+.item-title{font-size:13px;font-weight:var(--fluent-fontWeightSemibold)}
+.item-desc{font-size:12px;color:var(--fluent-colorNeutralForeground2);margin-top:2px}
+.badge{display:inline-flex;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:var(--fluent-fontWeightSemibold);margin-right:6px}
+.badge-p1{background:#fde7e9;color:var(--fluent-colorPaletteRedForeground1)}.badge-p2{background:#fff4e5;color:var(--fluent-colorPaletteYellowForeground1)}
+.badge-p3{background:#e6f4e6;color:var(--fluent-colorPaletteGreenForeground1)}.badge-info{background:var(--fluent-colorNeutralBackground3);color:var(--fluent-colorNeutralForeground2)}
+.escalation{background:#fde7e9;border-left:4px solid var(--fluent-colorPaletteRedBackground3)}
+.note-list{list-style:none;display:flex;flex-direction:column;gap:6px}
+.note-list li{padding:8px 12px;background:var(--fluent-colorNeutralBackground2);border-radius:var(--fluent-borderRadiusMedium);font-size:13px;display:flex;align-items:center;gap:8px}
+.note-list li::before{content:'•';color:var(--fluent-colorBrandForeground1);font-weight:700;font-size:16px}
+.empty-section{color:var(--fluent-colorNeutralForeground3);font-size:13px;padding:8px 0}
+.footer{padding:10px 16px;border-top:1px solid var(--fluent-colorNeutralStroke1);text-align:right;font-size:10px;color:var(--fluent-colorNeutralForeground3)}
+</style>
+</head>
+<body>
+<div class="widget" role="region" aria-label="Shift Handover Briefing">
+  <div class="widget-header"><div class="widget-icon">📋</div><div class="widget-title"><h2>Shift Handover Briefing</h2><p>Operations Handover Summary</p></div></div>
+  <div class="shift-bar" id="shift-bar" role="group" aria-label="Shift information"></div>
+  <div id="sections" aria-live="polite"></div>
+  <div class="footer" id="footer"></div>
+</div>
+<script>
+var to=window.__TOOL_DATA__||(window.openai&&window.openai.toolOutput)||{};
+var h=to.handover||{};
+
+function esc(s){var d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
+
+// Shift bar
+var outgoing=h.outgoingShift||h.outgoing||{};
+var incoming=h.incomingShift||h.incoming||{};
+document.getElementById('shift-bar').innerHTML=
+  '<div class="shift"><div class="shift-label">Outgoing</div><div class="shift-val">'+esc(outgoing.name||outgoing.engineer||'—')+' · '+esc(outgoing.time||outgoing.end||'—')+'</div></div>'+
+  '<div class="shift" style="border-left:1px solid var(--fluent-colorNeutralStroke1)"><div class="shift-label">Incoming</div><div class="shift-val">'+esc(incoming.name||incoming.engineer||'—')+' · '+esc(incoming.time||incoming.start||'—')+'</div></div>';
+
+var sections='';
+
+// Open incidents
+var incidents=h.incidents||h.openIncidents||[];
+var p1Count=0,p2Count=0;
+for(var i=0;i<incidents.length;i++){var p=(incidents[i].priority||'').toLowerCase();if(p.indexOf('1')>-1)p1Count++;else if(p.indexOf('2')>-1)p2Count++;}
+sections+='<div class="section" role="region" aria-label="Open incidents"><div class="section-header"><h3>🔴 Open Incidents</h3><span class="count">'+incidents.length+'</span>'+(p1Count?'<span class="badge badge-p1">P1: '+p1Count+'</span>':'')+(p2Count?'<span class="badge badge-p2">P2: '+p2Count+'</span>':'')+'</div>';
+if(incidents.length===0){sections+='<div class="empty-section">No open incidents at handover.</div>';}
+else{for(var i=0;i<incidents.length;i++){var inc=incidents[i];var pCls=(inc.priority||'').indexOf('1')>-1?'badge-p1':(inc.priority||'').indexOf('2')>-1?'badge-p2':'badge-p3';sections+='<div class="item" tabindex="0"><div class="item-icon">⚠️</div><div class="item-body"><div class="item-title"><span class="badge '+pCls+'">'+esc(inc.priority||'P3')+'</span>'+esc(inc.number||'')+' — '+esc(inc.short_description||inc.description||'')+'</div><div class="item-desc">'+esc(inc.status||inc.state||'')+' · Assigned: '+esc(inc.assigned_to||inc.assignedTo||'Unassigned')+'</div></div></div>';}}
+sections+='</div>';
+
+// Active changes
+var changes=h.changes||h.activeChanges||[];
+sections+='<div class="section" role="region" aria-label="Active changes"><div class="section-header"><h3>🔄 Active Changes</h3><span class="count">'+changes.length+'</span></div>';
+if(changes.length===0){sections+='<div class="empty-section">No active changes during handover.</div>';}
+else{for(var i=0;i<changes.length;i++){var ch=changes[i];sections+='<div class="item" tabindex="0"><div class="item-icon">📝</div><div class="item-body"><div class="item-title">'+esc(ch.number||'')+' — '+esc(ch.short_description||ch.description||'')+'</div><div class="item-desc">'+esc(ch.state||ch.status||'')+' · Planned: '+esc(ch.planned_start||ch.plannedStart||'—')+'</div></div></div>';}}
+sections+='</div>';
+
+// Ongoing problems
+var problems=h.problems||h.ongoingProblems||[];
+sections+='<div class="section" role="region" aria-label="Ongoing problems"><div class="section-header"><h3>🔍 Ongoing Problems</h3><span class="count">'+problems.length+'</span></div>';
+if(problems.length===0){sections+='<div class="empty-section">No ongoing problems to report.</div>';}
+else{for(var i=0;i<problems.length;i++){var pr=problems[i];sections+='<div class="item" tabindex="0"><div class="item-icon">🔍</div><div class="item-body"><div class="item-title">'+esc(pr.number||'')+' — '+esc(pr.short_description||pr.description||'')+'</div><div class="item-desc">'+esc(pr.state||pr.status||'')+' · Impact: '+esc(pr.impact||'—')+'</div></div></div>';}}
+sections+='</div>';
+
+// Key actions / notes
+var actions=h.actions||h.keyActions||h.notes||[];
+sections+='<div class="section" role="region" aria-label="Key actions and notes"><div class="section-header"><h3>📌 Key Actions &amp; Notes</h3></div>';
+if(actions.length===0){sections+='<div class="empty-section">No key actions noted.</div>';}
+else{sections+='<ul class="note-list">';for(var i=0;i<actions.length;i++){var a=typeof actions[i]==='string'?actions[i]:(actions[i].text||actions[i].description||'');sections+='<li tabindex="0">'+esc(a)+'</li>';}sections+='</ul>';}
+sections+='</div>';
+
+// Escalations
+var escalations=h.escalations||[];
+sections+='<div class="section" role="region" aria-label="Escalations summary"><div class="section-header"><h3>🚨 Escalations</h3><span class="count">'+escalations.length+'</span></div>';
+if(escalations.length===0){sections+='<div class="empty-section">No active escalations.</div>';}
+else{for(var i=0;i<escalations.length;i++){var e=escalations[i];sections+='<div class="item escalation" tabindex="0"><div class="item-icon">🚨</div><div class="item-body"><div class="item-title">'+esc(e.title||e.number||e.description||'')+'</div><div class="item-desc">'+esc(e.reason||e.details||'')+' · '+esc(e.status||'Pending')+'</div></div></div>';}}
+sections+='</div>';
+
+document.getElementById('sections').innerHTML=sections;
+document.getElementById('footer').textContent='Shift Handover · Generated '+new Date().toLocaleString();
+</script>
+</body>
+</html>

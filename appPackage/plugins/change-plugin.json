@@ -5,7 +5,7 @@
     "name_for_model": "itsm_change",
     "description_for_human": "Change management: create, update, and track change requests with risk analysis and CAB workflows.",
     "description_for_model": "Use for ServiceNow change management: creating, updating, querying change requests, risk briefings, collision detection, CAB agendas, change metrics, and post-implementation reviews.",
-    "logo_url": "https://itsm-digital-worker.graycoast-8df9ee76.eastus.azurecontainerapps.io/assets/itsm-logo.png",
+    "logo_url": "${{CONTAINER_APP_URL}}/assets/itsm-logo.png",
     "contact_email": "itops@absx68251802.onmicrosoft.com",
     "legal_info_url": "https://absx68251802.sharepoint.com/sites/itsm-operations/legal",
     "namespace": "itsm_change",

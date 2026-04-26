@@ -35,6 +35,36 @@ export interface A2AResponse {
 const connectedAgents = new Map<string, ConnectedAgent>();
 
 /**
+ * Register the ServiceNow first-party agent for A2A delegation.
+ * Uses the SNOW_INSTANCE env var to build the agent endpoint.
+ */
+export function registerServiceNowAgent(): void {
+  const snowInstance = process.env.SNOW_INSTANCE || '';
+  if (!snowInstance) {
+    console.log('[A2A] SNOW_INSTANCE not set — ServiceNow agent not registered');
+    return;
+  }
+
+  const agent: ConnectedAgent = {
+    id: 'servicenow-agent',
+    name: 'ServiceNow Virtual Agent',
+    endpoint: snowInstance,
+    capabilities: [
+      'incident-management',
+      'change-management',
+      'knowledge-management',
+      'service-catalog',
+      'live-chat',
+      'agent-workspace',
+    ],
+    status: 'active',
+    lastHealthCheck: new Date().toISOString(),
+  };
+
+  registerAgent(agent);
+}
+
+/**
  * Register an external agent for A2A communication.
  */
 export function registerAgent(agent: ConnectedAgent): void {
@@ -187,7 +217,7 @@ export function getDiscoveryManifest(): Record<string, unknown> {
       'security-operations',
       'finops-management',
     ],
-    protocols: ['a2a', 'mcp'],
+    protocols: ['a2a', 'mcp', 'servicenow'],
     endpoints: {
       a2a: '/api/a2a/message',
       discovery: '/api/a2a/discover',

@@ -21,6 +21,7 @@ import tokenCache, { createAgenticTokenCacheKey } from './token-cache';
 import { classifyIntent } from './worker-registry';
 import { runWorker, type PromptContext } from './agent-harness';
 import { createConfirmationCard } from './adaptive-cards';
+import { publishIncidentEvent, publishChangeEvent, publishProblemEvent } from './service-bus';
 
 const mcp = new ItsmMcpClient();
 const workiq = new WorkIqClient();
@@ -247,6 +248,16 @@ export class ItsmAgent extends AgentApplication<TurnState> {
         const result = await runWorker(classification.worker, enrichedPrompt, ctx);
         addMessage(userId, 'assistant', result.output);
         stopTypingLoop();
+
+        // Publish domain events to Service Bus for downstream consumers
+        const conversationId = context.activity.conversation?.id || '';
+        if (classification.worker.id === 'incident-manager') {
+          publishIncidentEvent({ incidentId: '', number: '', action: 'updated', priority: 3, state: 'processed', shortDescription: text.substring(0, 200) }, conversationId).catch(() => {});
+        } else if (classification.worker.id === 'change-manager') {
+          publishChangeEvent({ changeId: '', number: '', action: 'submitted', type: 'Normal', risk: 'low', cabRequired: false }, conversationId).catch(() => {});
+        } else if (classification.worker.id === 'problem-manager') {
+          publishProblemEvent({ problemId: '', number: '', action: 'created', relatedIncidents: [] }, conversationId).catch(() => {});
+        }
 
         // Prefix with worker badge so the user sees which practice handled it
         const badge = `🏷️ *${classification.worker.name}*\n\n`;

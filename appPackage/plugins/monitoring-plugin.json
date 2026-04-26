@@ -5,7 +5,7 @@
     "name_for_model": "itsm_monitoring",
     "description_for_human": "Infrastructure monitoring: Azure alerts and resource health status.",
     "description_for_model": "Use for ServiceNow monitoring integration: querying Azure Monitor alerts for infrastructure health and checking resource health status.",
-    "logo_url": "https://itsm-digital-worker.graycoast-8df9ee76.eastus.azurecontainerapps.io/assets/itsm-logo.png",
+    "logo_url": "${{CONTAINER_APP_URL}}/assets/itsm-logo.png",
     "contact_email": "itops@absx68251802.onmicrosoft.com",
     "legal_info_url": "https://absx68251802.sharepoint.com/sites/itsm-operations/legal",
     "namespace": "itsm_monitoring",

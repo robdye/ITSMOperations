@@ -523,7 +523,7 @@ All 29 Azure resources are deployed via Bicep (`infra/main.bicep`):
 | 28 | Security Manager MI | User-Assigned Managed Identity | Scoped RBAC for security operations |
 | 29 | ACR Pull Roles (2) | Role Assignments | Digital Worker + MCP Server pull from ACR |
 
-**Container App FQDN**: `itsm-digital-worker.graycoast-8df9ee76.eastus.azurecontainerapps.io`
+**Container App FQDN**: `<your-container-app>.azurecontainerapps.io`
 
 ---
 
@@ -945,7 +945,7 @@ az containerapp update \
   --image <acr-login-server>/itsm-mcp-server:${SHA}
 
 # Health checks
-curl https://itsm-digital-worker.graycoast-8df9ee76.eastus.azurecontainerapps.io/api/health
+curl https://<your-container-app>.azurecontainerapps.io/api/health
 ```
 
 ### Bicep IaC Deployment

@@ -5,7 +5,7 @@
     "name_for_model": "itsm_incident",
     "description_for_human": "Incident management: create, update, and track incidents with priority dashboards.",
     "description_for_model": "Use for ServiceNow incident management: creating, updating, querying incidents, viewing incident dashboards, and checking incidents for configuration items.",
-    "logo_url": "https://itsm-digital-worker.graycoast-8df9ee76.eastus.azurecontainerapps.io/assets/itsm-logo.png",
+    "logo_url": "${{CONTAINER_APP_URL}}/assets/itsm-logo.png",
     "contact_email": "itops@absx68251802.onmicrosoft.com",
     "legal_info_url": "https://absx68251802.sharepoint.com/sites/itsm-operations/legal",
     "namespace": "itsm_incident",

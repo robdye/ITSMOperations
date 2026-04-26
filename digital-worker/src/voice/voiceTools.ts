@@ -32,6 +32,8 @@ export const VOICE_TOOLS = [
   // Asset
   { type: 'function', name: 'get_asset_lifecycle', description: 'Get the asset lifecycle compliance dashboard.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
   { type: 'function', name: 'get_expired_warranties', description: 'Get assets with expired warranties.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
+  // Live Chat
+  { type: 'function', name: 'connect_live_agent', description: 'Connect the caller to a ServiceNow live chat agent for human support.', parameters: { type: 'object', properties: { reason: { type: 'string', description: 'Reason for requesting a live agent' } }, required: ['reason'], additionalProperties: false } },
 ];
 
 /** Execute a voice tool call and return a voice-friendly text summary */
@@ -57,6 +59,13 @@ export async function executeVoiceTool(name: string, args: Record<string, unknow
       case 'get_itsm_briefing': result = await mcp.getItsmBriefing(); break;
       case 'get_asset_lifecycle': result = await mcp.getAssetLifecycle(); break;
       case 'get_expired_warranties': result = await mcp.getExpiredWarranties(); break;
+      case 'connect_live_agent': {
+        const reason = (args.reason as string) || 'User requested live agent';
+        const snowInstance = process.env.SNOW_INSTANCE || '';
+        return `I'm connecting you to a ServiceNow live agent now. Reason: ${reason}. ` +
+          `Please hold while I transfer you. A support agent from ${snowInstance ? 'the ServiceNow service desk' : 'IT support'} will be with you shortly. ` +
+          `Your conversation context has been forwarded so you won't need to repeat yourself.`;
+      }
       default: return `Unknown tool: ${name}`;
     }
     // Extract voice-friendly text from result

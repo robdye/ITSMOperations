@@ -103,6 +103,7 @@ let FINOPS_DASHBOARD: Widget;
 let SHADOW_AGENTS: Widget;
 let SCHEDULE_CONTROL: Widget;
 let HANDOVER: Widget;
+let SNOW_LIVE_CHAT: Widget;
 
 function loadWidgets() {
   CHANGE_DASHBOARD = {
@@ -249,10 +250,18 @@ function loadWidgets() {
     invoked: "Handover report ready.",
     html: readWidgetHtml("handover"),
   };
+  SNOW_LIVE_CHAT = {
+    id: "snow-live-chat",
+    title: "ServiceNow Live Chat",
+    uri: "ui://widget/snow-live-chat.html",
+    invoking: "Connecting to ServiceNow live agent\u2026",
+    invoked: "Live chat ready.",
+    html: readWidgetHtml("snow-live-chat"),
+  };
 }
 
 function allWidgets(): Widget[] {
-  return [CHANGE_DASHBOARD, CHANGE_REQUEST, BLAST_RADIUS, RISK_FORECAST, ASSET_LIFECYCLE, CHANGE_FORM, CHANGE_BRIEFING, CHANGE_METRICS, INCIDENT_DASHBOARD, PROBLEM_DASHBOARD, SLA_DASHBOARD, ITSM_BRIEFING, MISSION_CONTROL, AUDIT_TRAIL, FINOPS_DASHBOARD, SHADOW_AGENTS, SCHEDULE_CONTROL, HANDOVER];
+  return [CHANGE_DASHBOARD, CHANGE_REQUEST, BLAST_RADIUS, RISK_FORECAST, ASSET_LIFECYCLE, CHANGE_FORM, CHANGE_BRIEFING, CHANGE_METRICS, INCIDENT_DASHBOARD, PROBLEM_DASHBOARD, SLA_DASHBOARD, ITSM_BRIEFING, MISSION_CONTROL, AUDIT_TRAIL, FINOPS_DASHBOARD, SHADOW_AGENTS, SCHEDULE_CONTROL, HANDOVER, SNOW_LIVE_CHAT];
 }
 
 // ── _meta helpers ───────────────────────────────────────────
@@ -573,6 +582,11 @@ export function createChangeServer(): Server {
       { name: "harvest-knowledge", description: "Extract knowledge from a resolved incident and format as KB draft.", inputSchema: { type: "object" as const, properties: { incident_number: { type: "string" as const, description: "Incident number" }, include_workaround: { type: "boolean" as const, description: "Include workaround steps" } }, required: ["incident_number"] as const, additionalProperties: false }, annotations: { readOnlyHint: true } },
       // ── KB Article Creation ──
       { name: "create-kb-article", description: "Create a knowledge base article in ServiceNow.", inputSchema: { type: "object" as const, properties: { title: { type: "string" as const, description: "Article title" }, body: { type: "string" as const, description: "Article body (HTML)" }, category: { type: "string" as const }, keywords: { type: "string" as const, description: "Comma-separated keywords" } }, required: ["title", "body"] as const, additionalProperties: false } },
+      // ── ServiceNow Live Chat ──
+      { name: "connect-live-agent", description: "Connect the user to a ServiceNow live chat agent for real-time human support.", inputSchema: { type: "object" as const, properties: { reason: { type: "string" as const, description: "Reason for requesting a live agent" }, queue: { type: "string" as const, description: "Support queue: general, network, security, database" } }, additionalProperties: false }, _meta: descriptorMeta(SNOW_LIVE_CHAT) } as any,
+      // ── Demo Data ──
+      { name: "seed-demo-data", description: "Seed the ServiceNow dev instance with realistic ITSM demo data (incidents, changes, problems, CMDB CIs, SLAs).", inputSchema: { type: "object" as const, properties: {}, additionalProperties: false } },
+      { name: "clear-demo-data", description: "Remove all [DEMO]-prefixed records from the ServiceNow dev instance.", inputSchema: { type: "object" as const, properties: {}, additionalProperties: false } },
     ];
     return { tools };
   });
@@ -2102,6 +2116,41 @@ export function createChangeServer(): Server {
         const result = await snow.createKnowledgeArticle(kbData);
         const snowInstance = process.env.SNOW_INSTANCE || "";
         return textResponse(`KB Article created: ${result.number || "N/A"}\nTitle: ${args?.title}\nCategory: ${kbData.category}\nState: draft\nLink: ${snowInstance}/nav_to.do?uri=kb_knowledge.do?sys_id=${result.sys_id}`);
+      }
+
+      // ── ServiceNow Live Chat ──
+      case "connect-live-agent": {
+        const snowInstance = process.env.SNOW_INSTANCE || "";
+        const reason = (args?.reason as string) || "User requested live agent";
+        const queue = (args?.queue as string) || "general";
+        const data = {
+          config: {
+            snowInstance,
+            queue,
+            reason,
+            agentAvailable: true,
+            estimatedWaitTime: "< 2 minutes",
+          },
+          agentStatus: {
+            online: true,
+            queueDepth: 3,
+            avgResponseTime: "45s",
+          },
+        };
+        return widgetResponse(SNOW_LIVE_CHAT, data,
+          `Connecting to ServiceNow live agent. Queue: ${queue}. Reason: ${reason}.`);
+      }
+
+      // ── Demo Data ──
+      case "seed-demo-data": {
+        const { seedDemoData } = await import("./snow-demo-data.js");
+        const result = await seedDemoData();
+        return textResponse(`Demo data seeded:\n${JSON.stringify(result, null, 2)}`);
+      }
+      case "clear-demo-data": {
+        const { clearDemoData } = await import("./snow-demo-data.js");
+        await clearDemoData();
+        return textResponse("Demo data cleared — all [DEMO] records removed.");
       }
 
       default:

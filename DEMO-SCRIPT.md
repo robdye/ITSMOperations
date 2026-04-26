@@ -6,8 +6,8 @@
 ## Pre-Demo Setup
 - Open [M365 Copilot](https://m365.cloud.microsoft/chat) in your browser
 - Select **ITSM Operations** from the agent sidebar
-- Ensure ServiceNow dev instance is active: https://dev336844.service-now.com/
-- ITSM Digital Worker running: https://itsm-operations-worker.jollysand-88b78b02.eastus.azurecontainerapps.io/api/health
+- Ensure ServiceNow dev instance is active: https://YOUR_INSTANCE.service-now.com/
+- ITSM Digital Worker running: https://YOUR_CONTAINER_APP.azurecontainerapps.io/api/health
 - Recommended: full-screen browser for widget impact
 - Voice demo: have headset ready, open /voice page in separate tab
 

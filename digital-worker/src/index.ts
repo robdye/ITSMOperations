@@ -31,7 +31,7 @@ import { isVoiceEnabled } from './voice/voiceGate';
 import { initCosmosStore } from './cosmos-store';
 import { resolveSecrets } from './secret-resolver';
 import { initServiceBus, closeServiceBus, getServiceBusStatus } from './service-bus';
-import { createA2AHandler, getDiscoveryManifest } from './connected-agents';
+import { createA2AHandler, getDiscoveryManifest, registerServiceNowAgent } from './connected-agents';
 import { initRedis, closeRedis, getRedisStatus } from './redis-store';
 import { handleApprovalCallback, cancelAllPendingApprovals } from './teams-approvals';
 import { handleFlowCallback, getPowerAutomateStatus } from './power-automate';
@@ -388,6 +388,9 @@ httpServer.listen(port, host, async () => {
 
   // Initialize Azure Service Bus pub/sub messaging (falls back to local dispatch if not configured)
   await initServiceBus();
+
+  // Register ServiceNow first-party agent for A2A communication
+  registerServiceNowAgent();
 
   // Initialize Graph Connector for M365 search indexing (non-blocking)
   setupGraphConnector().then(ok => {

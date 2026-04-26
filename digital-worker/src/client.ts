@@ -25,7 +25,7 @@ import {
   startConversation, logIntent, logRouting, logThinking,
   logOutcome, logError,
 } from './reasoning-trace';
-import { startRoutingSpan, endSpanOk, endSpanError, recordWorkerInvocation, recordResponseLatency } from './telemetry';
+import { startRoutingSpan, startInferenceSpan, recordTokenUsage, startMcpSpan, endSpanOk, endSpanError, recordWorkerInvocation, recordResponseLatency } from './telemetry';
 import { analyzeInput, analyzeOutput } from './content-safety';
 
 configureOpenAIClient();
@@ -262,13 +262,17 @@ class WorkerClient implements Client {
     // Foundry delegation: attempt for promoted workers before local execution
     if (isFoundryPromoted(classification.worker.id)) {
       try {
+        const foundryModel = getModelForTask(detectTaskType(classification.worker.id, prompt));
         const agentId = await ensureFoundryAgent(
           classification.worker.id,
           classification.worker.name,
           classification.worker.instructions,
-          getModelForTask(detectTaskType(classification.worker.id, prompt)),
+          foundryModel,
+          classification.worker.tools,
         );
+        const inferenceSpan = startInferenceSpan('foundry.execute', foundryModel);
         const foundryResult = await executeViaFoundry(classification.worker.id, agentId, prompt);
+        endSpanOk(inferenceSpan);
         return foundryResult.response;
       } catch (err) {
         console.warn(`[Foundry] Delegation failed for ${classification.worker.id}, falling back to local:`, (err as Error).message);
@@ -277,7 +281,9 @@ class WorkerClient implements Client {
     }
 
     try {
+      const inferenceSpan = startInferenceSpan('worker.run', getModelName());
       const result = await runWorker(classification.worker, prompt, ctx);
+      endSpanOk(inferenceSpan);
       const durationMs = Date.now() - startTime;
 
       // Content safety check on output

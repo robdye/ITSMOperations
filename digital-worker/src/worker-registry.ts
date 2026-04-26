@@ -155,6 +155,13 @@ const PATTERNS: Array<{
       /\buser request/i,
       /\bticket/i,
       /\bhelp desk/i,
+      /\blive chat/i,
+      /\blive agent/i,
+      /\btalk.*agent/i,
+      /\bconnect.*agent/i,
+      /\bhuman agent/i,
+      /\bspeak.*someone/i,
+      /\bchat.*support/i,
     ],
   },
   {

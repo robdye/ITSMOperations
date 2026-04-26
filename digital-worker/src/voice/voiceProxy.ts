@@ -8,7 +8,7 @@ import { VOICE_TOOLS, executeVoiceTool } from './voiceTools';
 import { isVoiceEnabled } from './voiceGate';
 
 const VOICELIVE_ENDPOINT = process.env.VOICELIVE_ENDPOINT || '';
-const VOICELIVE_MODEL = process.env.VOICELIVE_MODEL || 'gpt-4o';
+const VOICELIVE_MODEL = process.env.VOICELIVE_MODEL || 'gpt-realtime';
 const MANAGER_NAME = process.env.MANAGER_NAME || 'the IT Director';
 
 function extractVoiceData(result: unknown): string {
@@ -55,7 +55,7 @@ Your manager is ${MANAGER_NAME}.`;
 
 function buildVoiceLiveUrl(): string {
   const url = new URL(VOICELIVE_ENDPOINT);
-  return `wss://${url.host}/voice-live/realtime?api-version=2025-10-01&model=${VOICELIVE_MODEL}`;
+  return `wss://${url.host}/openai/realtime?api-version=2024-10-01-preview&deployment=${VOICELIVE_MODEL}`;
 }
 
 async function getAccessToken(): Promise<string> {
@@ -87,14 +87,31 @@ export function attachVoiceWebSocket(server: Server): void {
   wss.on('connection', async (clientWs) => {
     console.log('[voice] Browser connected');
     let serviceWs: WebSocket | null = null;
+    const wsUrl = buildVoiceLiveUrl();
 
-    try {
+    async function connectToService(isRetry = false): Promise<WebSocket> {
+      const label = isRetry ? 'Retry connecting' : 'Connecting';
+      console.log(`[voice] ${label} to ${wsUrl.replace(/api-version=[^&]+/, 'api-version=...')}`);
       const token = await getAccessToken();
-      serviceWs = new WebSocket(buildVoiceLiveUrl(), { headers: { Authorization: `Bearer ${token}` } });
+      const ws = new WebSocket(wsUrl, { headers: { Authorization: `Bearer ${token}` } });
 
-      serviceWs.on('open', () => {
-        console.log('[voice] Connected to Voice Live');
-        serviceWs!.send(JSON.stringify({
+      // 5-second connection timeout
+      const connectTimeout = setTimeout(() => {
+        console.error(`[voice] Connection timeout (5s) - endpoint: ${VOICELIVE_ENDPOINT}, deployment: ${VOICELIVE_MODEL}`);
+        ws.close();
+        if (clientWs.readyState === WebSocket.OPEN) clientWs.close(1011);
+      }, 5000);
+
+      ws.on('open', () => clearTimeout(connectTimeout));
+      ws.on('error', () => clearTimeout(connectTimeout));
+      ws.on('close', () => clearTimeout(connectTimeout));
+      return ws;
+    }
+
+    function wireServiceEvents(ws: WebSocket) {
+      ws.on('open', () => {
+        console.log(`[voice] Connected to Voice Live (deployment: ${VOICELIVE_MODEL})`);
+        ws.send(JSON.stringify({
           type: 'session.update',
           session: {
             modalities: ['text', 'audio'],
@@ -111,7 +128,7 @@ export function attachVoiceWebSocket(server: Server): void {
         }));
       });
 
-      serviceWs.on('message', async (data) => {
+      ws.on('message', async (data) => {
         let event: any;
         try { event = JSON.parse(data.toString()); } catch { return; }
 
@@ -121,14 +138,14 @@ export function attachVoiceWebSocket(server: Server): void {
           try {
             const result = await executeVoiceTool(fnName, JSON.parse(fnArgs));
             const voiceData = extractVoiceData(result);
-            if (serviceWs?.readyState === WebSocket.OPEN) {
-              serviceWs.send(JSON.stringify({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id, output: voiceData } }));
-              serviceWs.send(JSON.stringify({ type: 'response.create' }));
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id, output: voiceData } }));
+              ws.send(JSON.stringify({ type: 'response.create' }));
             }
           } catch (err) {
-            if (serviceWs?.readyState === WebSocket.OPEN) {
-              serviceWs.send(JSON.stringify({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id, output: JSON.stringify({ error: String(err) }) } }));
-              serviceWs.send(JSON.stringify({ type: 'response.create' }));
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id, output: JSON.stringify({ error: String(err) }) } }));
+              ws.send(JSON.stringify({ type: 'response.create' }));
             }
           }
           return;
@@ -137,21 +154,47 @@ export function attachVoiceWebSocket(server: Server): void {
         if (clientWs.readyState === WebSocket.OPEN) clientWs.send(data.toString());
       });
 
-      serviceWs.on('close', () => { if (clientWs.readyState === WebSocket.OPEN) clientWs.close(1000); });
-      serviceWs.on('error', (err) => { console.error('[voice] Voice Live error:', err.message); if (clientWs.readyState === WebSocket.OPEN) clientWs.close(1011); });
-
-      clientWs.on('message', (data) => {
-        if (!serviceWs || serviceWs.readyState !== WebSocket.OPEN) return;
-        if (typeof data === 'string') { serviceWs.send(data); }
-        else { serviceWs.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: Buffer.from(data as ArrayBuffer).toString('base64') })); }
+      ws.on('close', (code, reason) => {
+        console.log(`[voice] Voice Live disconnected (code: ${code}, reason: ${reason?.toString() || 'none'})`);
+        if (clientWs.readyState === WebSocket.OPEN) clientWs.close(1000);
       });
-    } catch (err) {
-      console.error('[voice] Failed to connect:', err);
-      if (clientWs.readyState === WebSocket.OPEN) clientWs.close(1011);
+      ws.on('error', (err) => {
+        console.error(`[voice] Voice Live error: ${err.message} (endpoint: ${VOICELIVE_ENDPOINT}, deployment: ${VOICELIVE_MODEL})`);
+        if (clientWs.readyState === WebSocket.OPEN) clientWs.close(1011);
+      });
     }
 
-    clientWs.on('close', () => { if (serviceWs?.readyState === WebSocket.OPEN) serviceWs.close(); });
-    clientWs.on('error', () => { if (serviceWs?.readyState === WebSocket.OPEN) serviceWs.close(); });
+    clientWs.on('message', (data) => {
+      if (!serviceWs || serviceWs.readyState !== WebSocket.OPEN) return;
+      if (typeof data === 'string') { serviceWs.send(data); }
+      else { serviceWs.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: Buffer.from(data as ArrayBuffer).toString('base64') })); }
+    });
+
+    try {
+      serviceWs = await connectToService();
+      wireServiceEvents(serviceWs);
+    } catch (err) {
+      console.error(`[voice] Failed to connect: ${err} (endpoint: ${VOICELIVE_ENDPOINT}, deployment: ${VOICELIVE_MODEL})`);
+      // Single reconnect attempt after 2s delay
+      setTimeout(async () => {
+        try {
+          serviceWs = await connectToService(true);
+          wireServiceEvents(serviceWs);
+        } catch (retryErr) {
+          console.error(`[voice] Retry failed: ${retryErr}`);
+          if (clientWs.readyState === WebSocket.OPEN) clientWs.close(1011);
+        }
+      }, 2000);
+    }
+
+    clientWs.on('close', (code, reason) => {
+      console.log(`[voice] Browser disconnected (code: ${code}, reason: ${reason?.toString() || 'none'})`);
+      if (serviceWs?.readyState === WebSocket.OPEN) serviceWs.close();
+    });
+    clientWs.on('error', (err) => {
+      console.error(`[voice] Browser WebSocket error: ${err.message}`);
+      if (serviceWs?.readyState === WebSocket.OPEN) serviceWs.close();
+    });
   });
 
   console.log('[voice] ITSM Voice proxy ready at /api/voice');

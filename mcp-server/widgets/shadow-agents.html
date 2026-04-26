@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Shadow AI Agent Discovery</title>
+<style>
+:root {
+  --fluent-colorNeutralBackground1: #ffffff;
+  --fluent-colorNeutralBackground2: #fafafa;
+  --fluent-colorNeutralBackground3: #f5f5f5;
+  --fluent-colorNeutralForeground1: #242424;
+  --fluent-colorNeutralForeground2: #616161;
+  --fluent-colorNeutralForeground3: #9e9e9e;
+  --fluent-colorNeutralStroke1: #e0e0e0;
+  --fluent-colorBrandBackground: #0f6cbd;
+  --fluent-colorBrandForeground1: #0f6cbd;
+  --fluent-colorPaletteRedBackground3: #c50f1f;
+  --fluent-colorPaletteRedForeground1: #c50f1f;
+  --fluent-colorPaletteGreenBackground3: #107c10;
+  --fluent-colorPaletteGreenForeground1: #107c10;
+  --fluent-colorPaletteYellowBackground3: #f7630c;
+  --fluent-colorPaletteYellowForeground1: #f7630c;
+  --fluent-colorNeutralShadowAmbient: rgba(0,0,0,0.12);
+  --fluent-colorNeutralShadowKey: rgba(0,0,0,0.14);
+  --fluent-borderRadiusMedium: 8px;
+  --fluent-borderRadiusLarge: 12px;
+  --fluent-fontFamilyBase: 'Segoe UI', -apple-system, system-ui, sans-serif;
+  --fluent-fontSizeBase300: 14px;
+  --fluent-fontSizeBase400: 16px;
+  --fluent-fontSizeBase500: 20px;
+  --fluent-fontSizeBase600: 24px;
+  --fluent-fontWeightSemibold: 600;
+  --fluent-spacingHorizontalM: 12px;
+  --fluent-spacingHorizontalL: 16px;
+  --fluent-spacingVerticalM: 12px;
+  --fluent-spacingVerticalL: 16px;
+  --fluent-shadow4: 0 2px 4px var(--fluent-colorNeutralShadowAmbient), 0 1px 2px var(--fluent-colorNeutralShadowKey);
+  --fluent-shadow8: 0 4px 8px var(--fluent-colorNeutralShadowAmbient), 0 2px 4px var(--fluent-colorNeutralShadowKey);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fluent-colorNeutralBackground1: #1f1f1f;
+    --fluent-colorNeutralBackground2: #292929;
+    --fluent-colorNeutralBackground3: #333333;
+    --fluent-colorNeutralForeground1: #ffffff;
+    --fluent-colorNeutralForeground2: #d6d6d6;
+    --fluent-colorNeutralForeground3: #adadad;
+    --fluent-colorNeutralStroke1: #404040;
+    --fluent-colorNeutralShadowAmbient: rgba(0,0,0,0.24);
+    --fluent-colorNeutralShadowKey: rgba(0,0,0,0.28);
+  }
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--fluent-fontFamilyBase);background:var(--fluent-colorNeutralBackground3);color:var(--fluent-colorNeutralForeground1);padding:20px;line-height:1.5}
+.widget{background:var(--fluent-colorNeutralBackground1);border-radius:var(--fluent-borderRadiusLarge);border:1px solid var(--fluent-colorNeutralStroke1);overflow:hidden;max-width:1020px;margin:0 auto;box-shadow:var(--fluent-shadow8)}
+.widget-header{display:flex;align-items:center;gap:10px;padding:var(--fluent-spacingVerticalL) 20px;border-bottom:1px solid var(--fluent-colorNeutralStroke1)}
+.widget-icon{width:36px;height:36px;border-radius:var(--fluent-borderRadiusMedium);background:#fde7e9;display:flex;align-items:center;justify-content:center;font-size:18px}
+.widget-title h2{font-size:var(--fluent-fontSizeBase400);font-weight:var(--fluent-fontWeightSemibold)}
+.widget-title p{font-size:12px;color:var(--fluent-colorNeutralForeground2)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:1px;background:var(--fluent-colorNeutralStroke1);border-bottom:1px solid var(--fluent-colorNeutralStroke1)}
+.kpi{background:var(--fluent-colorNeutralBackground1);padding:var(--fluent-spacingVerticalL) var(--fluent-spacingHorizontalM);text-align:center}
+.kpi .val{font-size:var(--fluent-fontSizeBase600);font-weight:700;line-height:1.2}
+.kpi .lbl{font-size:11px;color:var(--fluent-colorNeutralForeground2);margin-top:2px;text-transform:uppercase;letter-spacing:.3px}
+.val-red{color:var(--fluent-colorPaletteRedForeground1)}.val-green{color:var(--fluent-colorPaletteGreenForeground1)}.val-amber{color:var(--fluent-colorPaletteYellowForeground1)}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:var(--fluent-fontSizeBase300)}
+th{text-align:left;padding:10px 14px;font-size:11px;font-weight:var(--fluent-fontWeightSemibold);text-transform:uppercase;letter-spacing:.3px;color:var(--fluent-colorNeutralForeground2);background:var(--fluent-colorNeutralBackground2);border-bottom:1px solid var(--fluent-colorNeutralStroke1);position:sticky;top:0}
+td{padding:10px 14px;border-bottom:1px solid var(--fluent-colorNeutralStroke1);vertical-align:middle}
+tr:hover td{background:var(--fluent-colorNeutralBackground2)}
+.badge{display:inline-flex;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:var(--fluent-fontWeightSemibold);white-space:nowrap}
+.badge-critical{background:#fde7e9;color:var(--fluent-colorPaletteRedForeground1)}.badge-high{background:#fde7e9;color:#a4262c}
+.badge-medium{background:#fff4e5;color:var(--fluent-colorPaletteYellowForeground1)}.badge-low{background:#e6f4e6;color:var(--fluent-colorPaletteGreenForeground1)}
+.badge-compliant{background:#e6f4e6;color:var(--fluent-colorPaletteGreenForeground1)}.badge-noncompliant{background:#fde7e9;color:var(--fluent-colorPaletteRedForeground1)}
+.badge-unregistered{background:#fff4e5;color:var(--fluent-colorPaletteYellowForeground1)}
+.actions{display:flex;gap:6px;flex-wrap:wrap}
+.btn{padding:5px 12px;border:1px solid var(--fluent-colorNeutralStroke1);border-radius:var(--fluent-borderRadiusMedium);font-size:11px;font-weight:var(--fluent-fontWeightSemibold);cursor:pointer;background:var(--fluent-colorNeutralBackground1);color:var(--fluent-colorNeutralForeground1);transition:all .15s;font-family:inherit}
+.btn:hover{background:var(--fluent-colorNeutralBackground2);border-color:var(--fluent-colorBrandBackground);color:var(--fluent-colorBrandForeground1)}
+.btn:focus{outline:2px solid var(--fluent-colorBrandBackground);outline-offset:1px}
+.btn-danger{border-color:var(--fluent-colorPaletteRedBackground3);color:var(--fluent-colorPaletteRedForeground1)}
+.btn-danger:hover{background:#fde7e9}
+.empty{text-align:center;color:var(--fluent-colorNeutralForeground3);padding:48px 20px;font-size:var(--fluent-fontSizeBase300)}
+.footer{padding:10px 16px;border-top:1px solid var(--fluent-colorNeutralStroke1);text-align:right;font-size:10px;color:var(--fluent-colorNeutralForeground3)}
+</style>
+</head>
+<body>
+<div class="widget" role="region" aria-label="Shadow AI Agent Discovery Dashboard">
+  <div class="widget-header"><div class="widget-icon">🕵️</div><div class="widget-title"><h2>Shadow AI Agent Discovery</h2><p>Unauthorized Agent Detection &amp; Governance</p></div></div>
+  <div class="kpis" id="kpis" role="group" aria-label="Agent discovery summary"></div>
+  <div class="table-wrap"><table role="grid" aria-label="Discovered agents table"><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+  <div class="empty" id="empty" style="display:none" role="status">No shadow agents discovered.</div>
+  <div class="footer" id="footer"></div>
+</div>
+<script>
+var to=window.__TOOL_DATA__||(window.openai&&window.openai.toolOutput)||{};
+var agents=to.agents||[];
+var summary=to.summary||{};
+
+function esc(s){var d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
+
+var total=summary.total||agents.length;
+var compliant=summary.compliant||0;
+var nonCompliant=summary.nonCompliant||summary.noncompliant||0;
+var unregistered=summary.unregistered||0;
+
+if(agents.length>0&&!summary.total){
+  compliant=0;nonCompliant=0;unregistered=0;
+  for(var i=0;i<agents.length;i++){
+    var s=(agents[i].complianceStatus||agents[i].compliance||'').toLowerCase();
+    if(s==='compliant')compliant++;else if(s.indexOf('non')>-1)nonCompliant++;else unregistered++;
+  }
+  total=agents.length;
+}
+
+document.getElementById('kpis').innerHTML=
+  '<div class="kpi" tabindex="0"><div class="val">'+total+'</div><div class="lbl">Total Discovered</div></div>'+
+  '<div class="kpi" tabindex="0"><div class="val val-green">'+compliant+'</div><div class="lbl">Compliant</div></div>'+
+  '<div class="kpi" tabindex="0"><div class="val val-red">'+nonCompliant+'</div><div class="lbl">Non-Compliant</div></div>'+
+  '<div class="kpi" tabindex="0"><div class="val val-amber">'+unregistered+'</div><div class="lbl">Unregistered</div></div>';
+
+function riskBadge(r){var l=(r||'').toLowerCase();var cls='badge-low';if(l==='critical')cls='badge-critical';else if(l==='high')cls='badge-high';else if(l==='medium')cls='badge-medium';return'<span class="badge '+cls+'">'+esc(r||'Low')+'</span>';}
+function compBadge(c){var l=(c||'').toLowerCase();var cls='badge-unregistered';var label=c||'Unknown';if(l==='compliant'){cls='badge-compliant';}else if(l.indexOf('non')>-1){cls='badge-noncompliant';}return'<span class="badge '+cls+'">'+esc(label)+'</span>';}
+
+document.getElementById('thead').innerHTML='<tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Platform</th><th scope="col">Owner</th><th scope="col">Compliance</th><th scope="col">Risk</th><th scope="col">Last Seen</th><th scope="col">Actions</th></tr>';
+
+var tbody=document.getElementById('tbody');
+var emptyEl=document.getElementById('empty');
+if(agents.length===0){emptyEl.style.display='block';}
+else{
+  var html='';
+  for(var i=0;i<agents.length;i++){
+    var a=agents[i];
+    html+='<tr tabindex="0"><td>'+esc(a.name||'')+'</td><td>'+esc(a.type||'')+'</td><td>'+esc(a.platform||'')+'</td><td>'+esc(a.owner||'')+'</td><td>'+compBadge(a.complianceStatus||a.compliance)+'</td><td>'+riskBadge(a.riskLevel||a.risk)+'</td><td>'+esc(a.lastSeen||'')+'</td><td><div class="actions"><button class="btn" aria-label="Register '+esc(a.name)+'">Register</button><button class="btn btn-danger" aria-label="Block '+esc(a.name)+'">Block</button><button class="btn" aria-label="Investigate '+esc(a.name)+'">Investigate</button></div></td></tr>';
+  }
+  tbody.innerHTML=html;
+}
+
+document.getElementById('footer').textContent='Shadow Agent Scan · '+agents.length+' agent'+(agents.length!==1?'s':'')+' · '+new Date().toLocaleString();
+</script>
+</body>
+</html>
