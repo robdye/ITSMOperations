@@ -264,6 +264,7 @@ export function getRoutineStatus(): Array<{
   description: string;
   enabled: boolean;
   active: boolean;
+  status: string;
 }> {
   return routines.map(r => ({
     id: r.id,
@@ -271,7 +272,8 @@ export function getRoutineStatus(): Array<{
     schedule: r.schedule,
     description: r.description,
     enabled: r.enabled,
-    active: r.enabled, // Routines are always "active" when enabled (triggered externally)
+    active: r.enabled,
+    status: r.enabled ? 'scheduled' : 'disabled',
   }));
 }
 

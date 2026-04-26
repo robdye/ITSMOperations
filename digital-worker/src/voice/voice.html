@@ -493,24 +493,10 @@
       ws = new WebSocket(`${proto}//${location.host}/api/voice`);
 
       ws.onopen = () => {
-        setStatus('Connected — listening', 'active');
+        setStatus('Connected — waiting for session...', 'active');
         btnDisconnect.disabled = false;
         btnMute.disabled = false;
         startMicCapture();
-        // Trigger greeting after session is configured
-        setTimeout(() => {
-          if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({
-              type: 'conversation.item.create',
-              item: {
-                type: 'message',
-                role: 'system',
-                content: [{ type: 'input_text', text: 'Greet the user briefly. You are their ITSM Operations. Keep it to one sentence.' }]
-              }
-            }));
-            ws.send(JSON.stringify({ type: 'response.create' }));
-          }
-        }, 1500);
       };
 
       ws.onmessage = (e) => {
@@ -519,8 +505,12 @@
         handleVoiceLiveEvent(event);
       };
 
-      ws.onclose = () => { setStatus('Disconnected', ''); cleanup(); };
-      ws.onerror = () => { setStatus('Connection error', 'error'); cleanup(); };
+      ws.onclose = (e) => {
+        const reason = e.reason || `code ${e.code}`;
+        setStatus(`Disconnected (${reason})`, '');
+        cleanup();
+      };
+      ws.onerror = () => { setStatus('Connection error — check console', 'error'); cleanup(); };
     } catch (err) {
       setStatus('Error: ' + err.message, 'error');
       btnConnect.disabled = false;
@@ -700,6 +690,19 @@
     switch (event.type) {
       case 'session.updated':
         console.log('[voice] Session configured');
+        setStatus('Connected — listening', 'active');
+        // Trigger greeting now that the session is ready
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'conversation.item.create',
+            item: {
+              type: 'message',
+              role: 'system',
+              content: [{ type: 'input_text', text: 'Greet the user briefly. You are their ITSM Operations. Keep it to one sentence.' }]
+            }
+          }));
+          ws.send(JSON.stringify({ type: 'response.create' }));
+        }
         break;
       case 'input_audio_buffer.speech_started':
         orbEl.className = 'orb listening';

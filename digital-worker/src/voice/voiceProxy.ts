@@ -8,7 +8,7 @@ import { VOICE_TOOLS, executeVoiceTool } from './voiceTools';
 import { isVoiceEnabled } from './voiceGate';
 
 const VOICELIVE_ENDPOINT = process.env.VOICELIVE_ENDPOINT || '';
-const VOICELIVE_MODEL = process.env.VOICELIVE_MODEL || 'gpt-realtime';
+const VOICELIVE_MODEL = process.env.VOICELIVE_MODEL || 'gpt-4o-realtime-preview';
 const MANAGER_NAME = process.env.MANAGER_NAME || 'the IT Director';
 
 function extractVoiceData(result: unknown): string {
@@ -55,7 +55,7 @@ Your manager is ${MANAGER_NAME}.`;
 
 function buildVoiceLiveUrl(): string {
   const url = new URL(VOICELIVE_ENDPOINT);
-  return `wss://${url.host}/openai/realtime?api-version=2024-10-01-preview&deployment=${VOICELIVE_MODEL}`;
+  return `wss://${url.host}/openai/v1/realtime?api-version=2025-04-01-preview&deployment=${VOICELIVE_MODEL}`;
 }
 
 async function getAccessToken(): Promise<string> {
@@ -68,6 +68,9 @@ export function attachVoiceWebSocket(server: Server): void {
   if (!VOICELIVE_ENDPOINT) {
     console.log('[voice] VOICELIVE_ENDPOINT not set - voice proxy disabled');
     return;
+  }
+  if (!VOICELIVE_MODEL.includes('realtime')) {
+    console.warn(`[voice] WARNING: VOICELIVE_MODEL="${VOICELIVE_MODEL}" does not look like a Realtime deployment. Expected a model like "gpt-4o-realtime-preview". Voice may fail to connect.`);
   }
 
   const wss = new WebSocketServer({ noServer: true });
@@ -98,6 +101,12 @@ export function attachVoiceWebSocket(server: Server): void {
       // 5-second connection timeout
       const connectTimeout = setTimeout(() => {
         console.error(`[voice] Connection timeout (5s) - endpoint: ${VOICELIVE_ENDPOINT}, deployment: ${VOICELIVE_MODEL}`);
+        if (clientWs.readyState === WebSocket.OPEN) {
+          clientWs.send(JSON.stringify({
+            type: 'error',
+            error: { message: `Voice connection timed out. Check that "${VOICELIVE_MODEL}" deployment exists and is a Realtime model.`, code: 'connection_timeout' },
+          }));
+        }
         ws.close();
         if (clientWs.readyState === WebSocket.OPEN) clientWs.close(1011);
       }, 5000);
@@ -116,12 +125,12 @@ export function attachVoiceWebSocket(server: Server): void {
           session: {
             modalities: ['text', 'audio'],
             instructions: VOICE_SYSTEM_PROMPT,
-            voice: { name: 'en-US-Ava:DragonHDLatestNeural', type: 'azure-standard', temperature: 0.8 },
-            input_audio_sampling_rate: 24000,
-            input_audio_transcription: { model: 'azure-speech', language: 'en' },
-            turn_detection: { type: 'azure_semantic_vad', silence_duration_ms: 500, interrupt_response: true, auto_truncate: true },
-            input_audio_noise_reduction: { type: 'azure_deep_noise_suppression' },
-            input_audio_echo_cancellation: { type: 'server_echo_cancellation' },
+            voice: 'en-US-AvaMultilingualNeural',
+            temperature: 0.8,
+            input_audio_format: 'pcm16',
+            output_audio_format: 'pcm16',
+            input_audio_transcription: { model: 'whisper-1' },
+            turn_detection: { type: 'server_vad', silence_duration_ms: 500 },
             tools: VOICE_TOOLS,
             tool_choice: 'auto',
           },
@@ -155,12 +164,26 @@ export function attachVoiceWebSocket(server: Server): void {
       });
 
       ws.on('close', (code, reason) => {
-        console.log(`[voice] Voice Live disconnected (code: ${code}, reason: ${reason?.toString() || 'none'})`);
-        if (clientWs.readyState === WebSocket.OPEN) clientWs.close(1000);
+        const reasonStr = reason?.toString() || 'none';
+        console.log(`[voice] Voice Live disconnected (code: ${code}, reason: ${reasonStr})`);
+        // Forward a structured error event to the browser before closing
+        if (clientWs.readyState === WebSocket.OPEN) {
+          clientWs.send(JSON.stringify({
+            type: 'error',
+            error: { message: `Voice service disconnected (code: ${code}). Check that deployment "${VOICELIVE_MODEL}" is a Realtime-capable model.`, code: 'service_disconnected' },
+          }));
+          clientWs.close(1000, `Service closed: ${code}`);
+        }
       });
       ws.on('error', (err) => {
         console.error(`[voice] Voice Live error: ${err.message} (endpoint: ${VOICELIVE_ENDPOINT}, deployment: ${VOICELIVE_MODEL})`);
-        if (clientWs.readyState === WebSocket.OPEN) clientWs.close(1011);
+        if (clientWs.readyState === WebSocket.OPEN) {
+          clientWs.send(JSON.stringify({
+            type: 'error',
+            error: { message: `Voice connection failed: ${err.message}. Ensure VOICELIVE_ENDPOINT and VOICELIVE_MODEL (${VOICELIVE_MODEL}) are configured correctly.`, code: 'connection_error' },
+          }));
+          clientWs.close(1011, 'Service error');
+        }
       });
     }
 

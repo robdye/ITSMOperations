@@ -453,6 +453,41 @@ function timeAgo(ts) {
   return `${Math.floor(sec/86400)}d ago`;
 }
 
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+function cronToHuman(cron) {
+  if (!cron || cron === '—') return cron;
+  const p = cron.trim().split(/\s+/);
+  if (p.length < 5) return cron;
+  const [min, hour, dom, mon, dow] = p;
+  // Every N minutes
+  if (min.startsWith('*/') && hour === '*' && dom === '*' && dow === '*') return `Every ${min.slice(2)} min`;
+  // Every N hours
+  if (min === '0' && hour.startsWith('*/') && dom === '*' && dow === '*') return `Every ${hour.slice(2)}h`;
+  // Hourly
+  if (min === '0' && hour === '*' && dom === '*' && dow === '*') return 'Every hour';
+  // Specific day of week
+  if (dow !== '*' && dom === '*') {
+    const days = dow.split(',').map(d => {
+      if (d === '1-5') return 'Weekdays';
+      const n = parseInt(d);
+      return isNaN(n) ? d : (DAY_NAMES[n] || d);
+    }).join(', ');
+    const time = `${hour.padStart(2,'0')}:${min.padStart(2,'0')}`;
+    return `${days} ${time}`;
+  }
+  // Specific day of month
+  if (dom !== '*' && dow === '*') {
+    const suffix = dom === '1' ? 'st' : dom === '15' ? 'th' : 'th';
+    const time = `${hour.padStart(2,'0')}:${min.padStart(2,'0')}`;
+    return `${dom}${suffix} of month ${time}`;
+  }
+  // Daily at specific time
+  if (hour !== '*' && !hour.startsWith('*/') && dom === '*' && dow === '*') {
+    return `Daily ${hour.padStart(2,'0')}:${min.padStart(2,'0')}`;
+  }
+  return cron;
+}
+
 // ── Data Fetching ──
 async function fetchAll() {
   const [healthR, workersR, routinesR, approvalsR, auditR, memoryR, reasoningR] = await Promise.allSettled([
@@ -544,9 +579,9 @@ function renderRoutines(data) {
     const name = r.name || r.id || '—';
     const cron = r.cron || r.schedule || '—';
     const status = r.status || r.state || 'idle';
-    const statusColor = status === 'running' ? 'var(--blue)' : status === 'completed' ? 'var(--green)' : status === 'failed' ? 'var(--red)' : 'var(--text-muted)';
+    const statusColor = status === 'running' ? 'var(--blue)' : status === 'completed' ? 'var(--green)' : status === 'failed' ? 'var(--red)' : status === 'scheduled' ? 'var(--cyan)' : status === 'disabled' ? 'var(--text-dim)' : 'var(--text-muted)';
     return `<div class="metric-row">
-      <span class="metric-label">${escHtml(name)} <span style="color:var(--text-muted);font-size:10px;font-family:monospace">${escHtml(cron)}</span></span>
+      <span class="metric-label">${escHtml(name)} <span style="color:var(--text-muted);font-size:10px">${escHtml(cronToHuman(cron))}</span></span>
       <span style="font-size:11px;color:${statusColor};font-weight:600">${status}</span>
     </div>`;
   }).join('') : '<div class="empty-state"><div class="empty-icon">⏱</div><div class="empty-text">No routines configured</div></div>';
@@ -772,8 +807,9 @@ function renderAgentMind(reasoning) {
 function renderTodaysPlan(routines) {
   const routineList = Array.isArray(routines) ? routines : (routines && routines.routines) || [];
 
-  const activeCount = routineList.filter(r => (r.status || r.state) === 'running').length;
-  document.getElementById('wd-active').textContent = activeCount;
+  const scheduledCount = routineList.filter(r => (r.status || r.state) === 'scheduled' || r.enabled).length;
+  const runningCount = routineList.filter(r => (r.status || r.state) === 'running').length;
+  document.getElementById('wd-active').textContent = runningCount || scheduledCount;
   document.getElementById('wd-total').textContent = routineList.length;
 
   // Find workers count from routine data
@@ -791,9 +827,11 @@ function renderTodaysPlan(routines) {
 
   // Group routines by time-of-day phases based on cron schedule
   const phases = {
+    recurring: { label: 'Recurring (Interval-based)', routines: [] },
     morning: { label: 'Morning (06:00 – 11:59)', routines: [] },
     midday: { label: 'Midday (12:00 – 16:59)', routines: [] },
     'end-of-day': { label: 'End of Day (17:00 – 21:59)', routines: [] },
+    overnight: { label: 'Overnight (22:00 – 05:59)', routines: [] },
     weekly: { label: 'Weekly', routines: [] },
     monthly: { label: 'Monthly', routines: [] },
   };
@@ -801,27 +839,31 @@ function renderTodaysPlan(routines) {
   for (const r of routineList) {
     const cron = r.cron || r.schedule || '';
     const parts = cron.split(/\s+/);
-    // Check for weekly/monthly patterns
-    if (parts.length >= 5 && parts[4] !== '*') {
+    if (parts.length < 5) { phases.morning.routines.push(r); continue; }
+    const [min, hour, dom, , dow] = parts;
+    // Interval-based (*/N patterns in min or hour with no specific day)
+    if ((min.startsWith('*/') || hour.startsWith('*/')) && dom === '*' && dow === '*') {
+      phases.recurring.routines.push(r);
+    } else if (dow !== '*' && dom === '*') {
       phases.weekly.routines.push(r);
-    } else if (parts.length >= 4 && parts[3] !== '*') {
+    } else if (dom !== '*') {
       phases.monthly.routines.push(r);
-    } else if (parts.length >= 2) {
-      const hour = parseInt(parts[1], 10);
-      if (!isNaN(hour)) {
-        if (hour >= 6 && hour < 12) phases.morning.routines.push(r);
-        else if (hour >= 12 && hour < 17) phases.midday.routines.push(r);
-        else if (hour >= 17 && hour < 22) phases['end-of-day'].routines.push(r);
-        else phases.morning.routines.push(r);
-      } else {
-        phases.morning.routines.push(r);
-      }
     } else {
-      phases.morning.routines.push(r);
+      const h = parseInt(hour, 10);
+      if (!isNaN(h)) {
+        if (h >= 6 && h < 12) phases.morning.routines.push(r);
+        else if (h >= 12 && h < 17) phases.midday.routines.push(r);
+        else if (h >= 17 && h < 22) phases['end-of-day'].routines.push(r);
+        else phases.overnight.routines.push(r);
+      } else {
+        // Hourly patterns like 0 * * * *
+        phases.recurring.routines.push(r);
+      }
     }
   }
 
-  const statusIcons = { pending: '○', running: '◉', completed: '✓', failed: '✗', idle: '○' };
+  const statusIcons = { pending: '○', running: '◉', completed: '✓', failed: '✗', scheduled: '◎', disabled: '○', idle: '○' };
+  const statusColors = { running: 'var(--blue)', completed: 'var(--green)', failed: 'var(--red)', scheduled: 'var(--cyan)', disabled: 'var(--text-dim)' };
   let html = '';
   for (const [key, phase] of Object.entries(phases)) {
     if (phase.routines.length === 0) continue;
@@ -833,13 +875,14 @@ function renderTodaysPlan(routines) {
       const worker = r.worker || '—';
       const icon = statusIcons[status] || '○';
       const workerIcon = WORKER_ICONS[worker] || '⚙';
+      const color = statusColors[status] || 'var(--text-muted)';
       html += `<div class="plan-task">
         <div class="plan-task-icon ${status}">${icon}</div>
         <div class="plan-task-body">
           <div class="plan-task-name">${workerIcon} ${escHtml(name)}</div>
-          <div class="plan-task-desc">${escHtml(worker)} · ${escHtml(cron)}</div>
+          <div class="plan-task-desc">${escHtml(worker)} · ${escHtml(cronToHuman(cron))}</div>
         </div>
-        <div class="plan-task-time">${status}</div>
+        <div class="plan-task-time" style="color:${color}">${status}</div>
       </div>`;
     }
     html += '</div>';
