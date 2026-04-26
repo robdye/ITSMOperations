@@ -124,23 +124,22 @@ export function attachVoiceWebSocket(server: Server): void {
     function wireServiceEvents(ws: WebSocket) {
       ws.on('open', () => {
         console.log(`[voice] Connected to Voice Live (deployment: ${VOICELIVE_MODEL})`);
+        // GA gpt-realtime uses output_modalities (not modalities)
         ws.send(JSON.stringify({
           type: 'session.update',
           session: {
             type: 'realtime',
-            modalities: ['text', 'audio'],
+            output_modalities: ['text', 'audio'],
             instructions: VOICE_SYSTEM_PROMPT,
             voice: 'ash',
             temperature: 0.8,
             input_audio_format: 'pcm16',
             output_audio_format: 'pcm16',
-            input_audio_noise_reduction: { type: 'near_field' },
             input_audio_transcription: { model: 'whisper-1' },
             turn_detection: {
-              type: 'semantic_vad',
-              eagerness: 'auto',
-              interrupt_response: true,
-              create_response: true,
+              type: 'server_vad',
+              threshold: 0.5,
+              silence_duration_ms: 500,
             },
             tools: VOICE_TOOLS,
             tool_choice: 'auto',
