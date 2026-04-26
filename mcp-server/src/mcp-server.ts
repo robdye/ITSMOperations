@@ -1231,22 +1231,30 @@ export function createChangeServer(): Server {
         const snowInstance = process.env.SNOW_INSTANCE || "";
         // Always show active incidents only (no LLM-controlled state filter)
         const incidents = await snow.getIncidents({ limit: 200 });
-        // Slim down payload for widget embedding — only fields the HTML uses
-        const slimIncidents = incidents.map((i: any) => ({
+        // Pre-compute KPI counts server-side (these are always accurate regardless of page size)
+        const kpis: Record<string, number> = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
+        for (const inc of incidents) {
+          const pr = (inc.priority || '') as string;
+          for (const p of ['1','2','3','4','5']) { if (pr.includes(p)) { kpis[p]++; break; } }
+        }
+        // Sort by priority (P1 first) then by opened_at (newest first) — take top 20 for widget
+        const sorted = [...incidents].sort((a: any, b: any) => {
+          const pa = parseInt((a.priority || '5').charAt(0)) || 5;
+          const pb = parseInt((b.priority || '5').charAt(0)) || 5;
+          if (pa !== pb) return pa - pb;
+          return (b.opened_at || '').localeCompare(a.opened_at || '');
+        });
+        // Minimal fields only — keep payload small for DA content limit
+        const pageIncidents = sorted.slice(0, 20).map((i: any) => ({
           sys_id: i.sys_id, number: i.number,
-          short_description: i.short_description,
-          description: (i.description || "").slice(0, 200),
+          short_description: (i.short_description || '').slice(0, 120),
           state: i.state, priority: i.priority,
-          impact: i.impact, urgency: i.urgency,
           category: i.category, assignment_group: i.assignment_group,
-          assigned_to: i.assigned_to, cmdb_ci: i.cmdb_ci,
-          caller_id: i.caller_id, opened_at: i.opened_at,
-          resolved_at: i.resolved_at, closed_at: i.closed_at,
+          opened_at: i.opened_at,
         }));
-        const data = { incidents: slimIncidents, snowInstance, generatedAt: new Date().toISOString() };
-        const p1 = incidents.filter((i: any) => (i.priority || "").includes("1")).length;
+        const data = { incidents: pageIncidents, kpis, total: incidents.length, snowInstance, generatedAt: new Date().toISOString() };
         return widgetResponse(INCIDENT_DASHBOARD, data,
-          `Incident Dashboard: ${incidents.length} active incidents. P1: ${p1}, P2: ${incidents.filter((i: any) => (i.priority || "").includes("2")).length}`);
+          `Incident Dashboard: ${incidents.length} active incidents. P1: ${kpis['1']}, P2: ${kpis['2']}, P3: ${kpis['3']}, P4: ${kpis['4']}`);
       }
 
       // ── Text: Get Incidents ──
