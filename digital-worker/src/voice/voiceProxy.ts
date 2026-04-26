@@ -63,8 +63,8 @@ function buildVoiceLiveUrl(): string {
 
 async function getAccessToken(): Promise<string> {
   const cred = new DefaultAzureCredential();
-  // GA Realtime API requires the ai.azure.com scope
-  const token = await cred.getToken('https://ai.azure.com/.default');
+  // OpenAI-kind resources use cognitiveservices scope; AIServices-kind use ai.azure.com
+  const token = await cred.getToken('https://cognitiveservices.azure.com/.default');
   return token.token;
 }
 
