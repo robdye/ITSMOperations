@@ -1,79 +1,78 @@
 {
-    "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
-    "schema_version": "v2.4",
-    "name_for_human": "ITSM Briefings",
-    "name_for_model": "itsm_briefing",
-    "description_for_human": "ITSM briefings: operations overview and EOL risk forecasting.",
-    "description_for_model": "Use for ServiceNow briefings: holistic ITSM operations briefing across incidents, problems, SLAs, and changes, plus EOL risk forecasting timeline.",
-    "logo_url": "${{CONTAINER_APP_URL}}/assets/itsm-logo.png",
-    "contact_email": "itops@absx68251802.onmicrosoft.com",
-    "legal_info_url": "https://absx68251802.sharepoint.com/sites/itsm-operations/legal",
-    "namespace": "itsm_briefing",
-    "functions": [
-        { "name": "show-itsm-briefing", "description": "Display the ITSM Operations Briefing — a holistic view across incidents, problems, SLAs, changes, and assets." },
-        { "name": "show-risk-forecast", "description": "Display the EOL Risk Forecast timeline showing assets approaching end of life with projected risk scores." }
-    ],
-    "runtimes": [
-        {
-            "type": "RemoteMCPServer",
-            "run_for_functions": [
-                "show-itsm-briefing", "show-risk-forecast"
-            ],
-            "spec": {
-                "url": "${{CHANGE_MCP_ENDPOINT}}",
-                "headers": {
-                    "x-api-key": "${{MCP_API_KEY}}"
-                },
-                "mcp_tool_description": {
-                    "tools": [
-                        {
-                            "name": "show-itsm-briefing",
-                            "description": "Display the ITSM Operations Briefing — a holistic view across incidents, problems, SLAs, changes, and assets.",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {},
-                                "additionalProperties": false
-                            },
-                            "annotations": { "readOnlyHint": true },
-                            "_meta": {
-                                "openai/outputTemplate": "ui://widget/itsm-briefing.html",
-                                "openai/toolInvocation/invoking": "Compiling ITSM operations briefing…",
-                                "openai/toolInvocation/invoked": "Briefing ready.",
-                                "openai/widgetAccessible": true
-                            }
-                        },
-                        {
-                            "name": "show-risk-forecast",
-                            "description": "Display the EOL Risk Forecast — a timeline showing assets approaching end of life with projected risk scores.",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {
-                                    "months": { "type": "number", "description": "Forecast window in months (default 12)" },
-                                    "tier": { "type": "string", "description": "Filter by tier: Tier1, Tier2, Tier3" }
-                                },
-                                "additionalProperties": false
-                            },
-                            "annotations": { "readOnlyHint": true },
-                            "_meta": {
-                                "openai/outputTemplate": "ui://widget/risk-forecast.html",
-                                "openai/toolInvocation/invoking": "Computing risk forecast…",
-                                "openai/toolInvocation/invoked": "Risk forecast ready.",
-                                "openai/widgetAccessible": true
-                            }
-                        }
-                    ]
-                }
-            },
-            "mcp_resource_description": {
-                "resources": [
-                    { "uri": "ui://widget/itsm-briefing.html", "mimeType": "text/html+skybridge", "description": "ITSM Operations Briefing across incidents, problems, SLAs, and changes" },
-                    { "uri": "ui://widget/risk-forecast.html", "mimeType": "text/html+skybridge", "description": "EOL Risk Forecast timeline with projected risk scores" }
-                ]
-            }
-        }
-    ],
-    "auth": {
-        "type": "OAuthPluginVault",
-        "reference_id": "${{SERVICENOW_OAUTH_REGISTRATION_ID}}"
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
+  "schema_version": "v2.4",
+  "name_for_human": "ITSM Briefings",
+  "description_for_human": "ITSM briefings: operations overview and EOL risk forecasting.",
+  "namespace": "itsm-briefing",
+  "functions": [
+    {
+      "name": "show-itsm-briefing",
+      "description": "Display the ITSM Operations Briefing — a holistic view across incidents, problems, SLAs, changes, and assets."
+    },
+    {
+      "name": "show-risk-forecast",
+      "description": "Display the EOL Risk Forecast timeline showing assets approaching end of life with projected risk scores."
     }
+  ],
+  "runtimes": [
+    {
+      "type": "RemoteMCPServer",
+      "run_for_functions": [
+        "show-itsm-briefing",
+        "show-risk-forecast"
+      ],
+      "spec": {
+        "url": "${{CHANGE_MCP_ENDPOINT}}",
+        "mcp_tool_description": {
+          "tools": [
+            {
+              "name": "show-itsm-briefing",
+              "description": "Display the ITSM Operations Briefing — a holistic view across incidents, problems, SLAs, changes, and assets.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              },
+              "annotations": {
+                "readOnlyHint": true
+              },
+              "_meta": {
+                "openai/outputTemplate": "ui://widget/itsm-briefing.html",
+                "openai/toolInvocation/invoking": "Compiling ITSM operations briefing…",
+                "openai/toolInvocation/invoked": "Briefing ready.",
+                "openai/widgetAccessible": true
+              }
+            },
+            {
+              "name": "show-risk-forecast",
+              "description": "Display the EOL Risk Forecast — a timeline showing assets approaching end of life with projected risk scores.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "months": {
+                    "type": "number",
+                    "description": "Forecast window in months (default 12)"
+                  },
+                  "tier": {
+                    "type": "string",
+                    "description": "Filter by tier: Tier1, Tier2, Tier3"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "annotations": {
+                "readOnlyHint": true
+              },
+              "_meta": {
+                "openai/outputTemplate": "ui://widget/risk-forecast.html",
+                "openai/toolInvocation/invoking": "Computing risk forecast…",
+                "openai/toolInvocation/invoked": "Risk forecast ready.",
+                "openai/widgetAccessible": true
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
 }

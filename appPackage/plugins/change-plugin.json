@@ -1,214 +1,372 @@
 {
-    "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
-    "schema_version": "v2.4",
-    "name_for_human": "ITSM Change Management",
-    "name_for_model": "itsm_change",
-    "description_for_human": "Change management: create, update, and track change requests with risk analysis and CAB workflows.",
-    "description_for_model": "Use for ServiceNow change management: creating, updating, querying change requests, risk briefings, collision detection, CAB agendas, change metrics, and post-implementation reviews.",
-    "logo_url": "${{CONTAINER_APP_URL}}/assets/itsm-logo.png",
-    "contact_email": "itops@absx68251802.onmicrosoft.com",
-    "legal_info_url": "https://absx68251802.sharepoint.com/sites/itsm-operations/legal",
-    "namespace": "itsm_change",
-    "functions": [
-        { "name": "show-change-dashboard", "description": "Display the Change Management dashboard with open change requests, risk heat map, and ITIL classification breakdown." },
-        { "name": "show-change-request", "description": "Display a detailed Change Request with CI details, risk assessment, approval chain, and backout plan." },
-        { "name": "show-change-briefing", "description": "Display the Change Risk Briefing with collisions, stale CRs, high-risk changes, incident risks, and recommendations." },
-        { "name": "show-change-metrics", "description": "Display Change Management KPIs including success rate, emergency change percentage, and pipeline breakdown." },
-        { "name": "get-change-requests", "description": "Query ServiceNow for change requests. Returns structured data for analysis." },
-        { "name": "prepare-change-request", "description": "Open an interactive form to create a new ServiceNow Change Request. Pre-fills from conversation context." },
-        { "name": "create-change-request", "description": "Create a new Change Request in ServiceNow." },
-        { "name": "update-change-request", "description": "Update an existing Change Request in ServiceNow by number or sys_id." },
-        { "name": "detect-change-collisions", "description": "Detect open changes targeting the same Configuration Item." },
-        { "name": "generate-cab-agenda", "description": "Generate a CAB meeting agenda with pending changes, risk scores, and recommendations." },
-        { "name": "get-change-history", "description": "Find similar past changes with success/failure rates and lessons learned." },
-        { "name": "post-implementation-review", "description": "Check if a completed change caused incidents within 48 hours." }
-    ],
-    "runtimes": [
-        {
-            "type": "RemoteMCPServer",
-            "run_for_functions": [
-                "show-change-dashboard", "show-change-request", "show-change-briefing",
-                "show-change-metrics", "get-change-requests", "prepare-change-request",
-                "create-change-request", "update-change-request", "detect-change-collisions",
-                "generate-cab-agenda", "get-change-history", "post-implementation-review"
-            ],
-            "spec": {
-                "url": "${{CHANGE_MCP_ENDPOINT}}",
-                "headers": {
-                    "x-api-key": "${{MCP_API_KEY}}"
-                },
-                "mcp_tool_description": {
-                    "tools": [
-                        {
-                            "name": "show-change-dashboard",
-                            "description": "Display the Change Management dashboard with open change requests, risk heat map, and ITIL classification breakdown.",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {},
-                                "additionalProperties": false
-                            },
-                            "annotations": { "readOnlyHint": true },
-                            "_meta": {
-                                "openai/outputTemplate": "ui://widget/change-dashboard.html",
-                                "openai/toolInvocation/invoking": "Loading change management dashboard…",
-                                "openai/toolInvocation/invoked": "Dashboard ready.",
-                                "openai/widgetAccessible": true
-                            }
-                        },
-                        {
-                            "name": "show-change-request",
-                            "description": "Display a detailed Change Request with CI details, risk assessment, approval chain, and backout plan.",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {
-                                    "number": { "type": "string", "description": "Change Request number (e.g. CHG0000001)" },
-                                    "sys_id": { "type": "string", "description": "ServiceNow sys_id of the change request" }
-                                },
-                                "additionalProperties": false
-                            },
-                            "annotations": { "readOnlyHint": true },
-                            "_meta": {
-                                "openai/outputTemplate": "ui://widget/change-request.html",
-                                "openai/toolInvocation/invoking": "Loading change request details…",
-                                "openai/toolInvocation/invoked": "Change request ready.",
-                                "openai/widgetAccessible": true
-                            }
-                        },
-                        {
-                            "name": "show-change-briefing",
-                            "description": "Display the Change Risk Briefing - a proactive analysis showing change collisions, stale CRs, high-risk changes, CIs with active incidents, and actionable recommendations.",
-                            "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
-                            "annotations": { "readOnlyHint": true },
-                            "_meta": {
-                                "openai/outputTemplate": "ui://widget/change-briefing.html",
-                                "openai/toolInvocation/invoking": "Compiling change risk briefing...",
-                                "openai/toolInvocation/invoked": "Briefing ready.",
-                                "openai/widgetAccessible": true
-                            }
-                        },
-                        {
-                            "name": "show-change-metrics",
-                            "description": "Display Change Management KPIs - success rate, emergency change percentage, pipeline breakdown by state/type/risk, and change outcomes.",
-                            "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
-                            "annotations": { "readOnlyHint": true },
-                            "_meta": {
-                                "openai/outputTemplate": "ui://widget/change-metrics.html",
-                                "openai/toolInvocation/invoking": "Computing change metrics...",
-                                "openai/toolInvocation/invoked": "Metrics ready.",
-                                "openai/widgetAccessible": true
-                            }
-                        },
-                        {
-                            "name": "get-change-requests",
-                            "description": "Query ServiceNow for change requests. Returns structured data for analysis.",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {
-                                    "state": { "type": "string", "description": "Filter by state" },
-                                    "priority": { "type": "string", "description": "Filter by priority" },
-                                    "category": { "type": "string", "description": "Filter by category" },
-                                    "assignment_group": { "type": "string", "description": "Filter by assignment group" },
-                                    "limit": { "type": "number", "description": "Max results (default 20)" }
-                                },
-                                "additionalProperties": false
-                            },
-                            "annotations": { "readOnlyHint": true }
-                        },
-                        {
-                            "name": "prepare-change-request",
-                            "description": "Open an interactive form to create a new ServiceNow Change Request. Pre-fills from conversation context.",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {
-                                    "short_description": { "type": "string", "description": "Short description of the change" },
-                                    "description": { "type": "string", "description": "Detailed description" },
-                                    "category": { "type": "string", "description": "Change category: Hardware, Software, Network, Database, Cloud, Security" },
-                                    "priority": { "type": "string", "description": "Priority: 1-Critical, 2-High, 3-Moderate, 4-Low" },
-                                    "risk": { "type": "string", "description": "Risk level: High, Moderate, Low" },
-                                    "type": { "type": "string", "description": "ITIL change type: Standard, Normal, Emergency" },
-                                    "assignment_group": { "type": "string", "description": "Assignment group name" },
-                                    "cmdb_ci": { "type": "string", "description": "Affected Configuration Item name" },
-                                    "justification": { "type": "string", "description": "Business justification" },
-                                    "backout_plan": { "type": "string", "description": "Backout/rollback plan" },
-                                    "test_plan": { "type": "string", "description": "Test plan" },
-                                    "planned_start": { "type": "string", "description": "Planned start date (ISO 8601)" },
-                                    "planned_end": { "type": "string", "description": "Planned end date (ISO 8601)" }
-                                },
-                                "additionalProperties": false
-                            },
-                            "_meta": {
-                                "openai/outputTemplate": "ui://widget/change-form.html",
-                                "openai/toolInvocation/invoking": "Preparing change request form…",
-                                "openai/toolInvocation/invoked": "Form ready.",
-                                "openai/widgetAccessible": true
-                            }
-                        },
-                        {
-                            "name": "create-change-request",
-                            "description": "Create a new Change Request in ServiceNow.",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {
-                                    "data": { "type": "string", "description": "JSON object of CR fields (short_description, category, priority, risk, type, etc.)" }
-                                },
-                                "required": ["data"],
-                                "additionalProperties": false
-                            }
-                        },
-                        {
-                            "name": "update-change-request",
-                            "description": "Update an existing Change Request in ServiceNow by number or sys_id.",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {
-                                    "number": { "type": "string", "description": "Change Request number (e.g. CHG0000012)" },
-                                    "sys_id": { "type": "string", "description": "Change Request sys_id" },
-                                    "fields": { "type": "string", "description": "JSON object of fields to update" }
-                                },
-                                "required": ["fields"],
-                                "additionalProperties": false
-                            }
-                        },
-                        {
-                            "name": "detect-change-collisions",
-                            "description": "Detect open changes targeting the same Configuration Item.",
-                            "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
-                            "annotations": { "readOnlyHint": true }
-                        },
-                        {
-                            "name": "generate-cab-agenda",
-                            "description": "Generate a CAB meeting agenda with pending changes, risk scores, and recommendations.",
-                            "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
-                            "annotations": { "readOnlyHint": true }
-                        },
-                        {
-                            "name": "get-change-history",
-                            "description": "Find similar past changes with success/failure rates and lessons learned.",
-                            "inputSchema": { "type": "object", "properties": { "ci_name": { "type": "string" }, "category": { "type": "string" }, "limit": { "type": "number" } }, "additionalProperties": false },
-                            "annotations": { "readOnlyHint": true }
-                        },
-                        {
-                            "name": "post-implementation-review",
-                            "description": "Check if a completed change caused incidents within 48 hours.",
-                            "inputSchema": { "type": "object", "properties": { "number": { "type": "string" } }, "required": ["number"], "additionalProperties": false },
-                            "annotations": { "readOnlyHint": true }
-                        }
-                    ]
-                }
-            },
-            "mcp_resource_description": {
-                "resources": [
-                    { "uri": "ui://widget/change-dashboard.html", "mimeType": "text/html+skybridge", "description": "Change Management dashboard with open CRs, risk heat map, and ITIL classification" },
-                    { "uri": "ui://widget/change-request.html", "mimeType": "text/html+skybridge", "description": "Detailed Change Request card with CI details, risk score, approvals, and timeline" },
-                    { "uri": "ui://widget/change-briefing.html", "mimeType": "text/html+skybridge", "description": "Change Risk Briefing with collisions, stale CRs, and recommendations" },
-                    { "uri": "ui://widget/change-metrics.html", "mimeType": "text/html+skybridge", "description": "Change Management KPIs and pipeline breakdown" },
-                    { "uri": "ui://widget/change-form.html", "mimeType": "text/html+skybridge", "description": "Interactive Change Request creation form" }
-                ]
-            }
-        }
-    ],
-    "auth": {
-        "type": "OAuthPluginVault",
-        "reference_id": "${{SERVICENOW_OAUTH_REGISTRATION_ID}}"
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
+  "schema_version": "v2.4",
+  "name_for_human": "ITSM Changes",
+  "description_for_human": "Change management: create, update, and track change requests with risk analysis and CAB workflows.",
+  "namespace": "itsm-change",
+  "functions": [
+    {
+      "name": "show-change-dashboard",
+      "description": "Display the Change Management dashboard with open change requests, risk heat map, and ITIL classification breakdown."
+    },
+    {
+      "name": "show-change-request",
+      "description": "Display a detailed Change Request with CI details, risk assessment, approval chain, and backout plan."
+    },
+    {
+      "name": "show-change-briefing",
+      "description": "Display the Change Risk Briefing with collisions, stale CRs, high-risk changes, incident risks, and recommendations."
+    },
+    {
+      "name": "show-change-metrics",
+      "description": "Display Change Management KPIs including success rate, emergency change percentage, and pipeline breakdown."
+    },
+    {
+      "name": "get-change-requests",
+      "description": "Query ServiceNow for change requests. Returns structured data for analysis."
+    },
+    {
+      "name": "prepare-change-request",
+      "description": "Open an interactive form to create a new ServiceNow Change Request. Pre-fills from conversation context."
+    },
+    {
+      "name": "create-change-request",
+      "description": "Create a new Change Request in ServiceNow."
+    },
+    {
+      "name": "update-change-request",
+      "description": "Update an existing Change Request in ServiceNow by number or sys_id."
+    },
+    {
+      "name": "detect-change-collisions",
+      "description": "Detect open changes targeting the same Configuration Item."
+    },
+    {
+      "name": "generate-cab-agenda",
+      "description": "Generate a CAB meeting agenda with pending changes, risk scores, and recommendations."
+    },
+    {
+      "name": "get-change-history",
+      "description": "Find similar past changes with success/failure rates and lessons learned."
+    },
+    {
+      "name": "post-implementation-review",
+      "description": "Check if a completed change caused incidents within 48 hours."
     }
+  ],
+  "runtimes": [
+    {
+      "type": "RemoteMCPServer",
+      "run_for_functions": [
+        "show-change-dashboard",
+        "show-change-request",
+        "show-change-briefing",
+        "show-change-metrics",
+        "get-change-requests",
+        "prepare-change-request",
+        "create-change-request",
+        "update-change-request",
+        "detect-change-collisions",
+        "generate-cab-agenda",
+        "get-change-history",
+        "post-implementation-review"
+      ],
+      "spec": {
+        "url": "${{CHANGE_MCP_ENDPOINT}}",
+        "mcp_tool_description": {
+          "tools": [
+            {
+              "name": "show-change-dashboard",
+              "description": "Display the Change Management dashboard with open change requests, risk heat map, and ITIL classification breakdown.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              },
+              "annotations": {
+                "readOnlyHint": true
+              },
+              "_meta": {
+                "openai/outputTemplate": "ui://widget/change-dashboard.html",
+                "openai/toolInvocation/invoking": "Loading change management dashboard…",
+                "openai/toolInvocation/invoked": "Dashboard ready.",
+                "openai/widgetAccessible": true
+              }
+            },
+            {
+              "name": "show-change-request",
+              "description": "Display a detailed Change Request with CI details, risk assessment, approval chain, and backout plan.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "number": {
+                    "type": "string",
+                    "description": "Change Request number (e.g. CHG0000001)"
+                  },
+                  "sys_id": {
+                    "type": "string",
+                    "description": "ServiceNow sys_id of the change request"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "annotations": {
+                "readOnlyHint": true
+              },
+              "_meta": {
+                "openai/outputTemplate": "ui://widget/change-request.html",
+                "openai/toolInvocation/invoking": "Loading change request details…",
+                "openai/toolInvocation/invoked": "Change request ready.",
+                "openai/widgetAccessible": true
+              }
+            },
+            {
+              "name": "show-change-briefing",
+              "description": "Display the Change Risk Briefing - a proactive analysis showing change collisions, stale CRs, high-risk changes, CIs with active incidents, and actionable recommendations.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              },
+              "annotations": {
+                "readOnlyHint": true
+              },
+              "_meta": {
+                "openai/outputTemplate": "ui://widget/change-briefing.html",
+                "openai/toolInvocation/invoking": "Compiling change risk briefing...",
+                "openai/toolInvocation/invoked": "Briefing ready.",
+                "openai/widgetAccessible": true
+              }
+            },
+            {
+              "name": "show-change-metrics",
+              "description": "Display Change Management KPIs - success rate, emergency change percentage, pipeline breakdown by state/type/risk, and change outcomes.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              },
+              "annotations": {
+                "readOnlyHint": true
+              },
+              "_meta": {
+                "openai/outputTemplate": "ui://widget/change-metrics.html",
+                "openai/toolInvocation/invoking": "Computing change metrics...",
+                "openai/toolInvocation/invoked": "Metrics ready.",
+                "openai/widgetAccessible": true
+              }
+            },
+            {
+              "name": "get-change-requests",
+              "description": "Query ServiceNow for change requests. Returns structured data for analysis.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "description": "Filter by state"
+                  },
+                  "priority": {
+                    "type": "string",
+                    "description": "Filter by priority"
+                  },
+                  "category": {
+                    "type": "string",
+                    "description": "Filter by category"
+                  },
+                  "assignment_group": {
+                    "type": "string",
+                    "description": "Filter by assignment group"
+                  },
+                  "limit": {
+                    "type": "number",
+                    "description": "Max results (default 20)"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "annotations": {
+                "readOnlyHint": true
+              }
+            },
+            {
+              "name": "prepare-change-request",
+              "description": "Open an interactive form to create a new ServiceNow Change Request. Pre-fills from conversation context.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "short_description": {
+                    "type": "string",
+                    "description": "Short description of the change"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "Detailed description"
+                  },
+                  "category": {
+                    "type": "string",
+                    "description": "Change category: Hardware, Software, Network, Database, Cloud, Security"
+                  },
+                  "priority": {
+                    "type": "string",
+                    "description": "Priority: 1-Critical, 2-High, 3-Moderate, 4-Low"
+                  },
+                  "risk": {
+                    "type": "string",
+                    "description": "Risk level: High, Moderate, Low"
+                  },
+                  "type": {
+                    "type": "string",
+                    "description": "ITIL change type: Standard, Normal, Emergency"
+                  },
+                  "assignment_group": {
+                    "type": "string",
+                    "description": "Assignment group name"
+                  },
+                  "cmdb_ci": {
+                    "type": "string",
+                    "description": "Affected Configuration Item name"
+                  },
+                  "justification": {
+                    "type": "string",
+                    "description": "Business justification"
+                  },
+                  "backout_plan": {
+                    "type": "string",
+                    "description": "Backout/rollback plan"
+                  },
+                  "test_plan": {
+                    "type": "string",
+                    "description": "Test plan"
+                  },
+                  "planned_start": {
+                    "type": "string",
+                    "description": "Planned start date (ISO 8601)"
+                  },
+                  "planned_end": {
+                    "type": "string",
+                    "description": "Planned end date (ISO 8601)"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "_meta": {
+                "openai/outputTemplate": "ui://widget/change-form.html",
+                "openai/toolInvocation/invoking": "Preparing change request form…",
+                "openai/toolInvocation/invoked": "Form ready.",
+                "openai/widgetAccessible": true
+              }
+            },
+            {
+              "name": "create-change-request",
+              "description": "Create a new Change Request in ServiceNow.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "string",
+                    "description": "JSON object of CR fields (short_description, category, priority, risk, type, etc.)"
+                  }
+                },
+                "required": [
+                  "data"
+                ],
+                "additionalProperties": false
+              }
+            },
+            {
+              "name": "update-change-request",
+              "description": "Update an existing Change Request in ServiceNow by number or sys_id.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "number": {
+                    "type": "string",
+                    "description": "Change Request number (e.g. CHG0000012)"
+                  },
+                  "sys_id": {
+                    "type": "string",
+                    "description": "Change Request sys_id"
+                  },
+                  "fields": {
+                    "type": "string",
+                    "description": "JSON object of fields to update"
+                  }
+                },
+                "required": [
+                  "fields"
+                ],
+                "additionalProperties": false
+              }
+            },
+            {
+              "name": "detect-change-collisions",
+              "description": "Detect open changes targeting the same Configuration Item.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              },
+              "annotations": {
+                "readOnlyHint": true
+              }
+            },
+            {
+              "name": "generate-cab-agenda",
+              "description": "Generate a CAB meeting agenda with pending changes, risk scores, and recommendations.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              },
+              "annotations": {
+                "readOnlyHint": true
+              }
+            },
+            {
+              "name": "get-change-history",
+              "description": "Find similar past changes with success/failure rates and lessons learned.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "ci_name": {
+                    "type": "string"
+                  },
+                  "category": {
+                    "type": "string"
+                  },
+                  "limit": {
+                    "type": "number"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "annotations": {
+                "readOnlyHint": true
+              }
+            },
+            {
+              "name": "post-implementation-review",
+              "description": "Check if a completed change caused incidents within 48 hours.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "number": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "number"
+                ],
+                "additionalProperties": false
+              },
+              "annotations": {
+                "readOnlyHint": true
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
 }

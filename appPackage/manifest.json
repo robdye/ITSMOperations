@@ -12,7 +12,7 @@
     "icons": { "color": "color.png", "outline": "outline.png" },
     "name": { "short": "ITSM Operations", "full": "Alex IT Ops — ITIL 4 & NIST 800-53 Digital Worker" },
     "description": {
-        "short": "Autonomous ITSM digital worker: incidents, problems, changes, SLAs, CMDB, FinOps, security",
+        "short": "Autonomous ITSM digital worker for IT service management",
         "full": "Alex IT Ops is an autonomous ITIL 4-aligned digital worker orchestrating 23 child workers across Incident, Change, Problem, Knowledge, Asset/CMDB, SLA, Security, FinOps, Release, Monitoring, Service Desk, Shift Handover, Vendor, Capacity, and Continuity management practices. Connects to ServiceNow for live ITSM data, rendered as Fluent UI v9 widgets inside M365 Copilot. Grounded in ITIL 4 and NIST 800-53."
     },
     "accentColor": "#0F6CBD",

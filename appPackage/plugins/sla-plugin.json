@@ -1,72 +1,72 @@
 {
-    "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
-    "schema_version": "v2.4",
-    "name_for_human": "ITSM SLA Management",
-    "name_for_model": "itsm_sla",
-    "description_for_human": "SLA management: track compliance, breaches, and at-risk service level agreements.",
-    "description_for_model": "Use for ServiceNow SLA management: viewing SLA compliance dashboards, tracking breaches, and identifying at-risk SLAs.",
-    "logo_url": "${{CONTAINER_APP_URL}}/assets/itsm-logo.png",
-    "contact_email": "itops@absx68251802.onmicrosoft.com",
-    "legal_info_url": "https://absx68251802.sharepoint.com/sites/itsm-operations/legal",
-    "namespace": "itsm_sla",
-    "functions": [
-        { "name": "show-sla-dashboard", "description": "Display the SLA Compliance Dashboard showing breaches, at-risk SLAs, and compliance rate." },
-        { "name": "get-sla-breaches", "description": "Get a list of current SLA breaches with affected services and breach details." }
-    ],
-    "runtimes": [
-        {
-            "type": "RemoteMCPServer",
-            "run_for_functions": [
-                "show-sla-dashboard", "get-sla-breaches"
-            ],
-            "spec": {
-                "url": "${{CHANGE_MCP_ENDPOINT}}",
-                "headers": {
-                    "x-api-key": "${{MCP_API_KEY}}"
-                },
-                "mcp_tool_description": {
-                    "tools": [
-                        {
-                            "name": "show-sla-dashboard",
-                            "description": "Display the SLA Compliance Dashboard showing breaches, at-risk SLAs, and compliance rate.",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {},
-                                "additionalProperties": false
-                            },
-                            "annotations": { "readOnlyHint": true },
-                            "_meta": {
-                                "openai/outputTemplate": "ui://widget/sla-dashboard.html",
-                                "openai/toolInvocation/invoking": "Loading SLA compliance…",
-                                "openai/toolInvocation/invoked": "SLA dashboard ready.",
-                                "openai/widgetAccessible": true
-                            }
-                        },
-                        {
-                            "name": "get-sla-breaches",
-                            "description": "Get a list of current SLA breaches with affected services and breach details.",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {
-                                    "priority": { "type": "string", "description": "Filter by priority" },
-                                    "limit": { "type": "number", "description": "Max results (default 20)" }
-                                },
-                                "additionalProperties": false
-                            },
-                            "annotations": { "readOnlyHint": true }
-                        }
-                    ]
-                }
-            },
-            "mcp_resource_description": {
-                "resources": [
-                    { "uri": "ui://widget/sla-dashboard.html", "mimeType": "text/html+skybridge", "description": "SLA Compliance Dashboard with breaches, at-risk SLAs, and compliance rate" }
-                ]
-            }
-        }
-    ],
-    "auth": {
-        "type": "OAuthPluginVault",
-        "reference_id": "${{SERVICENOW_OAUTH_REGISTRATION_ID}}"
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
+  "schema_version": "v2.4",
+  "name_for_human": "ITSM SLA",
+  "description_for_human": "SLA management: track compliance, breaches, and at-risk service level agreements.",
+  "namespace": "itsm-sla",
+  "functions": [
+    {
+      "name": "show-sla-dashboard",
+      "description": "Display the SLA Compliance Dashboard showing breaches, at-risk SLAs, and compliance rate."
+    },
+    {
+      "name": "get-sla-breaches",
+      "description": "Get a list of current SLA breaches with affected services and breach details."
     }
+  ],
+  "runtimes": [
+    {
+      "type": "RemoteMCPServer",
+      "run_for_functions": [
+        "show-sla-dashboard",
+        "get-sla-breaches"
+      ],
+      "spec": {
+        "url": "${{CHANGE_MCP_ENDPOINT}}",
+        "mcp_tool_description": {
+          "tools": [
+            {
+              "name": "show-sla-dashboard",
+              "description": "Display the SLA Compliance Dashboard showing breaches, at-risk SLAs, and compliance rate.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              },
+              "annotations": {
+                "readOnlyHint": true
+              },
+              "_meta": {
+                "openai/outputTemplate": "ui://widget/sla-dashboard.html",
+                "openai/toolInvocation/invoking": "Loading SLA compliance…",
+                "openai/toolInvocation/invoked": "SLA dashboard ready.",
+                "openai/widgetAccessible": true
+              }
+            },
+            {
+              "name": "get-sla-breaches",
+              "description": "Get a list of current SLA breaches with affected services and breach details.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "priority": {
+                    "type": "string",
+                    "description": "Filter by priority"
+                  },
+                  "limit": {
+                    "type": "number",
+                    "description": "Max results (default 20)"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "annotations": {
+                "readOnlyHint": true
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
 }

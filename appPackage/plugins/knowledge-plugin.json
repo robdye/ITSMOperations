@@ -1,82 +1,104 @@
 {
-    "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
-    "schema_version": "v2.4",
-    "name_for_human": "ITSM Knowledge Management",
-    "name_for_model": "itsm_knowledge",
-    "description_for_human": "Knowledge management: search, harvest, and create knowledge base articles and runbooks.",
-    "description_for_model": "Use for ServiceNow knowledge management: searching the knowledge base for articles and runbooks, harvesting knowledge from resolved incidents, and creating new KB articles.",
-    "logo_url": "${{CONTAINER_APP_URL}}/assets/itsm-logo.png",
-    "contact_email": "itops@absx68251802.onmicrosoft.com",
-    "legal_info_url": "https://absx68251802.sharepoint.com/sites/itsm-operations/legal",
-    "namespace": "itsm_knowledge",
-    "functions": [
-        { "name": "search-knowledge", "description": "Search the ServiceNow Knowledge Base for articles, runbooks, and procedures." },
-        { "name": "harvest-knowledge", "description": "Harvest knowledge from resolved incidents to identify candidates for new KB articles." },
-        { "name": "create-kb-article", "description": "Create a new Knowledge Base article in ServiceNow." }
-    ],
-    "runtimes": [
-        {
-            "type": "RemoteMCPServer",
-            "run_for_functions": [
-                "search-knowledge", "harvest-knowledge", "create-kb-article"
-            ],
-            "spec": {
-                "url": "${{CHANGE_MCP_ENDPOINT}}",
-                "headers": {
-                    "x-api-key": "${{MCP_API_KEY}}"
-                },
-                "mcp_tool_description": {
-                    "tools": [
-                        {
-                            "name": "search-knowledge",
-                            "description": "Search the ServiceNow Knowledge Base for articles, runbooks, and procedures.",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {
-                                    "query": { "type": "string", "description": "Search query" },
-                                    "limit": { "type": "number", "description": "Max results" }
-                                },
-                                "required": ["query"],
-                                "additionalProperties": false
-                            },
-                            "annotations": { "readOnlyHint": true }
-                        },
-                        {
-                            "name": "harvest-knowledge",
-                            "description": "Harvest knowledge from resolved incidents to identify candidates for new KB articles.",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {
-                                    "category": { "type": "string", "description": "Filter by incident category" },
-                                    "days": { "type": "number", "description": "Look back period in days (default 30)" },
-                                    "limit": { "type": "number", "description": "Max results" }
-                                },
-                                "additionalProperties": false
-                            },
-                            "annotations": { "readOnlyHint": true }
-                        },
-                        {
-                            "name": "create-kb-article",
-                            "description": "Create a new Knowledge Base article in ServiceNow.",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {
-                                    "data": { "type": "string", "description": "JSON object of KB article fields (short_description, text, category, knowledge_base)" }
-                                },
-                                "required": ["data"],
-                                "additionalProperties": false
-                            }
-                        }
-                    ]
-                }
-            },
-            "mcp_resource_description": {
-                "resources": []
-            }
-        }
-    ],
-    "auth": {
-        "type": "OAuthPluginVault",
-        "reference_id": "${{SERVICENOW_OAUTH_REGISTRATION_ID}}"
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
+  "schema_version": "v2.4",
+  "name_for_human": "ITSM Knowledge",
+  "description_for_human": "Knowledge management: search, harvest, and create knowledge base articles and runbooks.",
+  "namespace": "itsm-knowledge",
+  "functions": [
+    {
+      "name": "search-knowledge",
+      "description": "Search the ServiceNow Knowledge Base for articles, runbooks, and procedures."
+    },
+    {
+      "name": "harvest-knowledge",
+      "description": "Harvest knowledge from resolved incidents to identify candidates for new KB articles."
+    },
+    {
+      "name": "create-kb-article",
+      "description": "Create a new Knowledge Base article in ServiceNow."
     }
+  ],
+  "runtimes": [
+    {
+      "type": "RemoteMCPServer",
+      "run_for_functions": [
+        "search-knowledge",
+        "harvest-knowledge",
+        "create-kb-article"
+      ],
+      "spec": {
+        "url": "${{CHANGE_MCP_ENDPOINT}}",
+        "mcp_tool_description": {
+          "tools": [
+            {
+              "name": "search-knowledge",
+              "description": "Search the ServiceNow Knowledge Base for articles, runbooks, and procedures.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "description": "Search query"
+                  },
+                  "limit": {
+                    "type": "number",
+                    "description": "Max results"
+                  }
+                },
+                "required": [
+                  "query"
+                ],
+                "additionalProperties": false
+              },
+              "annotations": {
+                "readOnlyHint": true
+              }
+            },
+            {
+              "name": "harvest-knowledge",
+              "description": "Harvest knowledge from resolved incidents to identify candidates for new KB articles.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "category": {
+                    "type": "string",
+                    "description": "Filter by incident category"
+                  },
+                  "days": {
+                    "type": "number",
+                    "description": "Look back period in days (default 30)"
+                  },
+                  "limit": {
+                    "type": "number",
+                    "description": "Max results"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "annotations": {
+                "readOnlyHint": true
+              }
+            },
+            {
+              "name": "create-kb-article",
+              "description": "Create a new Knowledge Base article in ServiceNow.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "string",
+                    "description": "JSON object of KB article fields (short_description, text, category, knowledge_base)"
+                  }
+                },
+                "required": [
+                  "data"
+                ],
+                "additionalProperties": false
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
 }

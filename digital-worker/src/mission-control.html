@@ -266,32 +266,36 @@
     <div class="content">
       <!-- ═══ Command Center View ═══ -->
       <div class="view active" id="view-command-center">
-        <div class="stats-row">
-          <div class="stat-card"><div class="stat-value blue" id="s-workers">0</div><div class="stat-label">Workers</div></div>
-          <div class="stat-card"><div class="stat-value green" id="s-routines">0</div><div class="stat-label">Routines</div></div>
+        <div class="stats-row" style="grid-template-columns:repeat(6,1fr)">
+          <div class="stat-card"><div class="stat-value blue" id="s-conversations">0</div><div class="stat-label">Conversations</div></div>
+          <div class="stat-card"><div class="stat-value green" id="s-toolcalls">0</div><div class="stat-label">Tool Calls</div></div>
           <div class="stat-card"><div class="stat-value orange" id="s-approvals">0</div><div class="stat-label">Pending Approvals</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:var(--cyan)" id="s-workers">0</div><div class="stat-label">Workers Online</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:var(--pink)" id="s-routines">0</div><div class="stat-label">Routines</div></div>
           <div class="stat-card"><div class="stat-value purple" id="s-uptime">0h</div><div class="stat-label">Uptime</div></div>
         </div>
-        <div class="panel-grid">
-          <div class="panel">
-            <div class="panel-title">Worker Overview</div>
-            <div id="cc-workers"><div class="empty-state"><div class="empty-icon">⚙</div><div class="empty-text">No workers registered</div></div></div>
+        <div style="display:grid;grid-template-columns:1fr 340px;gap:12px;">
+          <!-- Left: Recent Agent Activity -->
+          <div class="panel" style="max-height:calc(100vh - 240px);overflow-y:auto;">
+            <div class="panel-title">🧠 Agent Activity — What Alex is doing</div>
+            <div id="cc-activity">
+              <div class="empty-state"><div class="empty-icon">⚡</div><div class="empty-text">No agent activity yet. Send a message to Alex and watch the reasoning appear here in real time.</div></div>
+            </div>
           </div>
-          <div class="panel">
-            <div class="panel-title">Scheduled Routines</div>
-            <div id="cc-routines"><div class="empty-state"><div class="empty-icon">⏱</div><div class="empty-text">No routines configured</div></div></div>
-          </div>
-          <div class="panel">
-            <div class="panel-title">Approval Queue</div>
-            <div id="cc-approvals"><div class="empty-state"><div class="empty-icon">✓</div><div class="empty-text">No pending approvals</div></div></div>
-          </div>
-          <div class="panel">
-            <div class="panel-title">Memory Store</div>
-            <div id="cc-memory"><div class="empty-state"><div class="empty-icon">🧠</div><div class="empty-text">No memory entries</div></div></div>
-          </div>
-          <div class="panel panel-full">
-            <div class="panel-title">Audit Trail — Recent</div>
-            <div id="cc-audit"><div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">No audit events yet</div></div></div>
+          <!-- Right: Fleet + Routines compact -->
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <div class="panel" style="flex:0 0 auto;max-height:220px;overflow-y:auto;">
+              <div class="panel-title">⚙ Worker Fleet</div>
+              <div id="cc-workers-compact"></div>
+            </div>
+            <div class="panel" style="flex:0 0 auto;max-height:180px;overflow-y:auto;">
+              <div class="panel-title">⏱ Next Scheduled</div>
+              <div id="cc-routines-next"></div>
+            </div>
+            <div class="panel" style="flex:1;overflow-y:auto;">
+              <div class="panel-title">✓ Approval Queue</div>
+              <div id="cc-approvals"><div class="empty-state" style="padding:16px"><div class="empty-text">No pending approvals</div></div></div>
+            </div>
           </div>
         </div>
       </div>

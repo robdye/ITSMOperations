@@ -2,7 +2,7 @@
     "$schema": "https://developer.microsoft.com/json-schemas/copilot/declarative-agent/v1.6/schema.json",
     "version": "v1.6",
     "name": "ITSM Operations",
-    "description": "Alex IT Ops — an autonomous ITIL 4-aligned digital worker orchestrating 23 child workers across Incident, Change, Problem, Knowledge, Asset/CMDB, SLA, Security, FinOps, Release, Monitoring, Service Catalog, Shift Handover, Vendor, Service Desk, Capacity, Continuity management practices, plus Knowledge Harvesting, Computer Use, and ServiceNow Live Chat. All dashboards rendered in Fluent UI v9 with dark mode support. Grounded in ITIL 4 and NIST 800-53. Connects to ServiceNow, Microsoft 365, and Azure services.",
+    "description": "Alex IT Ops — an autonomous ITIL 4-aligned digital worker orchestrating 23 child workers across Incident, Change, Problem, Knowledge, Asset/CMDB, SLA, Security, FinOps, Release, Monitoring, and more. Dashboards rendered in Fluent UI v9. Grounded in ITIL 4 and NIST 800-53. Connects to ServiceNow, Microsoft 365, and Azure services.",
     "instructions": "$[file('instruction-short.txt')]",
     "capabilities": [
         { "name": "CodeInterpreter" },
@@ -16,15 +16,8 @@
         { "name": "WebSearch" },
         {
             "name": "GraphConnectors",
-            "connections": ["servicenow-kb-connector"]
-        },
-        { "name": "Image" },
-        {
-            "name": "CopilotConnectors",
-            "connectors": ["servicenow", "azure-devops"]
-        },
-        { "name": "EnterpriseGraphSearch" },
-        { "name": "Memory" }
+            "connections": [{ "connection_id": "servicenow-kb-connector" }]
+        }
     ],
     "actions": [
         { "id": "itsm-change", "file": "plugins/change-plugin.json" },
@@ -37,145 +30,18 @@
         { "id": "itsm-briefing", "file": "plugins/briefing-plugin.json" },
         { "id": "eoldata", "file": "eol-plugin.json" }
     ],
-    "skills": [
-        { "id": "incident-manager", "file": "../cowork-skills/incident-manager/skill.json" },
-        { "id": "change-manager", "file": "../cowork-skills/change-manager/skill.json" },
-        { "id": "problem-manager", "file": "../cowork-skills/problem-manager/skill.json" },
-        { "id": "asset-cmdb-manager", "file": "../cowork-skills/asset-cmdb-manager/skill.json" },
-        { "id": "sla-manager", "file": "../cowork-skills/sla-manager/skill.json" },
-        { "id": "knowledge-manager", "file": "../cowork-skills/knowledge-manager/skill.json" },
-        { "id": "vendor-manager", "file": "../cowork-skills/vendor-manager/skill.json" },
-        { "id": "service-desk-manager", "file": "../cowork-skills/service-desk-manager/skill.json" },
-        { "id": "monitoring-manager", "file": "../cowork-skills/monitoring-manager/skill.json" },
-        { "id": "release-manager", "file": "../cowork-skills/release-manager/skill.json" },
-        { "id": "capacity-manager", "file": "../cowork-skills/capacity-manager/skill.json" },
-        { "id": "continuity-manager", "file": "../cowork-skills/continuity-manager/skill.json" },
-        { "id": "security-manager", "file": "../cowork-skills/security-manager/skill.json" },
-        { "id": "knowledge-harvester", "file": "../cowork-skills/knowledge-manager/skill.json" },
-        { "id": "shift-handover", "file": "../cowork-skills/shift-handover/skill.json" },
-        { "id": "finops-manager", "file": "../cowork-skills/finops-manager/skill.json" },
-        { "id": "computer-use-operator", "file": "../cowork-skills/computer-use/skill.json" },
-        { "id": "agent-change-control", "file": "../cowork-skills/agent-change-control/skill.json" },
-        { "id": "agent-compliance-dashboard", "file": "../cowork-skills/agent-compliance-dashboard/skill.json" },
-        { "id": "agent-inventory-audit", "file": "../cowork-skills/agent-inventory-audit/skill.json" },
-        { "id": "agent-ownership-transfer", "file": "../cowork-skills/agent-ownership-transfer/skill.json" },
-        { "id": "shadow-agent-discovery", "file": "../cowork-skills/shadow-agent-discovery/skill.json" }
-    ],
     "conversation_starters": [
-        { "title": "Morning Briefing", "text": "Give me my ITSM operations briefing. What needs my attention across incidents, problems, changes, and SLAs?",
-          "audience": { "graph_groups": ["IT Service Managers", "IT Operations"] } },
-        { "title": "P1 War Room", "text": "Open the major incident bridge — show me all active P1/P2 incidents and their blast radius.",
-          "audience": { "graph_groups": ["Incident Commanders", "On-Call Engineers"] } },
-        { "title": "CAB Prep", "text": "Generate the CAB agenda for this week. Include risk scores, collisions, and recommendations.",
-          "audience": { "graph_groups": ["Change Managers", "Change Advisory Board"] } },
-        { "title": "Shadow Agent Sweep", "text": "Run a shadow-agent discovery sweep across our tenant.",
-          "audience": { "graph_groups": ["Security Operations", "IT Governance"] } },
-        { "title": "FinOps Snapshot", "text": "Show me the FinOps dashboard with Azure cost anomalies, right-sizing candidates, and budget forecast." },
+        { "title": "Morning Briefing", "text": "Give me my ITSM operations briefing. What needs my attention across incidents, problems, changes, and SLAs?" },
         { "title": "Incident Dashboard", "text": "Show me the incident dashboard. Are there any P1s or P2s that need immediate attention?" },
+        { "title": "P1 War Room", "text": "Open the major incident bridge — show me all active P1/P2 incidents and their blast radius." },
+        { "title": "Change Dashboard", "text": "Show me the change dashboard with risk scores. Any collisions or high-risk changes?" },
         { "title": "SLA Compliance", "text": "Show me the SLA compliance dashboard. Which SLAs are breached or at risk?" },
+        { "title": "CAB Prep", "text": "Generate the CAB agenda for this week. Include risk scores, collisions, and recommendations." },
         { "title": "Knowledge Search", "text": "Search the knowledge base for Oracle failover procedures and related runbooks." },
-        { "title": "Shift Handover", "text": "Generate a shift handover report covering the last 8 hours of ITSM activity.",
-          "audience": { "graph_groups": ["On-Call Engineers", "NOC Team"] } },
-        { "title": "Change Risk Briefing", "text": "Show me the change dashboard with risk scores. Any collisions or high-risk changes?" },
-        { "title": "Security & DR Posture", "text": "Give me a security posture overview, DR readiness status, and any active security incidents.",
-          "audience": { "graph_groups": ["Security Operations", "CISO Office"] } },
-        { "title": "Mission Control", "text": "Show me Mission Control — what workers are active, pending approvals, and recent tool calls." },
-        { "title": "Live Chat with Agent", "text": "Connect me to a ServiceNow live agent for help with a complex issue." },
-        { "title": "Audit Trail", "text": "Show me the audit trail — what actions has Alex taken in the last 24 hours?" },
-        { "title": "Schedule Control", "text": "Show me the scheduled routine control panel. What automated jobs are running?" },
-        { "title": "Seed Demo Data", "text": "Seed the ServiceNow dev instance with realistic ITSM demo data for a walkthrough." }
-    ],
-    "knowledge_sources": [
-        {
-            "type": "GraphConnector",
-            "connection_id": "servicenow-kb-connector",
-            "description": "ServiceNow knowledge base articles, runbooks, KEDB",
-            "citation_required": true
-        },
-        {
-            "type": "SharePoint",
-            "url": "https://absx68251802.sharepoint.com/sites/itsm-operations",
-            "description": "Operational runbooks, DR plans, architecture docs, PIR reports"
-        },
-        {
-            "type": "AzureAISearch",
-            "endpoint": "${{AZURE_SEARCH_ENDPOINT}}",
-            "index": "itsm-knowledge-v1",
-            "semantic_config": "default",
-            "vector_field": "content_vector"
-        },
-        {
-            "type": "MicrosoftLearn",
-            "scope": ["azure", "microsoft-365", "security"]
-        }
-    ],
-    "tools_settings": {
-        "default_citation_policy": "required",
-        "tool_overrides": [
-            { "tool": "create-change-request", "hitl": "required", "approval_audience": "ChangeManagers" },
-            { "tool": "update-cmdb-ci", "hitl": "required" },
-            { "tool": "create-incident", "hitl": "optional" },
-            { "tool": "update-incident", "hitl": "required" },
-            { "tool": "create-problem", "hitl": "required" },
-            { "tool": "search-knowledge", "citation_policy": "required" },
-            { "tool": "harvest-knowledge", "hitl": "required", "approval_audience": "KnowledgeManagers" },
-            { "tool": "update-change-request", "hitl": "required" },
-            { "tool": "generate-cab-agenda", "hitl": "optional" },
-            { "tool": "get-azure-alerts", "citation_policy": "required" }
-        ]
-    },
-    "behavior_overrides": {
-        "refuse_when": [
-            "user requests bypass of CAB approval process",
-            "user requests deletion of audit records or logs",
-            "user requests change implementation outside approved window without ECAB authorization",
-            "user requests bulk deletion of ServiceNow records",
-            "user requests access to another user's credentials or tokens",
-            "user attempts to disable HITL controls or safety gates"
-        ],
-        "always_cite": [
-            "NIST 800-53 control reference when discussing security controls",
-            "ITIL 4 practice name when performing service management activities",
-            "ServiceNow record number when referencing specific tickets",
-            "SLA target when discussing service level compliance"
-        ]
-    },
-    "agent_extensibility": {
-        "discoverable": true,
-        "published_capabilities": [
-            {
-                "id": "itsm-knowledge-search",
-                "description": "Search ITSM knowledge base, runbooks, and known errors",
-                "input_schema": { "query": "string", "filters": "object" },
-                "output_schema": { "articles": "array", "citations": "array" }
-            },
-            {
-                "id": "itsm-briefing",
-                "description": "Get current ITSM operations status across all practices",
-                "input_schema": { "scope": "string" },
-                "output_schema": { "briefing": "object" }
-            },
-            {
-                "id": "itsm-incident-status",
-                "description": "Query incident status and active P1/P2 incidents",
-                "input_schema": { "priority": "string", "state": "string" },
-                "output_schema": { "incidents": "array", "summary": "object" }
-            }
-        ],
-        "federation_protocol": "A2A",
-        "governance": {
-            "require_auth": true,
-            "allowed_callers": ["*"],
-            "rate_limit": { "requests_per_minute": 60 },
-            "audit": true
-        }
-    },
-    "localizationInfo": {
-        "defaultLanguageTag": "en-US",
-        "additionalLanguages": [
-            { "languageTag": "fr-FR", "file": "instruction.fr-FR.txt" },
-            { "languageTag": "es-ES", "file": "instruction.es-ES.txt" },
-            { "languageTag": "ja-JP", "file": "instruction.ja-JP.txt" }
-        ]
-    }
+        { "title": "FinOps Snapshot", "text": "Show me the FinOps dashboard with Azure cost anomalies, right-sizing candidates, and budget forecast." },
+        { "title": "Problem Dashboard", "text": "Show me the problem management dashboard with open problems and known errors." },
+        { "title": "EOL Risk Check", "text": "Check end-of-life status for Windows Server 2019 and show the lifecycle risk." },
+        { "title": "Seed Demo Data", "text": "Seed the ServiceNow dev instance with realistic ITSM demo data for a walkthrough." },
+        { "title": "Audit Trail", "text": "Show me the audit trail — what actions has Alex taken in the last 24 hours?" }
+    ]
 }
