@@ -55,12 +55,16 @@ Your manager is ${MANAGER_NAME}.`;
 
 function buildVoiceLiveUrl(): string {
   const url = new URL(VOICELIVE_ENDPOINT);
-  return `wss://${url.host}/openai/v1/realtime?api-version=2025-04-01-preview&deployment=${VOICELIVE_MODEL}`;
+  // GA format: /openai/v1/realtime?model=<deployment>
+  // Preview format uses /openai/realtime?api-version=...&deployment=...
+  // The GA path MUST use model= (not deployment=) and has NO api-version.
+  return `wss://${url.host}/openai/v1/realtime?model=${VOICELIVE_MODEL}`;
 }
 
 async function getAccessToken(): Promise<string> {
   const cred = new DefaultAzureCredential();
-  const token = await cred.getToken('https://cognitiveservices.azure.com/.default');
+  // GA Realtime API requires the ai.azure.com scope
+  const token = await cred.getToken('https://ai.azure.com/.default');
   return token.token;
 }
 
@@ -125,12 +129,18 @@ export function attachVoiceWebSocket(server: Server): void {
           session: {
             modalities: ['text', 'audio'],
             instructions: VOICE_SYSTEM_PROMPT,
-            voice: 'en-US-AvaMultilingualNeural',
+            voice: 'ash',
             temperature: 0.8,
             input_audio_format: 'pcm16',
             output_audio_format: 'pcm16',
+            input_audio_noise_reduction: { type: 'near_field' },
             input_audio_transcription: { model: 'whisper-1' },
-            turn_detection: { type: 'server_vad', silence_duration_ms: 500 },
+            turn_detection: {
+              type: 'semantic_vad',
+              eagerness: 'auto',
+              interrupt_response: true,
+              create_response: true,
+            },
             tools: VOICE_TOOLS,
             tool_choice: 'auto',
           },
