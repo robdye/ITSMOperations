@@ -76,6 +76,7 @@ server.get('/api/health', (_req: Request, res: Response) => {
     status: 'healthy',
     agent: 'ITSM Operations Digital Worker',
     timestamp: new Date().toISOString(),
+    uptimeMs: Math.floor(process.uptime() * 1000),
     voiceEnabled: isVoiceEnabled(),
     features: {
       architecture: 'multi-agent',
