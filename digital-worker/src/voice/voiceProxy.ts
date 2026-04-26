@@ -130,7 +130,7 @@ export function attachVoiceWebSocket(server: Server): void {
           type: 'session.update',
           session: {
             type: 'realtime',
-            output_modalities: ['text', 'audio'],
+            output_modalities: ['audio'],
             instructions: VOICE_SYSTEM_PROMPT,
             audio: {
               input: {
