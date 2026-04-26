@@ -501,16 +501,16 @@ export function createChangeServer(): Server {
       { name: "get-change-history", description: "Find similar past changes for a CI or category. Shows success/failure rates and lessons learned.", inputSchema: { type: "object" as const, properties: { ci_name: { type: "string" as const }, category: { type: "string" as const }, limit: { type: "number" as const } }, additionalProperties: false }, annotations: { readOnlyHint: true } },
       { name: "post-implementation-review", description: "Post-Implementation Review — checks if a completed change caused any incidents in the 48 hours after implementation.", inputSchema: { type: "object" as const, properties: { number: { type: "string" as const, description: "CR number" } }, required: ["number"] as const, additionalProperties: false }, annotations: { readOnlyHint: true } },
       // ── Incident Management ──
-      { name: "show-incident-dashboard", description: "Display the Incident Dashboard with all active incidents by priority.", inputSchema: { type: "object" as const, properties: { state: { type: "string" as const }, priority: { type: "string" as const }, category: { type: "string" as const } }, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(INCIDENT_DASHBOARD) } as any,
+      { name: "show-incident-dashboard", description: "Display the Incident Dashboard showing all active (open) incidents grouped by priority.", inputSchema: { type: "object" as const, properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(INCIDENT_DASHBOARD) } as any,
       { name: "get-incidents", description: "Query ServiceNow incidents. Defaults to active/open incidents only (excludes Resolved, Closed, Canceled). Pass state='all' for every state.", inputSchema: { type: "object" as const, properties: { state: { type: "string" as const, description: "Incident state filter. Omit for active only. Use 'all' for every state, or a number: 1=New, 2=InProgress, 3=OnHold, 6=Resolved, 7=Closed, 8=Canceled." }, priority: { type: "string" as const }, category: { type: "string" as const }, assignment_group: { type: "string" as const }, limit: { type: "number" as const } }, additionalProperties: false }, annotations: { readOnlyHint: true } },
       { name: "create-incident", description: "Create a new incident in ServiceNow.", inputSchema: { type: "object" as const, properties: { data: { type: "string" as const, description: "JSON object of incident fields" } }, required: ["data"] as const, additionalProperties: false } },
       { name: "update-incident", description: "Update an existing incident.", inputSchema: { type: "object" as const, properties: { sys_id: { type: "string" as const }, fields: { type: "string" as const } }, required: ["sys_id", "fields"] as const, additionalProperties: false } },
       // ── Problem Management ──
-      { name: "show-problem-dashboard", description: "Display the Problem Dashboard with open problems and known errors.", inputSchema: { type: "object" as const, properties: { state: { type: "string" as const }, priority: { type: "string" as const } }, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(PROBLEM_DASHBOARD) } as any,
+      { name: "show-problem-dashboard", description: "Display the Problem Dashboard showing open problems and known errors.", inputSchema: { type: "object" as const, properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(PROBLEM_DASHBOARD) } as any,
       { name: "create-problem", description: "Create a problem record from recurring incidents.", inputSchema: { type: "object" as const, properties: { data: { type: "string" as const } }, required: ["data"] as const, additionalProperties: false } },
       { name: "update-problem", description: "Update an existing problem record.", inputSchema: { type: "object" as const, properties: { sys_id: { type: "string" as const }, fields: { type: "string" as const } }, required: ["sys_id", "fields"] as const, additionalProperties: false } },
       // ── SLA Management ──
-      { name: "show-sla-dashboard", description: "Display the SLA Compliance Dashboard showing breaches, at-risk, and compliance rate.", inputSchema: { type: "object" as const, properties: { stage: { type: "string" as const }, has_breached: { type: "string" as const } }, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(SLA_DASHBOARD) } as any,
+      { name: "show-sla-dashboard", description: "Display the SLA Compliance Dashboard showing breaches, at-risk, and compliance rate.", inputSchema: { type: "object" as const, properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(SLA_DASHBOARD) } as any,
       // ── Service Request Management ──
       { name: "create-service-request", description: "Create a new service request in ServiceNow.", inputSchema: { type: "object" as const, properties: { data: { type: "string" as const, description: "JSON object of service request fields" } }, required: ["data"] as const, additionalProperties: false } },
       { name: "update-service-request", description: "Update an existing service request.", inputSchema: { type: "object" as const, properties: { sys_id: { type: "string" as const }, fields: { type: "string" as const } }, required: ["sys_id", "fields"] as const, additionalProperties: false } },
@@ -1229,10 +1229,8 @@ export function createChangeServer(): Server {
       // ── Widget: Incident Dashboard ──
       case "show-incident-dashboard": {
         const snowInstance = process.env.SNOW_INSTANCE || "";
-        const incidents = await snow.getIncidents({
-          state: args?.state as string, priority: args?.priority as string,
-          category: args?.category as string, limit: 50,
-        });
+        // Always show active incidents only (no LLM-controlled state filter)
+        const incidents = await snow.getIncidents({ limit: 100 });
         const data = { incidents, snowInstance, generatedAt: new Date().toISOString() };
         const p1 = incidents.filter((i: any) => (i.priority || "").includes("1")).length;
         return widgetResponse(INCIDENT_DASHBOARD, data,
@@ -1272,9 +1270,8 @@ export function createChangeServer(): Server {
       // ── Widget: Problem Dashboard ──
       case "show-problem-dashboard": {
         const snowInstance = process.env.SNOW_INSTANCE || "";
-        const problems = await snow.getProblems({
-          state: args?.state as string, priority: args?.priority as string, limit: 50,
-        });
+        // Always show all open problems (no LLM-controlled filters)
+        const problems = await snow.getProblems({ limit: 50 });
         const data = { problems, snowInstance, generatedAt: new Date().toISOString() };
         return widgetResponse(PROBLEM_DASHBOARD, data,
           `Problem Dashboard: ${problems.length} problems. Known Errors: ${problems.filter((p: any) => p.known_error === "true").length}`);
@@ -1302,9 +1299,8 @@ export function createChangeServer(): Server {
       // ── Widget: SLA Dashboard ──
       case "show-sla-dashboard": {
         const snowInstance = process.env.SNOW_INSTANCE || "";
-        const slas = await snow.getTaskSLAs({
-          stage: args?.stage as string, has_breached: args?.has_breached as string, limit: 50,
-        });
+        // Always show all tracked SLAs (no LLM-controlled filters)
+        const slas = await snow.getTaskSLAs({ limit: 50 });
         const data = { slas, snowInstance, generatedAt: new Date().toISOString() };
         const breached = slas.filter((s: any) => s.has_breached === "true").length;
         return widgetResponse(SLA_DASHBOARD, data,
