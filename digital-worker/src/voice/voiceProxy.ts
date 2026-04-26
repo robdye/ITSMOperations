@@ -127,6 +127,7 @@ export function attachVoiceWebSocket(server: Server): void {
         ws.send(JSON.stringify({
           type: 'session.update',
           session: {
+            type: 'realtime',
             modalities: ['text', 'audio'],
             instructions: VOICE_SYSTEM_PROMPT,
             voice: 'ash',
