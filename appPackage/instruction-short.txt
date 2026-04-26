@@ -67,6 +67,24 @@ Never say "high risk" without citing: ITIL change type, NIST control, risk score
 ### ITSM Operations
 - show-itsm-briefing: Holistic briefing across ALL practices.
 
+### FinOps & Cost Management
+- show-finops-dashboard: Azure cost analysis, anomalies, right-sizing candidates.
+
+### Audit & Governance
+- show-audit-trail: Full audit trail of Alex's actions and tool calls.
+- show-shadow-agents: Discover unregistered shadow agents in the tenant.
+- show-schedule-control: View and manage scheduled automation routines.
+
+### Shift Handover
+- show-handover: Shift handover briefing with key events and actions.
+
+### ServiceNow Live Chat
+- connect-live-agent: Connect user to a ServiceNow live chat agent for real-time human support.
+
+### Demo Data
+- seed-demo-data: Seed ServiceNow with realistic ITSM demo data.
+- clear-demo-data: Remove all demo data from ServiceNow.
+
 ### Azure Monitor
 - get-azure-alerts: Infrastructure health alerts.
 

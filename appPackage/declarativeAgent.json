@@ -2,7 +2,7 @@
     "$schema": "https://developer.microsoft.com/json-schemas/copilot/declarative-agent/v1.6/schema.json",
     "version": "v1.6",
     "name": "ITSM Operations",
-    "description": "Alex IT Ops — an autonomous ITIL 4-aligned digital worker orchestrating 18 child workers across Incident, Change, Problem, Knowledge, Asset/CMDB, SLA, Security, FinOps, Release, Monitoring, Service Catalog, Shift Handover, Vendor, Service Desk, Capacity, Continuity management practices, plus Knowledge Harvesting and Computer Use. Grounded in ITIL 4 and NIST 800-53. Connects to ServiceNow, Microsoft 365, and Azure services.",
+    "description": "Alex IT Ops — an autonomous ITIL 4-aligned digital worker orchestrating 23 child workers across Incident, Change, Problem, Knowledge, Asset/CMDB, SLA, Security, FinOps, Release, Monitoring, Service Catalog, Shift Handover, Vendor, Service Desk, Capacity, Continuity management practices, plus Knowledge Harvesting, Computer Use, and ServiceNow Live Chat. All dashboards rendered in Fluent UI v9 with dark mode support. Grounded in ITIL 4 and NIST 800-53. Connects to ServiceNow, Microsoft 365, and Azure services.",
     "instructions": "$[file('instruction-short.txt')]",
     "capabilities": [
         { "name": "CodeInterpreter" },
@@ -70,16 +70,20 @@
           "audience": { "graph_groups": ["Change Managers", "Change Advisory Board"] } },
         { "title": "Shadow Agent Sweep", "text": "Run a shadow-agent discovery sweep across our tenant.",
           "audience": { "graph_groups": ["Security Operations", "IT Governance"] } },
-        { "title": "FinOps Snapshot", "text": "Show me Azure cost anomalies, right-sizing candidates, and budget forecast." },
-        { "title": "Incident Dashboard", "text": "Show me all active incidents. Are there any P1s or P2s that need immediate attention?" },
+        { "title": "FinOps Snapshot", "text": "Show me the FinOps dashboard with Azure cost anomalies, right-sizing candidates, and budget forecast." },
+        { "title": "Incident Dashboard", "text": "Show me the incident dashboard. Are there any P1s or P2s that need immediate attention?" },
         { "title": "SLA Compliance", "text": "Show me the SLA compliance dashboard. Which SLAs are breached or at risk?" },
         { "title": "Knowledge Search", "text": "Search the knowledge base for Oracle failover procedures and related runbooks." },
         { "title": "Shift Handover", "text": "Generate a shift handover report covering the last 8 hours of ITSM activity.",
           "audience": { "graph_groups": ["On-Call Engineers", "NOC Team"] } },
-        { "title": "Change Risk Briefing", "text": "Give me the change risk briefing. Any collisions, high-risk changes, or stale CRs?" },
+        { "title": "Change Risk Briefing", "text": "Show me the change dashboard with risk scores. Any collisions or high-risk changes?" },
         { "title": "Security & DR Posture", "text": "Give me a security posture overview, DR readiness status, and any active security incidents.",
           "audience": { "graph_groups": ["Security Operations", "CISO Office"] } },
-        { "title": "What is Alex doing?", "text": "Show me Mission Control — what workers are active, pending approvals, and recent tool calls." }
+        { "title": "Mission Control", "text": "Show me Mission Control — what workers are active, pending approvals, and recent tool calls." },
+        { "title": "Live Chat with Agent", "text": "Connect me to a ServiceNow live agent for help with a complex issue." },
+        { "title": "Audit Trail", "text": "Show me the audit trail — what actions has Alex taken in the last 24 hours?" },
+        { "title": "Schedule Control", "text": "Show me the scheduled routine control panel. What automated jobs are running?" },
+        { "title": "Seed Demo Data", "text": "Seed the ServiceNow dev instance with realistic ITSM demo data for a walkthrough." }
     ],
     "knowledge_sources": [
         {

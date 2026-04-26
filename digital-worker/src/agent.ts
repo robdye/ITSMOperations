@@ -80,6 +80,7 @@ async function resolveUserEmail(displayName: string): Promise<string | null> {
 
 export class ItsmAgent extends AgentApplication<TurnState> {
   static authHandlerName: string = 'agentic';
+  private _processedMessageIds?: Set<string>;
 
   constructor() {
     super({
@@ -206,6 +207,22 @@ export class ItsmAgent extends AgentApplication<TurnState> {
     }
 
     addMessage(userId, 'user', text);
+
+    // Deduplicate — Teams/Copilot may deliver the same message twice
+    const msgId = context.activity.id || '';
+    if (msgId && this._processedMessageIds?.has(msgId)) {
+      console.log(`[Agent] Duplicate message ${msgId} — skipping`);
+      return;
+    }
+    if (msgId) {
+      if (!this._processedMessageIds) this._processedMessageIds = new Set();
+      this._processedMessageIds.add(msgId);
+      // Evict old entries to prevent memory leak (keep last 200)
+      if (this._processedMessageIds.size > 200) {
+        const first = this._processedMessageIds.values().next().value;
+        if (first) this._processedMessageIds.delete(first);
+      }
+    }
 
     // Send typing indicator loop while processing (official A365 pattern — 4s interval)
     let typingInterval: ReturnType<typeof setInterval> | undefined;

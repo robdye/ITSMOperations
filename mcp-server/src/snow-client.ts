@@ -20,6 +20,21 @@ async function authHeader(): Promise<Record<string, string>> {
   return getAuthHeaders();
 }
 
+/** Fetch with retry on 429 / 5xx — exponential backoff */
+async function fetchWithRetry(url: string, init: RequestInit, maxRetries = 3): Promise<Response> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, init);
+    if (res.status === 429 || (res.status >= 500 && attempt < maxRetries)) {
+      const retryAfter = Number(res.headers.get('Retry-After') || String(Math.pow(2, attempt)));
+      console.warn(`[SNOW] ${res.status} on ${url} — retry ${attempt + 1}/${maxRetries} after ${retryAfter}s`);
+      await new Promise(r => setTimeout(r, retryAfter * 1000));
+      continue;
+    }
+    return res;
+  }
+  return fetch(url, init); // final attempt, let it throw naturally
+}
+
 /** Generic ServiceNow Table API GET */
 async function snowGet(table: string, query?: string, fields?: string[], limit = 20): Promise<any[]> {
   const params = new URLSearchParams();
@@ -29,7 +44,7 @@ async function snowGet(table: string, query?: string, fields?: string[], limit =
   params.set("sysparm_display_value", "true");
 
   const url = `${SNOW_INSTANCE}/api/now/table/${encodeURIComponent(table)}?${params}`;
-  const res = await fetch(url, { headers: await authHeader() });
+  const res = await fetchWithRetry(url, { headers: await authHeader() });
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`ServiceNow GET ${table} failed (${res.status}): ${text}`);
@@ -41,7 +56,7 @@ async function snowGet(table: string, query?: string, fields?: string[], limit =
 /** ServiceNow Table API POST (create record) */
 async function snowPost(table: string, body: Record<string, unknown>): Promise<any> {
   const url = `${SNOW_INSTANCE}/api/now/table/${encodeURIComponent(table)}`;
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     method: "POST",
     headers: await authHeader(),
     body: JSON.stringify(body),

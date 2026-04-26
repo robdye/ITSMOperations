@@ -1,21 +1,21 @@
 {
     "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.24/MicrosoftTeams.schema.json",
     "manifestVersion": "1.24",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "id": "${{TEAMS_APP_ID}}",
     "developer": {
-        "name": "ABSx68251802",
-        "websiteUrl": "https://www.microsoft.com",
-        "privacyUrl": "https://www.microsoft.com/privacy",
-        "termsOfUseUrl": "https://www.microsoft.com/termofuse"
+        "name": "ITSM Operations",
+        "websiteUrl": "https://github.com/robdye/ITSMOperations",
+        "privacyUrl": "https://github.com/robdye/ITSMOperations/blob/master/PRIVACY.md",
+        "termsOfUseUrl": "https://github.com/robdye/ITSMOperations/blob/master/TERMS.md"
     },
     "icons": { "color": "color.png", "outline": "outline.png" },
-    "name": { "short": "ITSM Operations", "full": "ITSM Operations Agent - ITIL V4 and NIST 800-53 IT Service Management" },
+    "name": { "short": "ITSM Operations", "full": "Alex IT Ops — ITIL 4 & NIST 800-53 Digital Worker" },
     "description": {
-        "short": "Full ITSM operations: incidents, problems, changes, SLAs, knowledge, assets",
-        "full": "ITSM Operations agent provides full IT Service Management across incident management, problem management, change enablement, SLA compliance, knowledge base, asset management, and CMDB intelligence - all grounded in ITIL V4 and NIST 800-53, rendered as rich widgets inside M365 Copilot."
+        "short": "Autonomous ITSM digital worker: incidents, problems, changes, SLAs, CMDB, FinOps, security",
+        "full": "Alex IT Ops is an autonomous ITIL 4-aligned digital worker orchestrating 23 child workers across Incident, Change, Problem, Knowledge, Asset/CMDB, SLA, Security, FinOps, Release, Monitoring, Service Desk, Shift Handover, Vendor, Capacity, and Continuity management practices. Connects to ServiceNow for live ITSM data, rendered as Fluent UI v9 widgets inside M365 Copilot. Grounded in ITIL 4 and NIST 800-53."
     },
-    "accentColor": "#009688",
+    "accentColor": "#0F6CBD",
     "composeExtensions": [],
     "permissions": ["identity", "messageTeamMembers"],
     "copilotAgents": {
