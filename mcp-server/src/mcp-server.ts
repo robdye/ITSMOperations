@@ -1223,8 +1223,8 @@ export function createChangeServer(): Server {
       // ── Widget: Incident Dashboard ──
       case "show-incident-dashboard": {
         const snowInstance = process.env.SNOW_INSTANCE || "";
-        // Always show active incidents only (no LLM-controlled state filter)
-        const incidents = await snow.getIncidents({ limit: 200 });
+        // Show ALL incidents (active + resolved/closed) so the dashboard always has data
+        const incidents = await snow.getIncidents({ state: 'all', limit: 200 });
         // Pre-compute KPI counts server-side (these are always accurate regardless of page size)
         const kpis: Record<string, number> = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
         for (const inc of incidents) {
@@ -1248,7 +1248,7 @@ export function createChangeServer(): Server {
         }));
         const data = { incidents: pageIncidents, kpis, total: incidents.length, snowInstance, generatedAt: new Date().toISOString() };
         return widgetResponse(INCIDENT_DASHBOARD, data,
-          `Incident Dashboard: ${incidents.length} active incidents. P1: ${kpis['1']}, P2: ${kpis['2']}, P3: ${kpis['3']}, P4: ${kpis['4']}`);
+          `Incident Dashboard: ${incidents.length} incidents. P1: ${kpis['1']}, P2: ${kpis['2']}, P3: ${kpis['3']}, P4: ${kpis['4']}`);
       }
 
       // ── Text: Get Incidents ──
