@@ -38,7 +38,7 @@
       ],
       "spec": {
         "url": "${{CHANGE_MCP_ENDPOINT}}",
-        "mcp_tool_description": {
+        "x-mcp_tool_description": {
           "tools": [
             {
               "name": "show-incident-dashboard",
@@ -157,6 +157,9 @@
             }
           ]
         }
+      },
+      "auth": {
+        "type": "None"
       }
     }
   ]

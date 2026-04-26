@@ -53,7 +53,7 @@
       ],
       "spec": {
         "url": "${{CHANGE_MCP_ENDPOINT}}",
-        "mcp_tool_description": {
+        "x-mcp_tool_description": {
           "tools": [
             {
               "name": "get-cmdb-ci",
@@ -241,6 +241,9 @@
             }
           ]
         }
+      },
+      "auth": {
+        "type": "None"
       }
     }
   ]
