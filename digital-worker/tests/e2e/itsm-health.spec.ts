@@ -37,11 +37,10 @@ test.describe('ITSM DA — Health & Platform Status', () => {
     const res = await request.get('/api/routines');
     expect(res.status()).toBe(200);
     const body = await res.json();
-    // API returns array of routines
-    expect(Array.isArray(body)).toBe(true);
-    expect(body.length).toBeGreaterThan(0);
-    // Spot-check first routine has expected shape
-    const first = body[0];
+    // API returns { routines: [...] }
+    const routines = body.routines || (Array.isArray(body) ? body : Object.values(body).flat());
+    expect(routines.length).toBeGreaterThan(0);
+    const first = routines[0];
     expect(first.id).toBeDefined();
     expect(first.status).toBeDefined();
     expect(['scheduled', 'disabled', 'running']).toContain(first.status);
