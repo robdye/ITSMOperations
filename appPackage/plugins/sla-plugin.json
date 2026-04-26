@@ -31,10 +31,7 @@
                             "description": "Display the SLA Compliance Dashboard showing breaches, at-risk SLAs, and compliance rate.",
                             "inputSchema": {
                                 "type": "object",
-                                "properties": {
-                                    "stage": { "type": "string", "description": "Filter by stage" },
-                                    "has_breached": { "type": "string", "description": "Filter by breach status: true or false" }
-                                },
+                                "properties": {},
                                 "additionalProperties": false
                             },
                             "annotations": { "readOnlyHint": true },

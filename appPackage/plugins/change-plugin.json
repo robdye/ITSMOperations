@@ -44,10 +44,7 @@
                             "description": "Display the Change Management dashboard with open change requests, risk heat map, and ITIL classification breakdown.",
                             "inputSchema": {
                                 "type": "object",
-                                "properties": {
-                                    "state": { "type": "string", "description": "Filter by state: New, Assess, Authorize, Scheduled, Implement, Review, Closed, Canceled" },
-                                    "priority": { "type": "string", "description": "Filter by priority: 1-Critical, 2-High, 3-Moderate, 4-Low" }
-                                },
+                                "properties": {},
                                 "additionalProperties": false
                             },
                             "annotations": { "readOnlyHint": true },

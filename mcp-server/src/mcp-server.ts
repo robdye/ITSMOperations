@@ -326,10 +326,7 @@ function calculateRiskScore(threatLikelihood: number, businessImpact: number) {
 // ── Tool schemas ──────────────────────────────────────────
 const changeDashboardSchema = {
   type: "object" as const,
-  properties: {
-    state: { type: "string" as const, description: "Filter by state" },
-    priority: { type: "string" as const, description: "Filter by priority" },
-  },
+  properties: {},
   additionalProperties: false,
 };
 
@@ -598,10 +595,7 @@ export function createChangeServer(): Server {
     switch (name) {
       // ── Widget: Change Dashboard ──
       case "show-change-dashboard": {
-        const changes = await snow.getChangeRequests({
-          state: args?.state as string,
-          priority: args?.priority as string,
-        });
+        const changes = await snow.getChangeRequests({});
 
         // Enrich with risk scores
         const enriched = changes.map((ch: any) => {

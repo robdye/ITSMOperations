@@ -32,10 +32,7 @@
                             "description": "Display the Problem Dashboard with open problems and known errors.",
                             "inputSchema": {
                                 "type": "object",
-                                "properties": {
-                                    "state": { "type": "string", "description": "Filter by state" },
-                                    "priority": { "type": "string", "description": "Filter by priority" }
-                                },
+                                "properties": {},
                                 "additionalProperties": false
                             },
                             "annotations": { "readOnlyHint": true },
