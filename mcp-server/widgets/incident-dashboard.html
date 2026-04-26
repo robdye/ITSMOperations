@@ -148,9 +148,11 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
 var to=window.__TOOL_DATA__||(window.openai&&window.openai.toolOutput)||{};
 var allIncidents=to.incidents||[];var si=to.snowInstance||'';
 var base=window.__SERVER_BASE_URL__||'';
-var counts={};var priorities=['1','2','3','4','5'];
+var totalCount=to.total||allIncidents.length;
+var counts=to.kpis||{};
+if(!to.kpis){var priorities=['1','2','3','4','5'];
 for(var i=0;i<allIncidents.length;i++){var pr=allIncidents[i].priority||'';
-for(var j=0;j<priorities.length;j++){if(pr.includes(priorities[j])){counts[priorities[j]]=(counts[priorities[j]]||0)+1;break;}}}
+for(var j=0;j<priorities.length;j++){if(pr.includes(priorities[j])){counts[priorities[j]]=(counts[priorities[j]]||0)+1;break;}}}}
 var activeFilter=null;var currentInc=null;
 function render(filter){
 activeFilter=filter;
@@ -174,7 +176,7 @@ html+='<div class="inc-card" onclick="openDetail('+i+',\''+filter+'\')" role="bu
 '<div class="inc-right"><span class="state-tag '+stClass+'">'+(inc.state||'New')+'</span>'+
 '<span class="pri-tag '+priCls+'">'+(inc.priority||'Unset')+'</span></div></div>';}
 document.getElementById('list').innerHTML=html||'<div class="empty">No'+(filter?' P'+filter:'')+' incidents found.</div>';
-document.getElementById('footer').textContent='Showing '+filtered.length+' of '+allIncidents.length+' incident'+(allIncidents.length!==1?'s':'')+' · Data from ServiceNow';}
+document.getElementById('footer').textContent='Showing '+filtered.length+' of '+totalCount+' incident'+(totalCount!==1?'s':'')+' · Data from ServiceNow';}
 function openDetail(idx,filter){
 var list=filter?allIncidents.filter(function(inc){return(inc.priority||'').includes(filter)}):allIncidents;
 var inc=list[idx];if(!inc)return;currentInc=inc;
@@ -182,7 +184,7 @@ document.getElementById('detail-title').textContent=(inc.number||'')+' — '+(in
 var stateOpts=['New','In Progress','On Hold','Resolved','Closed','Canceled'];
 var priOpts=['1 - Critical','2 - High','3 - Moderate','4 - Low','5 - Planning'];
 var curState=inc.state||'New';var curPri=inc.priority||'';
-var opened=inc.opened_at||'';var resolved=inc.resolved_at||'';var closed=inc.closed_at||'';
+var opened=inc.opened_at||'';
 var h='<div class="detail-row">';
 h+='<div class="detail-field"><label>State</label><select id="f-state">';
 for(var i=0;i<stateOpts.length;i++){var sel=curState===stateOpts[i]?' selected':'';h+='<option'+sel+'>'+stateOpts[i]+'</option>';}
@@ -194,18 +196,10 @@ h+='<div class="detail-row">';
 h+='<div class="detail-field"><label>Category</label><input id="f-category" value="'+(inc.category||'').replace(/"/g,'&quot;')+'"></div>';
 h+='<div class="detail-field"><label>Assignment Group</label><input id="f-assignment_group" value="'+(inc.assignment_group||'').replace(/"/g,'&quot;')+'"></div></div>';
 h+='<div class="detail-row">';
-h+='<div class="detail-field"><label>Impact</label><div class="val">'+(inc.impact||'—')+'</div></div>';
-h+='<div class="detail-field"><label>Urgency</label><div class="val">'+(inc.urgency||'—')+'</div></div></div>';
-h+='<div class="detail-row">';
-h+='<div class="detail-field"><label>CI</label><div class="val">'+(inc.cmdb_ci||'—')+'</div></div>';
-h+='<div class="detail-field"><label>Caller</label><div class="val">'+(inc.caller_id||'—')+'</div></div></div>';
-h+='<div class="detail-row">';
 h+='<div class="detail-field"><label>Opened</label><div class="val">'+opened+'</div></div>';
-h+='<div class="detail-field"><label>Resolved</label><div class="val">'+(resolved||'—')+'</div></div></div>';
+h+='<div class="detail-field"><label>State</label><div class="val">'+curState+'</div></div></div>';
 h+='<div class="detail-field full"><label>Short Description</label><input id="f-short_description" value="'+(inc.short_description||'').replace(/"/g,'&quot;')+'"></div>';
-h+='<div class="detail-field full"><label>Description</label><textarea id="f-description">'+(inc.description||'')+'</textarea></div>';
 h+='<div class="detail-field full"><label>Work Notes (add new)</label><textarea id="f-work_notes" placeholder="Add work notes..."></textarea></div>';
-if(inc.close_notes){h+='<div class="detail-field full"><label>Close Notes</label><div class="val">'+inc.close_notes+'</div></div>';}
 document.getElementById('detail-body').innerHTML=h;
 var link=si+'/nav_to.do?uri=incident.do?sys_id='+(inc.sys_id||'');
 document.getElementById('detail-actions').innerHTML=
