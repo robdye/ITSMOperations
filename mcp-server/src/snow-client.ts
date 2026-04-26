@@ -343,13 +343,21 @@ export async function getIncidentsByName(ciName: string, limit = 20): Promise<an
   return snowGet("incident", SnowQuery.eq('cmdb_ci.name', ciName).notIn('state', ['6', '7']).orderByDesc('opened_at').build(), INCIDENT_FIELDS, limit);
 }
 
-/** Get all incidents with optional filters */
+/** Get incidents with optional filters.
+ *  IMPORTANT: When no state filter is provided, defaults to active incidents
+ *  (New / In Progress / On Hold — excludes Resolved 6, Closed 7, Canceled 8).
+ *  Pass state="all" to include every state, or a specific numeric state value. */
 export async function getIncidents(filters?: {
   state?: string; priority?: string; category?: string;
   assignment_group?: string; limit?: number;
 }): Promise<any[]> {
   const q = new SnowQuery();
-  if (filters?.state) q.eq('state', filters.state);
+  if (filters?.state && filters.state !== 'all') {
+    q.eq('state', filters.state);
+  } else if (!filters?.state) {
+    // Default: active incidents only (exclude Resolved, Closed, Canceled)
+    q.notIn('state', ['6', '7', '8']);
+  }
   if (filters?.priority) q.eq('priority', filters.priority);
   if (filters?.category) q.eq('category', filters.category);
   if (filters?.assignment_group) q.eq('assignment_group.name', filters.assignment_group);

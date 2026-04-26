@@ -502,7 +502,7 @@ export function createChangeServer(): Server {
       { name: "post-implementation-review", description: "Post-Implementation Review — checks if a completed change caused any incidents in the 48 hours after implementation.", inputSchema: { type: "object" as const, properties: { number: { type: "string" as const, description: "CR number" } }, required: ["number"] as const, additionalProperties: false }, annotations: { readOnlyHint: true } },
       // ── Incident Management ──
       { name: "show-incident-dashboard", description: "Display the Incident Dashboard with all active incidents by priority.", inputSchema: { type: "object" as const, properties: { state: { type: "string" as const }, priority: { type: "string" as const }, category: { type: "string" as const } }, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(INCIDENT_DASHBOARD) } as any,
-      { name: "get-incidents", description: "Query ServiceNow incidents.", inputSchema: { type: "object" as const, properties: { state: { type: "string" as const }, priority: { type: "string" as const }, category: { type: "string" as const }, assignment_group: { type: "string" as const }, limit: { type: "number" as const } }, additionalProperties: false }, annotations: { readOnlyHint: true } },
+      { name: "get-incidents", description: "Query ServiceNow incidents. Defaults to active/open incidents only (excludes Resolved, Closed, Canceled). Pass state='all' for every state.", inputSchema: { type: "object" as const, properties: { state: { type: "string" as const, description: "Incident state filter. Omit for active only. Use 'all' for every state, or a number: 1=New, 2=InProgress, 3=OnHold, 6=Resolved, 7=Closed, 8=Canceled." }, priority: { type: "string" as const }, category: { type: "string" as const }, assignment_group: { type: "string" as const }, limit: { type: "number" as const } }, additionalProperties: false }, annotations: { readOnlyHint: true } },
       { name: "create-incident", description: "Create a new incident in ServiceNow.", inputSchema: { type: "object" as const, properties: { data: { type: "string" as const, description: "JSON object of incident fields" } }, required: ["data"] as const, additionalProperties: false } },
       { name: "update-incident", description: "Update an existing incident.", inputSchema: { type: "object" as const, properties: { sys_id: { type: "string" as const }, fields: { type: "string" as const } }, required: ["sys_id", "fields"] as const, additionalProperties: false } },
       // ── Problem Management ──
@@ -1399,15 +1399,17 @@ export function createChangeServer(): Server {
         const now = new Date();
 
         // Gather data across all ITSM practices
-        const [incidents, problems, slas, openCRs, allCRs] = await Promise.all([
-          snow.getIncidents({ limit: 100 }),
+        // Active incidents for pulse + all incidents for total count
+        const [activeIncidents, allIncidents, problems, slas, openCRs, allCRs] = await Promise.all([
+          snow.getIncidents({ limit: 200 }),           // active only (default: excludes resolved/closed/canceled)
+          snow.getAllIncidents(200),                     // all states for total metrics
           snow.getProblems({ limit: 50 }),
           snow.getTaskSLAs({ limit: 50 }),
           snow.getOpenChangeRequests(100),
           snow.getClosedChanges(50),
         ]);
 
-        const p1Incidents = incidents.filter((i: any) => (i.priority || "").includes("1") || (i.priority || "").includes("2"));
+        const p1Incidents = activeIncidents.filter((i: any) => (i.priority || "").includes("1") || (i.priority || "").includes("2"));
         const openProblems = problems.filter((p: any) => !["Closed", "Canceled"].includes(p.state));
         const knownErrors = problems.filter((p: any) => p.known_error === "true").length;
         const slaBreaches = slas.filter((s: any) => s.has_breached === "true");
@@ -1444,7 +1446,8 @@ export function createChangeServer(): Server {
 
         const data = {
           pulse: {
-            p1Incidents: p1Incidents.length, totalIncidents: incidents.length,
+            p1Incidents: p1Incidents.length, totalIncidents: activeIncidents.length,
+            allIncidents: allIncidents.length,
             openProblems: openProblems.length, knownErrors,
             slaBreaches: slaBreaches.length, slaAtRisk: slaAtRisk.length,
             openChanges: openCRs.length, collisions: collisions.length,
@@ -1459,7 +1462,7 @@ export function createChangeServer(): Server {
           collisions, recommendations,
           snowInstance, generatedAt: now.toISOString(),
         };
-        const summary = `ITSM Briefing: ${incidents.length} incidents (${p1Incidents.length} P1/P2) | ${openProblems.length} problems | ${slaBreaches.length} SLA breaches | ${openCRs.length} changes (${collisions.length} collisions) | ${changeSuccessRate}% change success rate`;
+        const summary = `ITSM Briefing: ${activeIncidents.length} active incidents (${p1Incidents.length} P1/P2, ${allIncidents.length} total) | ${openProblems.length} problems | ${slaBreaches.length} SLA breaches | ${openCRs.length} changes (${collisions.length} collisions) | ${changeSuccessRate}% change success rate`;
         return widgetResponse(ITSM_BRIEFING, data, summary);
       }
 
