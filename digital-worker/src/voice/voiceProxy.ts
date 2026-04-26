@@ -125,13 +125,13 @@ export function attachVoiceWebSocket(server: Server): void {
       ws.on('open', () => {
         console.log(`[voice] Connected to Voice Live (deployment: ${VOICELIVE_MODEL})`);
         // GA gpt-realtime uses nested audio config (per openai-node SDK types)
+        // temperature is NOT a valid session-level param in GA — omit it
         ws.send(JSON.stringify({
           type: 'session.update',
           session: {
             type: 'realtime',
             output_modalities: ['text', 'audio'],
             instructions: VOICE_SYSTEM_PROMPT,
-            temperature: 0.8,
             audio: {
               input: {
                 format: { type: 'audio/pcm', rate: 24000 },
