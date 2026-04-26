@@ -165,7 +165,8 @@ server.get('/api/voice/avatar-config', async (_req: Request, res: Response) => {
     const authToken = tokenRes.ok ? await tokenRes.text() : '';
 
     if (!authToken) {
-      res.status(200).json({ enabled: false, reason: 'Failed to issue Speech auth token via Entra' });
+      const errBody = tokenRes.ok ? '' : await tokenRes.text().catch(() => '');
+      res.status(200).json({ enabled: false, reason: `Speech token failed (${tokenRes.status}): ${errBody.slice(0, 200)}` });
       return;
     }
 
