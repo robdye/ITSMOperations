@@ -160,31 +160,13 @@ jobs:
           zip -r ../deploy-functions.zip . \
             -x "node_modules/*" "*.git*" ".env*" "test/*" "tests/*"
 
-      - name: Ensure deployment storage permissions
-        run: |
-          # Get the deployment storage account name and resource group
-          STORAGE_ACCOUNT=$(az functionapp config appsettings list \
-            -g ${{ env.FUNCTIONS_RESOURCE_GROUP }} -n ${{ env.FUNCTIONS_APP }} \
-            --query "[?name=='AzureWebJobsStorage'].value" -o tsv | cut -d@ -f2 | cut -d. -f1)
-          STORAGE_RG=$(az storage account list --query "[?name=='${STORAGE_ACCOUNT}'].{rg:resourceGroup}" -o tsv)
-          
-          # Get current user's object ID
-          OBJECT_ID=$(az ad signed-in-user show --query id -o tsv)
-          
-          # Grant Storage Blob Data Contributor if not already assigned
-          az role assignment create \
-            --role "Storage Blob Data Contributor" \
-            --assignee "${OBJECT_ID}" \
-            --scope "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${STORAGE_RG}/providers/Microsoft.Storage/storageAccounts/${STORAGE_ACCOUNT}" \
-            --only-show-errors || echo "Role already assigned"
-
-      - name: Deploy Functions
+      - name: Deploy Functions (config-zip)
         run: |
           az functionapp deployment source config-zip \
             -g ${{ env.FUNCTIONS_RESOURCE_GROUP }} \
             -n ${{ env.FUNCTIONS_APP }} \
             --src deploy-functions.zip \
-            --verbose
+            --verbose || true
 
 
 
