@@ -581,9 +581,6 @@ export function createChangeServer(): Server {
       { name: "create-kb-article", description: "Create a knowledge base article in ServiceNow.", inputSchema: { type: "object" as const, properties: { title: { type: "string" as const, description: "Article title" }, body: { type: "string" as const, description: "Article body (HTML)" }, category: { type: "string" as const }, keywords: { type: "string" as const, description: "Comma-separated keywords" } }, required: ["title", "body"] as const, additionalProperties: false } },
       // ── ServiceNow Live Chat ──
       { name: "connect-live-agent", description: "Connect the user to a ServiceNow live chat agent for real-time human support.", inputSchema: { type: "object" as const, properties: { reason: { type: "string" as const, description: "Reason for requesting a live agent" }, queue: { type: "string" as const, description: "Support queue: general, network, security, database" } }, additionalProperties: false }, _meta: descriptorMeta(SNOW_LIVE_CHAT) } as any,
-      // ── Demo Data ──
-      { name: "seed-demo-data", description: "Seed the ServiceNow dev instance with realistic ITSM demo data (incidents, changes, problems, CMDB CIs, SLAs).", inputSchema: { type: "object" as const, properties: {}, additionalProperties: false } },
-      { name: "clear-demo-data", description: "Remove all [DEMO]-prefixed records from the ServiceNow dev instance.", inputSchema: { type: "object" as const, properties: {}, additionalProperties: false } },
     ];
     return { tools };
   });
@@ -2166,18 +2163,6 @@ export function createChangeServer(): Server {
         };
         return widgetResponse(SNOW_LIVE_CHAT, data,
           `Connecting to ServiceNow live agent. Queue: ${queue}. Reason: ${reason}.`);
-      }
-
-      // ── Demo Data ──
-      case "seed-demo-data": {
-        const { seedDemoData } = await import("./snow-demo-data.js");
-        const result = await seedDemoData();
-        return textResponse(`Demo data seeded:\n${JSON.stringify(result, null, 2)}`);
-      }
-      case "clear-demo-data": {
-        const { clearDemoData } = await import("./snow-demo-data.js");
-        await clearDemoData();
-        return textResponse("Demo data cleared — all [DEMO] records removed.");
       }
 
       default:

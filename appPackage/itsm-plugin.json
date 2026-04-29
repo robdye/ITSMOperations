@@ -1,0 +1,589 @@
+{
+    "$schema": "https://developer.microsoft.com/json-schemas/copilot/plugin/v2.4/schema.json",
+    "schema_version": "v2.4",
+    "name_for_human": "ITSM Operations",
+    "description_for_human": "ServiceNow ITSM tools — incidents, changes, problems, SLAs, CMDB assets, knowledge, and monitoring with interactive widget dashboards.",
+    "namespace": "itsmops",
+    "functions": [
+        { "name": "show-itsm-briefing", "description": "Display the ITSM Operations Briefing — a holistic view across incidents, problems, SLAs, changes, and assets." },
+        { "name": "show-incident-dashboard", "description": "Display the Incident Dashboard with all active incidents by priority, with clickable ServiceNow links." },
+        { "name": "get-incidents", "description": "Query ServiceNow incidents by state, priority, category, or assignment group." },
+        { "name": "create-incident", "description": "Create a new incident in ServiceNow." },
+        { "name": "update-incident", "description": "Update an existing incident in ServiceNow." },
+        { "name": "get-incidents-for-ci", "description": "Get active incidents for a Configuration Item to assess impact on planned changes." },
+        { "name": "show-change-dashboard", "description": "Display the Change Management dashboard with open change requests, risk heat map, and ITIL classification breakdown." },
+        { "name": "show-change-request", "description": "Display a detailed Change Request with CI details, risk assessment, approval chain, and backout plan." },
+        { "name": "show-change-briefing", "description": "Display the Change Risk Briefing — change collisions, stale CRs, high-risk changes, and recommendations." },
+        { "name": "show-change-metrics", "description": "Display Change Management KPIs — success rate, emergency change percentage, and pipeline breakdown." },
+        { "name": "get-change-requests", "description": "Query ServiceNow for change requests. Returns structured data for analysis." },
+        { "name": "prepare-change-request", "description": "Open an interactive form to create a new ServiceNow Change Request. Pre-fills from conversation context." },
+        { "name": "create-change-request", "description": "Create a new Change Request in ServiceNow." },
+        { "name": "update-change-request", "description": "Update an existing Change Request in ServiceNow by number or sys_id." },
+        { "name": "detect-change-collisions", "description": "Detect open changes targeting the same Configuration Item." },
+        { "name": "generate-cab-agenda", "description": "Generate a CAB meeting agenda with pending changes, risk scores, and recommendations." },
+        { "name": "get-change-history", "description": "Find similar past changes with success/failure rates and lessons learned." },
+        { "name": "post-implementation-review", "description": "Check if a completed change caused incidents within 48 hours." },
+        { "name": "show-problem-dashboard", "description": "Display the Problem Dashboard with open problems and known errors." },
+        { "name": "create-problem", "description": "Create a problem record from recurring incidents." },
+        { "name": "get-problem", "description": "Get details of a specific problem record by number or sys_id." },
+        { "name": "show-sla-dashboard", "description": "Display the SLA Compliance Dashboard showing breaches, at-risk SLAs, and compliance rate." },
+        { "name": "get-sla-breaches", "description": "Get a list of current SLA breaches with affected services and breach details." },
+        { "name": "get-cmdb-ci", "description": "Get a Configuration Item from CMDB with full details including class, status, environment, and owner." },
+        { "name": "get-ci-relationships", "description": "Get upstream and downstream CI relationships from the CMDB relationship table." },
+        { "name": "update-cmdb-ci", "description": "Update a Configuration Item in the ServiceNow CMDB." },
+        { "name": "get-assets", "description": "Query IT assets including hardware, software, and warranty status." },
+        { "name": "get-expired-warranties", "description": "Get assets with expired warranties." },
+        { "name": "get-catalog-items", "description": "List available Service Catalog items." },
+        { "name": "show-asset-lifecycle", "description": "Display the Asset Lifecycle compliance dashboard with EOL status, risk scores, and remediation actions." },
+        { "name": "show-blast-radius", "description": "Display the Blast Radius dependency graph showing how a CI failure cascades to connected services." },
+        { "name": "show-risk-forecast", "description": "Display the EOL Risk Forecast timeline showing assets approaching end of life with projected risk scores." },
+        { "name": "search-knowledge", "description": "Search the ServiceNow Knowledge Base for articles, runbooks, and procedures." },
+        { "name": "harvest-knowledge", "description": "Harvest knowledge from resolved incidents to identify candidates for new KB articles." },
+        { "name": "create-kb-article", "description": "Create a new Knowledge Base article in ServiceNow." },
+        { "name": "get-azure-alerts", "description": "Get Azure Monitor alerts for infrastructure health." },
+        { "name": "get-resource-health", "description": "Get Azure resource health status for monitored infrastructure components." }
+    ],
+    "runtimes": [
+        {
+            "type": "RemoteMCPServer",
+            "run_for_functions": [
+                "show-itsm-briefing",
+                "show-incident-dashboard",
+                "get-incidents",
+                "create-incident",
+                "update-incident",
+                "get-incidents-for-ci",
+                "show-change-dashboard",
+                "show-change-request",
+                "show-change-briefing",
+                "show-change-metrics",
+                "get-change-requests",
+                "prepare-change-request",
+                "create-change-request",
+                "update-change-request",
+                "detect-change-collisions",
+                "generate-cab-agenda",
+                "get-change-history",
+                "post-implementation-review",
+                "show-problem-dashboard",
+                "create-problem",
+                "get-problem",
+                "show-sla-dashboard",
+                "get-sla-breaches",
+                "get-cmdb-ci",
+                "get-ci-relationships",
+                "update-cmdb-ci",
+                "get-assets",
+                "get-expired-warranties",
+                "get-catalog-items",
+                "show-asset-lifecycle",
+                "show-blast-radius",
+                "show-risk-forecast",
+                "search-knowledge",
+                "harvest-knowledge",
+                "create-kb-article",
+                "get-azure-alerts",
+                "get-resource-health"
+            ],
+            "spec": {
+                "url": "https://change-mgmt-mcp.jollysand-88b78b02.eastus.azurecontainerapps.io/mcp",
+                "mcp_tool_description": {
+                    "tools": [
+                        {
+                            "name": "show-itsm-briefing",
+                            "description": "Display the ITSM Operations Briefing — a holistic view across incidents, problems, SLAs, changes, and assets.",
+                            "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+                            "annotations": { "readOnlyHint": true },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/itsm-briefing.html",
+                                "openai/toolInvocation/invoking": "Compiling ITSM operations briefing\u2026",
+                                "openai/toolInvocation/invoked": "Briefing ready.",
+                                "openai/widgetAccessible": true
+                            }
+                        },
+                        {
+                            "name": "show-incident-dashboard",
+                            "description": "Display the Incident Dashboard with all active incidents by priority, with clickable ServiceNow links.",
+                            "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+                            "annotations": { "readOnlyHint": true },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/incident-dashboard.html",
+                                "openai/toolInvocation/invoking": "Loading incident dashboard\u2026",
+                                "openai/toolInvocation/invoked": "Incidents ready.",
+                                "openai/widgetAccessible": true
+                            }
+                        },
+                        {
+                            "name": "get-incidents",
+                            "description": "Query ServiceNow incidents by state, priority, category, or assignment group.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "state": { "type": "string", "description": "Filter by state" },
+                                    "priority": { "type": "string", "description": "Filter by priority" },
+                                    "category": { "type": "string", "description": "Filter by category" },
+                                    "assignment_group": { "type": "string", "description": "Filter by assignment group" },
+                                    "limit": { "type": "number", "description": "Max results (default 20)" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "create-incident",
+                            "description": "Create a new incident in ServiceNow.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": { "data": { "type": "string", "description": "JSON object of incident fields" } },
+                                "required": ["data"],
+                                "additionalProperties": false
+                            }
+                        },
+                        {
+                            "name": "update-incident",
+                            "description": "Update an existing incident in ServiceNow.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "sys_id": { "type": "string", "description": "Incident sys_id" },
+                                    "fields": { "type": "string", "description": "JSON object of fields to update" }
+                                },
+                                "required": ["sys_id", "fields"],
+                                "additionalProperties": false
+                            }
+                        },
+                        {
+                            "name": "get-incidents-for-ci",
+                            "description": "Get active incidents for a Configuration Item. Use this to check if incidents on a CI could impact a planned change.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "ci_name": { "type": "string", "description": "Configuration Item name" },
+                                    "ci_sys_id": { "type": "string", "description": "CI sys_id" },
+                                    "limit": { "type": "number", "description": "Max incidents to return (default 10)" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "show-change-dashboard",
+                            "description": "Display the Change Management dashboard with open change requests, risk heat map, and ITIL classification breakdown.",
+                            "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+                            "annotations": { "readOnlyHint": true },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/change-dashboard.html",
+                                "openai/toolInvocation/invoking": "Loading change management dashboard\u2026",
+                                "openai/toolInvocation/invoked": "Dashboard ready.",
+                                "openai/widgetAccessible": true
+                            }
+                        },
+                        {
+                            "name": "show-change-request",
+                            "description": "Display a detailed Change Request with CI details, risk assessment, approval chain, and backout plan.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "number": { "type": "string", "description": "Change Request number (e.g. CHG0000001)" },
+                                    "sys_id": { "type": "string", "description": "ServiceNow sys_id of the change request" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/change-request.html",
+                                "openai/toolInvocation/invoking": "Loading change request details\u2026",
+                                "openai/toolInvocation/invoked": "Change request ready.",
+                                "openai/widgetAccessible": true
+                            }
+                        },
+                        {
+                            "name": "show-change-briefing",
+                            "description": "Display the Change Risk Briefing — change collisions, stale CRs, high-risk changes, CIs with active incidents, and actionable recommendations.",
+                            "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+                            "annotations": { "readOnlyHint": true },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/change-briefing.html",
+                                "openai/toolInvocation/invoking": "Compiling change risk briefing\u2026",
+                                "openai/toolInvocation/invoked": "Briefing ready.",
+                                "openai/widgetAccessible": true
+                            }
+                        },
+                        {
+                            "name": "show-change-metrics",
+                            "description": "Display Change Management KPIs — success rate, emergency change percentage, pipeline breakdown by state/type/risk.",
+                            "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+                            "annotations": { "readOnlyHint": true },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/change-metrics.html",
+                                "openai/toolInvocation/invoking": "Computing change metrics\u2026",
+                                "openai/toolInvocation/invoked": "Metrics ready.",
+                                "openai/widgetAccessible": true
+                            }
+                        },
+                        {
+                            "name": "get-change-requests",
+                            "description": "Query ServiceNow for change requests. Returns structured data for analysis.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "state": { "type": "string", "description": "Filter by state" },
+                                    "priority": { "type": "string", "description": "Filter by priority" },
+                                    "category": { "type": "string", "description": "Filter by category" },
+                                    "assignment_group": { "type": "string", "description": "Filter by assignment group" },
+                                    "limit": { "type": "number", "description": "Max results (default 20)" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "prepare-change-request",
+                            "description": "Open an interactive form to create a new ServiceNow Change Request. Pre-fills from conversation context.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "short_description": { "type": "string", "description": "Short description of the change" },
+                                    "description": { "type": "string", "description": "Detailed description" },
+                                    "category": { "type": "string", "description": "Change category: Hardware, Software, Network, Database, Cloud, Security" },
+                                    "priority": { "type": "string", "description": "Priority: 1-Critical, 2-High, 3-Moderate, 4-Low" },
+                                    "risk": { "type": "string", "description": "Risk level: High, Moderate, Low" },
+                                    "type": { "type": "string", "description": "ITIL change type: Standard, Normal, Emergency" },
+                                    "assignment_group": { "type": "string", "description": "Assignment group name" },
+                                    "cmdb_ci": { "type": "string", "description": "Affected Configuration Item name" },
+                                    "justification": { "type": "string", "description": "Business justification" },
+                                    "backout_plan": { "type": "string", "description": "Backout/rollback plan" },
+                                    "test_plan": { "type": "string", "description": "Test plan" },
+                                    "planned_start": { "type": "string", "description": "Planned start date (ISO 8601)" },
+                                    "planned_end": { "type": "string", "description": "Planned end date (ISO 8601)" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/change-form.html",
+                                "openai/toolInvocation/invoking": "Preparing change request form\u2026",
+                                "openai/toolInvocation/invoked": "Form ready.",
+                                "openai/widgetAccessible": true
+                            }
+                        },
+                        {
+                            "name": "create-change-request",
+                            "description": "Create a new Change Request in ServiceNow.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": { "data": { "type": "string", "description": "JSON object of CR fields" } },
+                                "required": ["data"],
+                                "additionalProperties": false
+                            }
+                        },
+                        {
+                            "name": "update-change-request",
+                            "description": "Update an existing Change Request in ServiceNow by number or sys_id.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "number": { "type": "string", "description": "Change Request number (e.g. CHG0000012)" },
+                                    "sys_id": { "type": "string", "description": "Change Request sys_id" },
+                                    "fields": { "type": "string", "description": "JSON object of fields to update" }
+                                },
+                                "required": ["fields"],
+                                "additionalProperties": false
+                            }
+                        },
+                        {
+                            "name": "detect-change-collisions",
+                            "description": "Detect open changes targeting the same Configuration Item.",
+                            "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "generate-cab-agenda",
+                            "description": "Generate a CAB meeting agenda with pending changes, risk scores, and recommendations.",
+                            "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "get-change-history",
+                            "description": "Find similar past changes with success/failure rates and lessons learned.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "ci_name": { "type": "string" },
+                                    "category": { "type": "string" },
+                                    "limit": { "type": "number" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "post-implementation-review",
+                            "description": "Check if a completed change caused incidents within 48 hours.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": { "number": { "type": "string" } },
+                                "required": ["number"],
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "show-problem-dashboard",
+                            "description": "Display the Problem Dashboard with open problems and known errors.",
+                            "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+                            "annotations": { "readOnlyHint": true },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/problem-dashboard.html",
+                                "openai/toolInvocation/invoking": "Loading problem dashboard\u2026",
+                                "openai/toolInvocation/invoked": "Problems ready.",
+                                "openai/widgetAccessible": true
+                            }
+                        },
+                        {
+                            "name": "create-problem",
+                            "description": "Create a problem record from recurring incidents.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": { "data": { "type": "string", "description": "JSON object of problem fields" } },
+                                "required": ["data"],
+                                "additionalProperties": false
+                            }
+                        },
+                        {
+                            "name": "get-problem",
+                            "description": "Get details of a specific problem record by number or sys_id.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "number": { "type": "string", "description": "Problem number (e.g. PRB0000001)" },
+                                    "sys_id": { "type": "string", "description": "Problem sys_id" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "show-sla-dashboard",
+                            "description": "Display the SLA Compliance Dashboard showing breaches, at-risk SLAs, and compliance rate.",
+                            "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+                            "annotations": { "readOnlyHint": true },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/sla-dashboard.html",
+                                "openai/toolInvocation/invoking": "Loading SLA compliance\u2026",
+                                "openai/toolInvocation/invoked": "SLA dashboard ready.",
+                                "openai/widgetAccessible": true
+                            }
+                        },
+                        {
+                            "name": "get-sla-breaches",
+                            "description": "Get a list of current SLA breaches with affected services and breach details.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "priority": { "type": "string", "description": "Filter by priority" },
+                                    "limit": { "type": "number", "description": "Max results (default 20)" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "get-cmdb-ci",
+                            "description": "Get a Configuration Item from CMDB with full details including class, status, environment, and owner.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "name": { "type": "string", "description": "CI name" },
+                                    "sys_id": { "type": "string", "description": "CI sys_id" },
+                                    "ci_class": { "type": "string", "description": "CMDB class: cmdb_ci_server, cmdb_ci_app_server, cmdb_ci_database, cmdb_ci_network_device" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "get-ci-relationships",
+                            "description": "Get upstream and downstream CI relationships from the CMDB relationship table.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "ci_sys_id": { "type": "string", "description": "sys_id of the CI to trace relationships for" },
+                                    "depth": { "type": "number", "description": "Relationship depth (default 2, max 5)" }
+                                },
+                                "required": ["ci_sys_id"],
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "update-cmdb-ci",
+                            "description": "Update a Configuration Item in the ServiceNow CMDB.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "sys_id": { "type": "string", "description": "CI sys_id to update" },
+                                    "fields": { "type": "string", "description": "JSON object of fields to update" }
+                                },
+                                "required": ["sys_id", "fields"],
+                                "additionalProperties": false
+                            }
+                        },
+                        {
+                            "name": "get-assets",
+                            "description": "Query IT assets including hardware, software, and warranty status.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "install_status": { "type": "string", "description": "Filter by install status" },
+                                    "model_category": { "type": "string", "description": "Filter by model category" },
+                                    "limit": { "type": "number", "description": "Max results" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "get-expired-warranties",
+                            "description": "Get assets with expired warranties.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": { "limit": { "type": "number", "description": "Max results" } },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "get-catalog-items",
+                            "description": "List available Service Catalog items.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": { "limit": { "type": "number", "description": "Max results" } },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "show-asset-lifecycle",
+                            "description": "Display the Asset Lifecycle compliance dashboard — all assets with EOL status, risk category, and NIST compliance.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "status": { "type": "string", "description": "Filter: supported, at-risk, non-compliant" },
+                                    "category": { "type": "string", "description": "Asset category: Server, Network, Application, Database" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/asset-lifecycle.html",
+                                "openai/toolInvocation/invoking": "Loading asset lifecycle data\u2026",
+                                "openai/toolInvocation/invoked": "Lifecycle dashboard ready.",
+                                "openai/widgetAccessible": true
+                            }
+                        },
+                        {
+                            "name": "show-blast-radius",
+                            "description": "Display the Blast Radius dependency graph showing how a CI failure cascades to connected services.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "ci_name": { "type": "string", "description": "Name of the Configuration Item to analyze" },
+                                    "ci_sys_id": { "type": "string", "description": "ServiceNow sys_id of the CI" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/blast-radius.html",
+                                "openai/toolInvocation/invoking": "Mapping blast radius\u2026",
+                                "openai/toolInvocation/invoked": "Blast radius mapped.",
+                                "openai/widgetAccessible": true
+                            }
+                        },
+                        {
+                            "name": "show-risk-forecast",
+                            "description": "Display the EOL Risk Forecast timeline — assets approaching end of life with projected risk scores.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "months": { "type": "number", "description": "Forecast window in months (default 12)" },
+                                    "tier": { "type": "string", "description": "Filter by tier: Tier1, Tier2, Tier3" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/risk-forecast.html",
+                                "openai/toolInvocation/invoking": "Computing risk forecast\u2026",
+                                "openai/toolInvocation/invoked": "Risk forecast ready.",
+                                "openai/widgetAccessible": true
+                            }
+                        },
+                        {
+                            "name": "search-knowledge",
+                            "description": "Search the ServiceNow Knowledge Base for articles, runbooks, and procedures.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "query": { "type": "string", "description": "Search query" },
+                                    "limit": { "type": "number", "description": "Max results" }
+                                },
+                                "required": ["query"],
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "harvest-knowledge",
+                            "description": "Harvest knowledge from resolved incidents to identify candidates for new KB articles.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "category": { "type": "string", "description": "Filter by incident category" },
+                                    "days": { "type": "number", "description": "Look back period in days (default 30)" },
+                                    "limit": { "type": "number", "description": "Max results" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "create-kb-article",
+                            "description": "Create a new Knowledge Base article in ServiceNow.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": { "data": { "type": "string", "description": "JSON object of KB article fields (short_description, text, category, knowledge_base)" } },
+                                "required": ["data"],
+                                "additionalProperties": false
+                            }
+                        },
+                        {
+                            "name": "get-azure-alerts",
+                            "description": "Get Azure Monitor alerts for infrastructure health.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": { "limit": { "type": "number", "description": "Max results" } },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "get-resource-health",
+                            "description": "Get Azure resource health status for monitored infrastructure components.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "resource_name": { "type": "string", "description": "Name of the Azure resource to check" },
+                                    "resource_type": { "type": "string", "description": "Azure resource type (e.g. Microsoft.Compute/virtualMachines)" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true }
+                        }
+                    ]
+                }
+            },
+            "auth": { "type": "None" }
+        }
+    ]
+}

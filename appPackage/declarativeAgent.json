@@ -2,46 +2,25 @@
     "$schema": "https://developer.microsoft.com/json-schemas/copilot/declarative-agent/v1.6/schema.json",
     "version": "v1.6",
     "name": "ITSM Operations",
-    "description": "Alex IT Ops — an autonomous ITIL 4-aligned digital worker orchestrating 23 child workers across Incident, Change, Problem, Knowledge, Asset/CMDB, SLA, Security, FinOps, Release, Monitoring, and more. Dashboards rendered in Fluent UI v9. Grounded in ITIL 4 and NIST 800-53. Connects to ServiceNow, Microsoft 365, and Azure services.",
-    "instructions": "$[file('instruction-short.txt')]",
+    "description": "ServiceNow ITSM agent — live incidents, change management, problem tracking, SLA compliance, CMDB asset views, and knowledge base search rendered as interactive widgets inside M365 Copilot.",
+    "instructions": "$[file('instruction.txt')]",
     "capabilities": [
         { "name": "CodeInterpreter" },
         { "name": "People" },
         { "name": "Email" },
         { "name": "TeamsMessages" },
-        {
-            "name": "OneDriveAndSharePoint",
-            "items_by_url": [{ "url": "https://absx68251802.sharepoint.com/Shared%20Documents" }]
-        },
-        { "name": "WebSearch" },
-        {
-            "name": "GraphConnectors",
-            "connections": [{ "connection_id": "servicenow-kb-connector" }]
-        }
+        { "name": "OneDriveAndSharePoint" },
+        { "name": "WebSearch" }
     ],
     "actions": [
-        { "id": "itsm-change", "file": "plugins/change-plugin.json" },
-        { "id": "itsm-incident", "file": "plugins/incident-plugin.json" },
-        { "id": "itsm-problem", "file": "plugins/problem-plugin.json" },
-        { "id": "itsm-sla", "file": "plugins/sla-plugin.json" },
-        { "id": "itsm-knowledge", "file": "plugins/knowledge-plugin.json" },
-        { "id": "itsm-cmdb-asset", "file": "plugins/cmdb-asset-plugin.json" },
-        { "id": "itsm-monitoring", "file": "plugins/monitoring-plugin.json" },
-        { "id": "itsm-briefing", "file": "plugins/briefing-plugin.json" },
-        { "id": "eoldata", "file": "eol-plugin.json" }
+        { "id": "itsmops", "file": "itsm-plugin.json" }
     ],
     "conversation_starters": [
-        { "title": "Morning Briefing", "text": "Give me my ITSM operations briefing. What needs my attention across incidents, problems, changes, and SLAs?" },
-        { "title": "Incident Dashboard", "text": "Show me the incident dashboard. Are there any P1s or P2s that need immediate attention?" },
-        { "title": "P1 War Room", "text": "Open the major incident bridge — show me all active P1/P2 incidents and their blast radius." },
-        { "title": "Change Dashboard", "text": "Show me the change dashboard with risk scores. Any collisions or high-risk changes?" },
-        { "title": "SLA Compliance", "text": "Show me the SLA compliance dashboard. Which SLAs are breached or at risk?" },
-        { "title": "CAB Prep", "text": "Generate the CAB agenda for this week. Include risk scores, collisions, and recommendations." },
-        { "title": "Knowledge Search", "text": "Search the knowledge base for Oracle failover procedures and related runbooks." },
-        { "title": "FinOps Snapshot", "text": "Show me the FinOps dashboard with Azure cost anomalies, right-sizing candidates, and budget forecast." },
-        { "title": "Problem Dashboard", "text": "Show me the problem management dashboard with open problems and known errors." },
-        { "title": "EOL Risk Check", "text": "Check end-of-life status for Windows Server 2019 and show the lifecycle risk." },
-        { "title": "Seed Demo Data", "text": "Seed the ServiceNow dev instance with realistic ITSM demo data for a walkthrough." },
-        { "title": "Audit Trail", "text": "Show me the audit trail — what actions has Alex taken in the last 24 hours?" }
+        { "title": "Morning Briefing", "text": "Show me the ITSM operations briefing." },
+        { "title": "Incident Dashboard", "text": "Show me the incident dashboard." },
+        { "title": "Change Dashboard", "text": "Show me the change management dashboard." },
+        { "title": "SLA Compliance", "text": "Show me the SLA compliance dashboard." },
+        { "title": "Problem Dashboard", "text": "Show me open problems and known errors." },
+        { "title": "Asset Lifecycle", "text": "Show me the asset lifecycle and EOL risk dashboard." }
     ]
 }

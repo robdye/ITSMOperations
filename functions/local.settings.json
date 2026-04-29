@@ -4,6 +4,7 @@
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "FUNCTIONS_WORKER_RUNTIME": "node",
     "DIGITAL_WORKER_URL": "http://localhost:3978",
+    "WORKER_SCHEDULED_SECRET": "set-to-same-value-as-digital-worker-SCHEDULED_SECRET",
     "SNOW_INSTANCE": "",
     "SNOW_USER": "",
     "SNOW_PASSWORD": ""

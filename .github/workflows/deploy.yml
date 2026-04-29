@@ -27,6 +27,8 @@ env:
   MCP_RESOURCE_GROUP: ${{ vars.MCP_RESOURCE_GROUP }}
   DW_CONTAINER_APP: ${{ vars.DW_CONTAINER_APP_NAME }}
   MCP_CONTAINER_APP: ${{ vars.MCP_CONTAINER_APP_NAME }}
+  FUNCTIONS_APP: itsm-ops-functions
+  FUNCTIONS_RESOURCE_GROUP: rg-itsm-operations
 
 jobs:
   # ── Build & Push Images ────────────────────────────────────────
@@ -121,6 +123,70 @@ jobs:
             --resource-group ${{ env.MCP_RESOURCE_GROUP }} \
             --query properties.configuration.ingress.fqdn -o tsv)
           curl --fail --retry 5 --retry-delay 10 "https://${MCP_URL}/health" || exit 1
+
+  # ── Deploy to Azure Functions ──────────────────────────────────
+  deploy-functions:
+    name: Deploy to Azure Functions
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build Functions
+        working-directory: functions
+        run: |
+          npm ci
+          npm run build
+
+      - name: Create deployment package
+        working-directory: functions
+        run: |
+          zip -r ../deploy-functions.zip . \
+            -x "node_modules/*" "*.git*" ".env*" "test/*" "tests/*"
+
+      - name: Ensure deployment storage permissions
+        run: |
+          # Get the deployment storage account name and resource group
+          STORAGE_ACCOUNT=$(az functionapp config appsettings list \
+            -g ${{ env.FUNCTIONS_RESOURCE_GROUP }} -n ${{ env.FUNCTIONS_APP }} \
+            --query "[?name=='AzureWebJobsStorage'].value" -o tsv | cut -d@ -f2 | cut -d. -f1)
+          STORAGE_RG=$(az storage account list --query "[?name=='${STORAGE_ACCOUNT}'].{rg:resourceGroup}" -o tsv)
+          
+          # Get current user's object ID
+          OBJECT_ID=$(az ad signed-in-user show --query id -o tsv)
+          
+          # Grant Storage Blob Data Contributor if not already assigned
+          az role assignment create \
+            --role "Storage Blob Data Contributor" \
+            --assignee "${OBJECT_ID}" \
+            --scope "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${STORAGE_RG}/providers/Microsoft.Storage/storageAccounts/${STORAGE_ACCOUNT}" \
+            --only-show-errors || echo "Role already assigned"
+
+      - name: Deploy Functions
+        run: |
+          az functionapp deployment source config-zip \
+            -g ${{ env.FUNCTIONS_RESOURCE_GROUP }} \
+            -n ${{ env.FUNCTIONS_APP }} \
+            --src deploy-functions.zip \
+            --verbose
+
+
 
   # ── Update Teams App (dev only) ────────────────────────────────
   update-teams-app:
