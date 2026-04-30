@@ -57,11 +57,16 @@ function captureConversationReference(context: TurnContext): void {
 }
 
 // People lookup via Microsoft Graph
-async function resolveUserEmail(displayName: string): Promise<string | null> {
+function isLikelyEmail(value: string | undefined | null): value is string {
+  return !!value && /.+@.+\..+/.test(value);
+}
+
+async function getGraphAppToken(): Promise<string | null> {
   const appId = process.env.GRAPH_APP_ID;
   const secret = process.env.GRAPH_APP_SECRET;
   const tenantId = process.env.GRAPH_TENANT_ID || process.env.MicrosoftAppTenantId;
   if (!appId || !secret || !tenantId) return null;
+
   try {
     const tokenBody = `client_id=${appId}&client_secret=${encodeURIComponent(secret)}&scope=https%3A%2F%2Fgraph.microsoft.com%2F.default&grant_type=client_credentials`;
     const tokenRes = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
@@ -69,15 +74,62 @@ async function resolveUserEmail(displayName: string): Promise<string | null> {
     });
     if (!tokenRes.ok) return null;
     const tokenData = await tokenRes.json() as any;
+    return tokenData.access_token || null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveUserEmail(displayName: string): Promise<string | null> {
+  const token = await getGraphAppToken();
+  if (!token) return null;
+  try {
     const safeName = displayName.replace(/['"\\()]/g, '').substring(0, 100);
     const userRes = await fetch(`https://graph.microsoft.com/v1.0/users?$filter=startswith(displayName,'${encodeURIComponent(safeName)}')&$select=displayName,mail,userPrincipalName&$top=3`, {
-      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      headers: { Authorization: `Bearer ${token}` },
     });
     if (!userRes.ok) return null;
     const users = (await userRes.json() as any).value || [];
-    if (users.length > 0) return users[0].mail || users[0].userPrincipalName || null;
+    if (users.length > 0) {
+      const resolved = users[0].mail || users[0].userPrincipalName || null;
+      return isLikelyEmail(resolved) ? resolved : null;
+    }
     return null;
   } catch { return null; }
+}
+
+async function resolveUserEmailByObjectId(objectId: string): Promise<string | null> {
+  const token = await getGraphAppToken();
+  if (!token || !objectId) return null;
+
+  try {
+    const userRes = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(objectId)}?$select=mail,userPrincipalName,displayName`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!userRes.ok) return null;
+    const user = await userRes.json() as any;
+    const resolved = user.mail || user.userPrincipalName || null;
+    return isLikelyEmail(resolved) ? resolved : null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveRequesterEmail(context: TurnContext, displayName: string): Promise<string | null> {
+  const from = (context.activity as any)?.from || {};
+  const directCandidates = [from.userPrincipalName, from.email, from.aadUpn, from.upn];
+  for (const candidate of directCandidates) {
+    if (isLikelyEmail(candidate)) return candidate;
+  }
+
+  const aadObjectId = from.aadObjectId || from.id || '';
+  const byObjectId = await resolveUserEmailByObjectId(aadObjectId);
+  if (isLikelyEmail(byObjectId)) return byObjectId;
+
+  const byName = await resolveUserEmail(displayName);
+  if (isLikelyEmail(byName)) return byName;
+
+  return null;
 }
 
 export class ItsmAgent extends AgentApplication<TurnState> {
@@ -225,11 +277,7 @@ export class ItsmAgent extends AgentApplication<TurnState> {
 
     addMessage(userId, 'user', text);
 
-    const requesterEmail =
-      (context.activity as any)?.from?.userPrincipalName ||
-      (context.activity as any)?.from?.email ||
-      await resolveUserEmail(displayName) ||
-      '';
+    const requesterEmail = (await resolveRequesterEmail(context, displayName)) || '';
 
     // Deduplicate — Teams/Copilot may deliver the same message twice
     const msgId = context.activity.id || '';
@@ -294,8 +342,16 @@ export class ItsmAgent extends AgentApplication<TurnState> {
     }
 
     const asksEmailSelf = /\b(email|send)\b[\s\S]{0,120}\b(me|myself|my mail|my email)\b/i.test(text) || /\bemail me\b/i.test(text);
+
+    if (asksEmailSelf && !requesterEmail) {
+      stopTypingLoop();
+      await context.sendActivity("I couldn't resolve your mailbox from your Teams identity in this session. Please share your email address once (e.g., 'send it to name@contoso.com') and I’ll use it.");
+      return;
+    }
+
     if (asksEmailSelf && requesterEmail) {
-      enrichedPrompt += `\n\nIMPORTANT: The user asked to email themselves. Use recipient email: ${requesterEmail}.`;
+      enrichedPrompt += `\n\nIMPORTANT: The user asked to email themselves. Use recipient email: ${requesterEmail}. DO NOT ask who to email.`;
+      enrichedPrompt = `${enrichedPrompt}\n\nResolved self-email recipient: ${requesterEmail}. If sending email, the \"to\" field must be exactly this value unless the user explicitly overrides it.`;
     }
 
     // Get AI response with agentic auth context
