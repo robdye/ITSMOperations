@@ -5,11 +5,12 @@ import { tool } from '@openai/agents';
 import { z } from 'zod';
 import { ItsmMcpClient } from './mcp-client';
 import { WorkIqClient } from './workiq-client';
-import { sendEmail } from './email-service';
+import { EmailService } from './email-service';
 import { postToChannel } from './teams-channel';
 
 const mcp = new ItsmMcpClient();
 const workiq = new WorkIqClient();
+const emailService = new EmailService();
 
 function stringify(data: unknown): string {
   if (typeof data === 'string') return data;
@@ -251,12 +252,18 @@ export const agentTools = [
       body: z.string().describe('Email body in HTML or plain text'),
     }),
     execute: async ({ to, subject, body }) => {
-      try {
-        await sendEmail(to, subject, body);
-        return `Email sent to ${to} with subject "${subject}"`;
-      } catch (err) {
-        return `Failed to send email to ${to}: ${(err as any).message || err}`;
+      const result = await emailService.sendEmailAdvanced({
+        to: [to],
+        subject,
+        body,
+        bodyType: 'HTML',
+      });
+
+      if (result.success) {
+        return `Email sent to ${to} with subject "${subject}" (requestId: ${result.messageId || 'n/a'})`;
       }
+
+      return `Email delivery failed to ${to}: ${result.error || 'unknown error'}`;
     },
   }),
 

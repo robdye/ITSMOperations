@@ -447,6 +447,8 @@ function addFeed(msg, agent) {
 
 // ── Utilities ──
 function escHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function byId(id) { return document.getElementById(id); }
+function safeText(id, value) { const el = byId(id); if (el) el.textContent = value; }
 function timeAgo(ts) {
   if (!ts) return '';
   const sec = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
@@ -512,18 +514,26 @@ async function fetchAll() {
   const memory = memoryR.status === 'fulfilled' ? memoryR.value : null;
   const reasoning = reasoningR.status === 'fulfilled' ? reasoningR.value : null;
 
-  if (health) renderHealth(health);
-  if (workers) renderWorkers(workers);
-  if (routines) renderRoutines(routines);
-  if (approvals) renderApprovals(approvals);
-  if (audit) renderAudit(audit);
-  if (memory) renderMemory(memory);
-  renderAgentMind(reasoning);
-  renderTodaysPlan(routines);
-  updateGraph(workers);
+  try { if (health) renderHealth(health); } catch (e) { console.error('renderHealth failed', e); }
+  try { if (workers) renderWorkers(workers); } catch (e) { console.error('renderWorkers failed', e); }
+  try { if (routines) renderRoutines(routines); } catch (e) { console.error('renderRoutines failed', e); }
+  try { if (approvals) renderApprovals(approvals); } catch (e) { console.error('renderApprovals failed', e); }
+  try { if (audit) renderAudit(audit); } catch (e) { console.error('renderAudit failed', e); }
+  try { if (memory) renderMemory(memory); } catch (e) { console.error('renderMemory failed', e); }
+  try { renderAgentMind(reasoning); } catch (e) { console.error('renderAgentMind failed', e); }
+  try { renderTodaysPlan(routines); } catch (e) { console.error('renderTodaysPlan failed', e); }
+  try { updateGraph(workers); } catch (e) { console.error('updateGraph failed', e); }
 
-  document.getElementById('health-badge').textContent = 'Healthy';
-  document.getElementById('health-badge').className = 'health-badge healthy';
+  const healthBadge = byId('health-badge');
+  if (healthBadge) {
+    if (health) {
+      healthBadge.textContent = 'Healthy';
+      healthBadge.className = 'health-badge healthy';
+    } else {
+      healthBadge.textContent = 'Offline';
+      healthBadge.className = 'health-badge unhealthy';
+    }
+  }
   if (firstFetch) {
     addFeed('All systems online — polling every 10s', 'system');
     firstFetch = false;
@@ -536,15 +546,15 @@ function renderHealth(data) {
   const h = Math.floor(uptimeMs / 3600000);
   const m = Math.floor((uptimeMs % 3600000) / 60000);
   const uptimeStr = h > 0 ? `${h}h ${m}m` : `${m}m`;
-  document.getElementById('s-uptime').textContent = uptimeStr;
-  document.getElementById('topbar-uptime').textContent = uptimeStr;
+  safeText('s-uptime', uptimeStr);
+  safeText('topbar-uptime', uptimeStr);
 }
 
 // ── Render: Workers ──
 let prevWorkerCount = 0;
 function renderWorkers(data) {
   const workerList = Array.isArray(data) ? data : (data.workers || []);
-  document.getElementById('s-workers').textContent = workerList.length;
+  safeText('s-workers', String(workerList.length));
 
   if (workerList.length > prevWorkerCount && prevWorkerCount > 0) {
     addFeed(`${workerList.length - prevWorkerCount} new worker(s) registered`, 'registry');
@@ -553,7 +563,10 @@ function renderWorkers(data) {
   }
   prevWorkerCount = workerList.length;
 
-  document.getElementById('cc-workers').innerHTML = workerList.length ? workerList.map(w => {
+  const workersPanel = byId('cc-workers-compact') || byId('cc-workers');
+  if (!workersPanel) return;
+
+  workersPanel.innerHTML = workerList.length ? workerList.map(w => {
     const name = w.name || w.id || '—';
     const tier = WORKER_TIERS[name] || 'extended';
     const icon = WORKER_ICONS[name] || '⚙';
@@ -570,7 +583,7 @@ function renderWorkers(data) {
 let prevRoutineCount = 0;
 function renderRoutines(data) {
   const routineList = Array.isArray(data) ? data : (data.routines || []);
-  document.getElementById('s-routines').textContent = routineList.length;
+  safeText('s-routines', String(routineList.length));
 
   if (routineList.length > prevRoutineCount && prevRoutineCount > 0) {
     addFeed(`${routineList.length - prevRoutineCount} new routine(s) added`, 'scheduler');
@@ -579,7 +592,10 @@ function renderRoutines(data) {
   }
   prevRoutineCount = routineList.length;
 
-  document.getElementById('cc-routines').innerHTML = routineList.length ? routineList.map(r => {
+  const routinesPanel = byId('cc-routines-next') || byId('cc-routines');
+  if (!routinesPanel) return;
+
+  routinesPanel.innerHTML = routineList.length ? routineList.map(r => {
     const name = r.name || r.id || '—';
     const cron = r.cron || r.schedule || '—';
     const status = r.status || r.state || 'idle';
@@ -645,8 +661,18 @@ function renderApprovals(data) {
 
 // ── Render: Audit ──
 function renderAudit(data) {
+  const auditPanel = byId('cc-audit');
+  if (!auditPanel) return;
+
   const entries = Array.isArray(data) ? data : (data.entries || data.events || []);
-  document.getElementById('cc-audit').innerHTML = entries.length ? entries.slice(0, 10).map(e => {
+  if (entries.length === 0 && data && typeof data === 'object' && data.totalEntries !== undefined) {
+    const totalEntries = data.totalEntries || 0;
+    const backend = data.storageBackend || 'in-memory';
+    auditPanel.innerHTML = `<div class="metric-row"><span class="metric-label">Total entries</span><span class="metric-val">${totalEntries}</span></div><div class="metric-row"><span class="metric-label">Backend</span><span style="font-size:11px;color:var(--text-muted)">${escHtml(backend)}</span></div>`;
+    return;
+  }
+
+  auditPanel.innerHTML = entries.length ? entries.slice(0, 10).map(e => {
     const ts = e.timestamp || e.createdAt || e.time;
     const timeStr = ts ? new Date(ts).toLocaleTimeString('en-US', { hour12: false }) : '--:--:--';
     const action = e.action || e.event || e.type || '—';
@@ -661,9 +687,12 @@ function renderAudit(data) {
 
 // ── Render: Memory ──
 function renderMemory(data) {
+  const memoryPanel = byId('cc-memory');
+  if (!memoryPanel) return;
+
   const entries = Array.isArray(data) ? data : (data.entries || data.items || []);
   const count = entries.length || data.count || 0;
-  document.getElementById('cc-memory').innerHTML = count > 0 ? `
+  memoryPanel.innerHTML = count > 0 ? `
     <div class="metric-row"><span class="metric-label">Entries</span><span class="metric-val">${count}</span></div>
     ${entries.slice(0, 5).map(e => {
       const key = e.key || e.name || e.id || '—';
@@ -677,18 +706,19 @@ function renderMemory(data) {
 let selectedConvId = null;
 
 function renderAgentMind(reasoning) {
+  const emptyEl = byId('am-empty');
   if (!reasoning) {
-    document.getElementById('am-empty').style.display = '';
+    if (emptyEl) emptyEl.style.display = '';
     return;
   }
 
   const { traces, conversations, stats } = reasoning;
 
   // Stats
-  document.getElementById('am-total').textContent = stats.totalTraces || 0;
-  document.getElementById('am-conversations').textContent = stats.totalConversations || 0;
-  document.getElementById('am-tools').textContent = (stats.byType && stats.byType['tool-call']) || 0;
-  document.getElementById('am-avgtime').textContent = stats.avgDurationMs ? `${stats.avgDurationMs}ms` : '—';
+  safeText('am-total', String((stats && stats.totalTraces) || 0));
+  safeText('am-conversations', String((stats && stats.totalConversations) || 0));
+  safeText('am-tools', String(((stats && stats.byType && stats.byType['tool-call']) || 0)));
+  safeText('am-avgtime', stats && stats.avgDurationMs ? `${stats.avgDurationMs}ms` : '—');
 
   // Type filters
   const typeLabels = {
@@ -700,7 +730,9 @@ function renderAgentMind(reasoning) {
   if (stats.byType) {
     for (const t of Object.keys(stats.byType)) { if (!types.includes(t)) types.push(t); }
   }
-  document.getElementById('am-filters').innerHTML = types.map(t => {
+  const filtersEl = byId('am-filters');
+  if (!filtersEl) return;
+  filtersEl.innerHTML = types.map(t => {
     const count = t === 'all' ? (stats.totalTraces || 0) : (stats.byType[t] || 0);
     const label = typeLabels[t] || t;
     return `<button class="filter-tab${t==='all'?' active':''}" data-rtype="${t}">${label} (${count})</button>`;
@@ -717,7 +749,8 @@ function renderAgentMind(reasoning) {
   });
 
   // Conversations list
-  const convList = document.getElementById('am-conversations-list');
+  const convList = byId('am-conversations-list');
+  if (!convList) return;
   if (conversations && conversations.length > 0) {
     convList.innerHTML = conversations.map((c, i) => {
       const worker = c.worker || '—';
@@ -752,9 +785,10 @@ function renderAgentMind(reasoning) {
   renderChain(selectedConvId, currentFilter);
 
   function renderChain(convId, typeFilter) {
-    const chainEl = document.getElementById('am-reasoning-chain');
-    const emptyEl = document.getElementById('am-empty');
-    const titleEl = document.getElementById('am-detail-title');
+    const chainEl = byId('am-reasoning-chain');
+    const emptyEl = byId('am-empty');
+    const titleEl = byId('am-detail-title');
+    if (!chainEl || !emptyEl || !titleEl) return;
 
     let filtered = traces || [];
     if (convId) {
@@ -813,16 +847,16 @@ function renderTodaysPlan(routines) {
 
   const scheduledCount = routineList.filter(r => (r.status || r.state) === 'scheduled' || r.enabled).length;
   const runningCount = routineList.filter(r => (r.status || r.state) === 'running').length;
-  document.getElementById('wd-active').textContent = runningCount || scheduledCount;
-  document.getElementById('wd-total').textContent = routineList.length;
+  safeText('wd-active', String(runningCount || scheduledCount));
+  safeText('wd-total', String(routineList.length));
 
   // Find workers count from routine data
   const uniqueWorkers = new Set(routineList.map(r => r.worker).filter(Boolean));
-  document.getElementById('wd-workers').textContent = uniqueWorkers.size;
+  safeText('wd-workers', String(uniqueWorkers.size));
 
   // Last run
   const lastRuns = routineList.map(r => r.lastRun).filter(Boolean).map(t => new Date(t).getTime());
-  document.getElementById('wd-lastrun').textContent = lastRuns.length ? timeAgo(new Date(Math.max(...lastRuns)).toISOString()) : '—';
+  safeText('wd-lastrun', lastRuns.length ? timeAgo(new Date(Math.max(...lastRuns)).toISOString()) : '—');
 
   if (routineList.length === 0) {
     document.getElementById('wd-plan-timeline').innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">No routines scheduled. Configure routines to see the plan.</div></div>';

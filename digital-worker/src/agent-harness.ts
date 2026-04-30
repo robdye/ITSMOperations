@@ -42,6 +42,8 @@ export interface PromptContext {
   enrichedData?: string;
   /** Display name of the user */
   displayName?: string;
+  /** Resolved email address of the user */
+  requesterEmail?: string;
 }
 
 // ── Harness Result ──
@@ -67,6 +69,10 @@ export function createWorkerAgent(worker: WorkerDefinition, ctx?: PromptContext,
   // Inject context if provided
   if (ctx?.displayName) {
     instructions += `\n\nYou are speaking with: ${ctx.displayName}`;
+  }
+  if (ctx?.requesterEmail) {
+    instructions += `\nRequester email: ${ctx.requesterEmail}`;
+    instructions += `\nIf the user asks to email \"me\" or \"myself\", use this requester email as the recipient unless they explicitly provide a different address.`;
   }
 
   const config: any = {

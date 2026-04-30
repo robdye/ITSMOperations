@@ -22,6 +22,8 @@ import { classifyIntent } from './worker-registry';
 import { runWorker, type PromptContext } from './agent-harness';
 import { createConfirmationCard } from './adaptive-cards';
 import { publishIncidentEvent, publishChangeEvent, publishProblemEvent } from './service-bus';
+import { startConversation, logIntent, logRouting, logOutcome, logError } from './reasoning-trace';
+import { logAuditEntry } from './audit-trail';
 
 const mcp = new ItsmMcpClient();
 const workiq = new WorkIqClient();
@@ -173,6 +175,21 @@ export class ItsmAgent extends AgentApplication<TurnState> {
     const displayName = from?.name ?? 'unknown';
     console.log(`[Agent] Message from ${displayName}: ${text.substring(0, 100)}`);
 
+    const conversationId = startConversation();
+
+    await logAuditEntry({
+      workerId: 'command-center',
+      workerName: 'ITSM Operations',
+      toolName: 'message.received',
+      riskLevel: 'read',
+      triggeredBy: displayName,
+      triggerType: 'user',
+      parameters: JSON.stringify({ text: text.substring(0, 500) }),
+      resultSummary: 'Inbound user message accepted',
+      requiredConfirmation: false,
+      durationMs: 0,
+    });
+
     // Capture conversation reference for proactive messaging
     captureConversationReference(context);
 
@@ -207,6 +224,12 @@ export class ItsmAgent extends AgentApplication<TurnState> {
     }
 
     addMessage(userId, 'user', text);
+
+    const requesterEmail =
+      (context.activity as any)?.from?.userPrincipalName ||
+      (context.activity as any)?.from?.email ||
+      await resolveUserEmail(displayName) ||
+      '';
 
     // Deduplicate — Teams/Copilot may deliver the same message twice
     const msgId = context.activity.id || '';
@@ -246,10 +269,34 @@ export class ItsmAgent extends AgentApplication<TurnState> {
     const classification = classifyIntent(text);
     console.log(`[Agent] Routed to ${classification.worker.name} (confidence: ${classification.confidence}): ${classification.reason}`);
 
+    logIntent(
+      conversationId,
+      text,
+      classification.worker.id,
+      classification.worker.name,
+      classification.confidence,
+      classification.reason,
+    );
+    logRouting(
+      conversationId,
+      'command-center',
+      classification.worker.id,
+      `Teams message routed to ${classification.worker.name} (${classification.worker.id}) with ${classification.confidence} confidence`,
+    );
+
     // Build prompt with conversation history
     let enrichedPrompt = text;
     const history = getHistory(userId);
     if (history) enrichedPrompt += `\n\nConversation history:\n${history}`;
+
+    if (requesterEmail) {
+      enrichedPrompt += `\n\nRequester context:\n- Name: ${displayName}\n- Email: ${requesterEmail}`;
+    }
+
+    const asksEmailSelf = /\b(email|send)\b[\s\S]{0,120}\b(me|myself|my mail|my email)\b/i.test(text) || /\bemail me\b/i.test(text);
+    if (asksEmailSelf && requesterEmail) {
+      enrichedPrompt += `\n\nIMPORTANT: The user asked to email themselves. Use recipient email: ${requesterEmail}.`;
+    }
 
     // Get AI response with agentic auth context
     const baggageScope = BaggageBuilderUtils.fromTurnContext(
@@ -261,7 +308,8 @@ export class ItsmAgent extends AgentApplication<TurnState> {
 
     try {
       await baggageScope.run(async () => {
-        const ctx: PromptContext = { userMessage: text, displayName };
+        const startedAt = Date.now();
+        const ctx: PromptContext = { userMessage: text, displayName, requesterEmail };
         const result = await runWorker(classification.worker, enrichedPrompt, ctx);
         addMessage(userId, 'assistant', result.output);
         stopTypingLoop();
@@ -279,10 +327,27 @@ export class ItsmAgent extends AgentApplication<TurnState> {
         // Prefix with worker badge so the user sees which practice handled it
         const badge = `🏷️ *${classification.worker.name}*\n\n`;
         await context.sendActivity(badge + result.output);
+
+        const durationMs = Date.now() - startedAt;
+        logOutcome(conversationId, classification.worker.id, result.output, durationMs);
+
+        await logAuditEntry({
+          workerId: classification.worker.id,
+          workerName: classification.worker.name,
+          toolName: 'message.responded',
+          riskLevel: 'notify',
+          triggeredBy: displayName,
+          triggerType: 'user',
+          parameters: JSON.stringify({ conversationId }),
+          resultSummary: result.output.substring(0, 500),
+          requiredConfirmation: false,
+          durationMs,
+        });
       });
     } catch (err) {
       stopTypingLoop();
       console.error('[Agent] AI response error:', err);
+      logError(conversationId, classification.worker.id, (err as Error).message || String(err));
       await context.sendActivity('Sorry, I encountered an error while processing your request. Please try again.');
     } finally {
       baggageScope.dispose();
