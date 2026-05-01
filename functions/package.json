@@ -2,7 +2,7 @@
   "name": "itsm-durable-functions",
   "version": "1.0.0",
   "private": true,
-  "main": "dist/src/**/*.js",
+  "main": "dist/**/*.js",
   "description": "Azure Durable Functions for ITSM stateful workflows — replaces node-cron",
   "scripts": {
     "build": "tsc",

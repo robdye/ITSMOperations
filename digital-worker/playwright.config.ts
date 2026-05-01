@@ -43,6 +43,11 @@ export default defineConfig({
       testMatch: /voice\.spec\.ts/,
       use: { baseURL: ITSM_BASE },
     },
+    {
+      name: 'itsm-anticipatory',
+      testMatch: /itsm-anticipatory\.spec\.ts/,
+      use: { baseURL: ITSM_BASE },
+    },
   ],
   reporter: [['list'], ['html', { open: 'never' }]],
 });

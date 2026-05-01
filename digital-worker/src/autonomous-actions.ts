@@ -19,6 +19,9 @@ interface CalendarAttendee {
   name?: string;
 }
 
+// Re-export for downstream wrappers (m365-tools.ts) that need the attendee shape.
+export type { CalendarAttendee };
+
 // ── Service ──
 
 export class AutonomousActions {
@@ -29,7 +32,13 @@ export class AutonomousActions {
       clientId: process.env.GRAPH_APP_ID || process.env.clientId || '',
       clientSecret: process.env.GRAPH_APP_SECRET || process.env.clientSecret || '',
       tenantId: process.env.GRAPH_TENANT_ID || process.env.tenantId || '',
-      userEmail: process.env.ITSM_USER_EMAIL || '',
+      // Organiser mailbox for calendar events, online meetings, and SharePoint actions.
+      // Falls back to the dedicated Graph sender (Alex's mailbox) when ITSM_USER_EMAIL is unset.
+      userEmail:
+        process.env.ITSM_USER_EMAIL ||
+        process.env.GRAPH_MAIL_SENDER ||
+        process.env.AGENT_EMAIL ||
+        '',
     };
   }
 
@@ -86,6 +95,12 @@ export class AutonomousActions {
 
   /**
    * Post a message (or Adaptive Card) to a Teams channel.
+   *
+   * Microsoft Graph application permissions cannot post to a live (non-migration)
+   * channel — the only app-only path is `Teamwork.Migrate.All` which requires the
+   * team to be in import mode. For live posting we therefore prefer an
+   * Incoming Webhook (Workflow URL) when `ITSM_TEAMS_WEBHOOK` is configured,
+   * and only fall back to the Graph endpoint when no webhook is available.
    */
   async postToTeamsChannel(
     teamId: string,
@@ -93,6 +108,35 @@ export class AutonomousActions {
     message: string,
     cardPayload?: Record<string, unknown>
   ): Promise<ActionResult> {
+    const webhook = process.env.ITSM_TEAMS_WEBHOOK || '';
+    if (webhook) {
+      try {
+        const payload = cardPayload
+          ? {
+              type: 'message',
+              attachments: [
+                {
+                  contentType: 'application/vnd.microsoft.card.adaptive',
+                  contentUrl: null,
+                  content: cardPayload,
+                },
+              ],
+            }
+          : { text: message };
+        const r = await fetch(webhook, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (r.ok) {
+          return { success: true, id: 'webhook' };
+        }
+        const txt = await r.text();
+        return { success: false, error: `Webhook ${r.status}: ${txt.slice(0, 200)}` };
+      } catch (err: unknown) {
+        return { success: false, error: `Webhook error: ${(err as Error).message}` };
+      }
+    }
     try {
       const url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages`;
       const body: Record<string, unknown> = cardPayload
@@ -120,7 +164,14 @@ export class AutonomousActions {
   }
 
   /**
-   * Create a calendar event (CAB meetings, DR drills, etc.).
+   * Create a calendar event with optional Teams online meeting (CAB meetings,
+   * DR drills, incident bridges, RCA reviews, etc.).
+   *
+   * Returns the Graph event id, the Teams join URL (if online), and the web link
+   * to the event in Outlook so callers can surface them to the user.
+   *
+   * Requires Graph application permission `Calendars.ReadWrite` on the
+   * organiser mailbox (default: GRAPH_MAIL_SENDER / Alex's mailbox).
    */
   async createCalendarEvent(
     subject: string,
@@ -128,18 +179,26 @@ export class AutonomousActions {
     end: string,
     attendees: CalendarAttendee[],
     body: string,
-    isOnlineMeeting: boolean = false
-  ): Promise<ActionResult> {
+    isOnlineMeeting: boolean = false,
+    options: { timeZone?: string; location?: string; organizerEmail?: string } = {}
+  ): Promise<ActionResult & { joinUrl?: string; webLink?: string }> {
     try {
       const cfg = this.getConfig();
-      if (!cfg.userEmail) return { success: false, error: 'ITSM_USER_EMAIL not configured' };
+      const organiser = options.organizerEmail || cfg.userEmail;
+      if (!organiser) {
+        return {
+          success: false,
+          error: 'Organiser mailbox not configured (ITSM_USER_EMAIL / GRAPH_MAIL_SENDER)',
+        };
+      }
 
-      const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(cfg.userEmail)}/events`;
-      const event = {
+      const tz = options.timeZone || 'UTC';
+      const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(organiser)}/events`;
+      const event: Record<string, unknown> = {
         subject,
         body: { contentType: 'HTML' as const, content: body },
-        start: { dateTime: start, timeZone: 'UTC' },
-        end: { dateTime: end, timeZone: 'UTC' },
+        start: { dateTime: start, timeZone: tz },
+        end: { dateTime: end, timeZone: tz },
         attendees: attendees.map((a) => ({
           emailAddress: { address: a.email, name: a.name || a.email },
           type: 'required' as const,
@@ -147,13 +206,93 @@ export class AutonomousActions {
         isOnlineMeeting,
         onlineMeetingProvider: isOnlineMeeting ? ('teamsForBusiness' as const) : undefined,
       };
+      if (options.location) {
+        event.location = { displayName: options.location };
+      }
 
-      const res = await this.graphRequest('POST', url, event as unknown as Record<string, unknown>);
+      const res = await this.graphRequest('POST', url, event);
       if (res.ok) {
-        const id = (res.data as Record<string, string>)?.id;
-        return { success: true, id };
+        const data = res.data as Record<string, unknown>;
+        const id = data?.id as string | undefined;
+        const onlineMeeting = data?.onlineMeeting as { joinUrl?: string } | undefined;
+        const webLink = data?.webLink as string | undefined;
+        return { success: true, id, joinUrl: onlineMeeting?.joinUrl, webLink };
       }
       return { success: false, error: `Graph API ${res.status}: ${JSON.stringify(res.data)}` };
+    } catch (err: unknown) {
+      return { success: false, error: (err as Error).message };
+    }
+  }
+
+  /**
+   * Suggest meeting times that work for the organiser and attendees.
+   * Wraps Graph `/users/{id}/findMeetingTimes`.
+   *
+   * Requires Graph application permission `Calendars.Read` on the organiser
+   * mailbox plus read access to attendee free/busy.
+   */
+  async findMeetingTimes(
+    attendees: CalendarAttendee[],
+    durationMinutes: number = 30,
+    options: {
+      organizerEmail?: string;
+      windowStart?: string;
+      windowEnd?: string;
+      maxCandidates?: number;
+    } = {}
+  ): Promise<
+    | { success: true; suggestions: Array<{ start: string; end: string; confidence?: number }> }
+    | { success: false; error: string }
+  > {
+    try {
+      const cfg = this.getConfig();
+      const organiser = options.organizerEmail || cfg.userEmail;
+      if (!organiser) {
+        return {
+          success: false,
+          error: 'Organiser mailbox not configured (ITSM_USER_EMAIL / GRAPH_MAIL_SENDER)',
+        };
+      }
+
+      const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(organiser)}/findMeetingTimes`;
+      const isoDuration = `PT${Math.max(15, Math.min(480, durationMinutes))}M`;
+      const body: Record<string, unknown> = {
+        attendees: attendees.map((a) => ({
+          emailAddress: { address: a.email, name: a.name || a.email },
+          type: 'required',
+        })),
+        meetingDuration: isoDuration,
+        maxCandidates: Math.max(1, Math.min(20, options.maxCandidates ?? 5)),
+        isOrganizerOptional: false,
+        returnSuggestionReasons: true,
+        minimumAttendeePercentage: 100,
+      };
+      if (options.windowStart && options.windowEnd) {
+        body.timeConstraint = {
+          activityDomain: 'work',
+          timeSlots: [
+            {
+              start: { dateTime: options.windowStart, timeZone: 'UTC' },
+              end: { dateTime: options.windowEnd, timeZone: 'UTC' },
+            },
+          ],
+        };
+      }
+
+      const res = await this.graphRequest('POST', url, body);
+      if (!res.ok) {
+        return { success: false, error: `Graph API ${res.status}: ${JSON.stringify(res.data)}` };
+      }
+      const data = res.data as { meetingTimeSuggestions?: Array<Record<string, unknown>> };
+      const suggestions = (data.meetingTimeSuggestions || []).map((s) => {
+        const slot = s.meetingTimeSlot as { start?: { dateTime?: string }; end?: { dateTime?: string } } | undefined;
+        return {
+          start: slot?.start?.dateTime || '',
+          end: slot?.end?.dateTime || '',
+          confidence: typeof s.confidence === 'number' ? (s.confidence as number) : undefined,
+        };
+      }).filter((s) => s.start && s.end);
+      return { success: true, suggestions };
     } catch (err: unknown) {
       return { success: false, error: (err as Error).message };
     }

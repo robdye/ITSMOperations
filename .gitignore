@@ -32,6 +32,16 @@ digital-worker/manifest/
 digital-worker/*.zip
 digital-worker/startup.err
 
+# Build artifacts (zips at any level)
+*.zip
+!appPackage/**/*.zip
+
+# Runtime telemetry / validation dumps
+last-validation-run.json
+outcomes-final.json
+outcomes-*.json
+*.smoke.json
+
 # Test coverage
 coverage/
 

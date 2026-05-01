@@ -1,0 +1,60 @@
+{
+  "id": "snow-incident-storm",
+  "description": "Edge router em_event precursor → 3 cascading P1 incidents → Alex correlates and runs the major-incident-response workflow against ServiceNow.",
+  "steps": [
+    {
+      "type": "snow.event",
+      "fields": {
+        "source": "monitoring",
+        "type": "edge-router-link-flap",
+        "severity": "1",
+        "node": "edge-router-01",
+        "additional_info": "BGP session flapping on edge-router-01"
+      }
+    },
+    { "type": "wait", "ms": 250 },
+    {
+      "type": "snow.incident",
+      "fields": {
+        "short_description": "Customers reporting intermittent connectivity loss",
+        "priority": "1",
+        "urgency": "1",
+        "impact": "1",
+        "cmdb_ci": "edge-router-01"
+      }
+    },
+    { "type": "wait", "ms": 500 },
+    {
+      "type": "snow.incident",
+      "fields": {
+        "short_description": "VPN gateway returning timeouts for remote workforce",
+        "priority": "1",
+        "urgency": "1",
+        "impact": "1",
+        "cmdb_ci": "vpn-gw-01"
+      }
+    },
+    { "type": "wait", "ms": 500 },
+    {
+      "type": "snow.incident",
+      "fields": {
+        "short_description": "Production checkout latency spiking above 8s",
+        "priority": "1",
+        "urgency": "1",
+        "impact": "1",
+        "cmdb_ci": "checkout-svc"
+      }
+    },
+    {
+      "type": "assert.outcome",
+      "description": "Major-incident-response workflow received the SNOW signal",
+      "signalRouted": { "workflowId": "major-incident-response" },
+      "timeoutMs": 5000
+    }
+  ],
+  "expectedOutcomes": [
+    "signal-router routes the SNOW signal to major-incident-response",
+    "trigger-policy logs a propose decision for high-blast incident workflow",
+    "snow-client appends a worknote with the reasoning trace link"
+  ]
+}

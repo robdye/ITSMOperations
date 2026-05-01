@@ -24,6 +24,13 @@ export interface EmailResult {
   error?: string;
 }
 
+export interface EmailServiceStatus {
+  enabled: boolean;
+  sender: string;
+  authMode: 'graph-app';
+  missing: string[];
+}
+
 // ── Internal helpers ──
 
 const GRAPH_APP_ID = process.env.GRAPH_APP_ID || process.env.clientId || '';
@@ -32,6 +39,21 @@ const GRAPH_TENANT_ID = process.env.GRAPH_TENANT_ID || process.env.MicrosoftAppT
 const SENDER_EMAIL = process.env.AGENT_EMAIL || process.env.MANAGER_EMAIL || process.env.ITSM_USER_EMAIL || '';
 
 if (!GRAPH_APP_ID || !GRAPH_APP_SECRET) console.warn('[Email] GRAPH_APP_ID or GRAPH_APP_SECRET not set — email sending will fail.');
+
+export function getEmailServiceStatus(): EmailServiceStatus {
+  const missing: string[] = [];
+  if (!SENDER_EMAIL) missing.push('sender');
+  if (!GRAPH_APP_ID) missing.push('graphAppId');
+  if (!GRAPH_APP_SECRET) missing.push('graphAppSecret');
+  if (!GRAPH_TENANT_ID) missing.push('graphTenantId');
+
+  return {
+    enabled: missing.length === 0,
+    sender: SENDER_EMAIL || 'not-configured',
+    authMode: 'graph-app',
+    missing,
+  };
+}
 
 let _tokenCache: { token: string; expiresAt: number } | null = null;
 

@@ -244,6 +244,11 @@
       <li data-view="agent-mind"><span class="icon">◎</span> Agent Mind</li>
       <li data-view="neural-core"><span class="icon">◈</span> Neural Core</li>
       <li data-view="actions"><span class="icon">▣</span> Actions</li>
+      <li data-view="signals"><span class="icon">⚡</span> Signals</li>
+      <li data-view="foresight"><span class="icon">△</span> Foresight</li>
+      <li data-view="outcomes"><span class="icon">●</span> Outcomes</li>
+      <li data-view="governance"><span class="icon">⚠</span> Governance</li>
+      <li data-view="goals"><span class="icon">•</span> Goals</li>
       <li data-view="workday"><span class="icon">◧</span> Today's Plan</li>
     </ul>
     <div class="sidebar-footer">Digital Worker · Container Apps<br>Auto-refresh 10s</div>
@@ -257,6 +262,10 @@
         <span>— what ITSM Operations is doing right now</span>
       </div>
       <div class="topbar-right">
+        <button id="cc-btn-storm" title="Inject a scripted P1 storm to trigger the major-incident workflow"
+          style="background:linear-gradient(135deg,#dc2626,#7f1d1d);border:none;color:#fff;font-size:11px;font-weight:600;padding:6px 10px;border-radius:6px;cursor:pointer;letter-spacing:0.3px">🎬 Run demo storm</button>
+        <button id="cc-btn-pageme" title="Make Alex page you (Teams + email + voice link)"
+          style="background:linear-gradient(135deg,#2563eb,#1d4ed8);border:none;color:#fff;font-size:11px;font-weight:600;padding:6px 10px;border-radius:6px;cursor:pointer;letter-spacing:0.3px">📞 Page me</button>
         <span style="font-size:12px;color:var(--text-dim)">uptime <span id="topbar-uptime" style="color:var(--text)">—</span></span>
         <span class="health-badge healthy" id="health-badge">Healthy</span>
         <div class="live-dot"></div>
@@ -352,6 +361,98 @@
       </div>
 
       <!-- ═══ Today's Plan View ═══ -->
+      <div class="view" id="view-signals">
+        <div class="stats-row">
+          <div class="stat-card"><div class="stat-value blue" id="sig-total">0</div><div class="stat-label">Recent Signals</div></div>
+          <div class="stat-card"><div class="stat-value orange" id="sig-observed">0</div><div class="stat-label">Observed</div></div>
+          <div class="stat-card"><div class="stat-value purple" id="sig-predicted">0</div><div class="stat-label">Predicted</div></div>
+          <div class="stat-card"><div class="stat-value green" id="sig-scripted">0</div><div class="stat-label">Scripted</div></div>
+        </div>
+        <div class="panel-grid">
+          <div class="panel panel-full">
+            <div class="panel-title">Signal Stream <span style="font-size:11px;color:var(--text-muted);font-weight:400;margin-left:8px">last 50</span></div>
+            <div id="sig-list"><div class="empty-state"><div class="empty-icon">⚡</div><div class="empty-text">No signals yet. Trigger a scenario or wait for ServiceNow events.</div></div></div>
+          </div>
+          <div class="panel panel-full">
+            <div class="panel-title">Trigger-Policy Decisions</div>
+            <div id="dec-list"><div class="empty-state"><div class="empty-icon">⚙</div><div class="empty-text">No decisions logged yet.</div></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ Today's Plan View ═══ -->
+      <div class="view" id="view-foresight">
+        <div class="stats-row">
+          <div class="stat-card"><div class="stat-value purple" id="fc-total">0</div><div class="stat-label">Forecasts</div></div>
+          <div class="stat-card"><div class="stat-value blue" id="fc-cluster">0</div><div class="stat-label">Cluster Forecasts</div></div>
+          <div class="stat-card"><div class="stat-value orange" id="fc-cascade">0</div><div class="stat-label">Cascade Forecasts</div></div>
+          <div class="stat-card"><div class="stat-value green" id="fc-window">30m</div><div class="stat-label">Window</div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Foresight Stream <span style="font-size:11px;color:var(--text-muted);font-weight:400;margin-left:8px">predicted signals last 50</span></div>
+          <div id="fc-list"><div class="empty-state"><div class="empty-icon">△</div><div class="empty-text">No forecasts yet. Foresight engine ticks every 60s.</div></div></div>
+        </div>
+      </div>
+
+      <div class="view" id="view-outcomes">
+        <div class="stats-row">
+          <div class="stat-card"><div class="stat-value green" id="out-success">0</div><div class="stat-label">Successes</div></div>
+          <div class="stat-card"><div class="stat-value orange" id="out-partial">0</div><div class="stat-label">Partial</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:var(--red)" id="out-failure">0</div><div class="stat-label">Failure</div></div>
+          <div class="stat-card"><div class="stat-value purple" id="out-rolled">0</div><div class="stat-label">Rolled Back</div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Outcome Stream</div>
+          <div id="out-list"><div class="empty-state"><div class="empty-icon">●</div><div class="empty-text">No outcomes yet. Run a workflow to populate.</div></div></div>
+        </div>
+      </div>
+
+      <div class="view" id="view-governance">
+        <div class="stats-row">
+          <div class="stat-card"><div class="stat-value" id="gov-kill" style="color:var(--green)">OK</div><div class="stat-label">Kill-Switch</div></div>
+          <div class="stat-card"><div class="stat-value" id="gov-freeze" style="color:var(--green)">OK</div><div class="stat-label">Change-Freeze</div></div>
+          <div class="stat-card"><div class="stat-value blue" id="gov-budget">0/0</div><div class="stat-label">Hourly Budget</div></div>
+          <div class="stat-card"><div class="stat-value purple" id="gov-workers">0</div><div class="stat-label">Workers</div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Statements of Autonomy</div>
+          <div id="gov-statements"><div class="empty-state"><div class="empty-icon">⚠</div><div class="empty-text">Loading…</div></div></div>
+        </div>
+        <div class="panel" style="margin-top:12px">
+          <div class="panel-title">Operator Controls</div>
+          <div style="padding:12px">
+            <button id="gov-engage" style="background:var(--red);color:white;border:0;padding:8px 14px;border-radius:6px;cursor:pointer;margin-right:8px">Engage Kill-Switch</button>
+            <button id="gov-release" style="background:var(--green);color:white;border:0;padding:8px 14px;border-radius:6px;cursor:pointer">Release</button>
+            <span style="margin-left:14px;font-size:11px;color:var(--text-muted)">Requires SCHEDULED_SECRET—paste in input below.</span>
+            <input id="gov-secret" placeholder="shared secret" style="margin-left:12px;background:var(--bg-darker);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px"/>
+          </div>
+        </div>
+      </div>
+
+      <div class="view" id="view-goals">
+        <div class="stats-row">
+          <div class="stat-card"><div class="stat-value blue" id="goals-recipes">0</div><div class="stat-label">Recipes</div></div>
+          <div class="stat-card"><div class="stat-value purple" id="goals-status">idle</div><div class="stat-label">Last Pursuit</div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Pursue a Goal</div>
+          <div style="padding:12px">
+            <input id="goal-input" placeholder="e.g. restore service x or cluster of auth failures" style="width:60%;background:var(--bg-darker);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:4px"/>
+            <button id="goal-run" style="background:var(--orange);color:white;border:0;padding:8px 14px;border-radius:6px;cursor:pointer;margin-left:8px">Pursue</button>
+            <input id="goal-secret" placeholder="shared secret" style="margin-left:12px;background:var(--bg-darker);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px"/>
+          </div>
+        </div>
+        <div class="panel" style="margin-top:12px">
+          <div class="panel-title">Recipe Catalog</div>
+          <div id="goals-list"><div class="empty-state"><div class="empty-icon">•</div><div class="empty-text">Loading…</div></div></div>
+        </div>
+        <div class="panel" style="margin-top:12px">
+          <div class="panel-title">Last Pursuit Report</div>
+          <pre id="goals-report" style="padding:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;font-size:12px;white-space:pre-wrap">No goal pursued yet.</pre>
+        </div>
+      </div>
+
+      <!-- ═══ Today's Plan View ═══ -->
       <div class="view" id="view-workday">
         <div class="stats-row">
           <div class="stat-card"><div class="stat-value" id="wd-active">0</div><div class="stat-label">Active Routines</div></div>
@@ -428,7 +529,7 @@ document.querySelectorAll('.nav-items li').forEach(li => {
     const viewId = li.dataset.view;
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     document.getElementById('view-' + viewId).classList.add('active');
-    const titles = { 'command-center': 'Command Center', 'agent-mind': 'Agent Mind', 'neural-core': 'Neural Core', 'actions': 'Actions', 'workday': "Today's Plan" };
+    const titles = { 'command-center': 'Command Center', 'agent-mind': 'Agent Mind', 'neural-core': 'Neural Core', 'actions': 'Actions', 'signals': 'Signals', 'foresight': 'Foresight', 'outcomes': 'Outcomes', 'governance': 'Governance', 'goals': 'Goals', 'workday': "Today's Plan" };
     document.getElementById('view-title').textContent = titles[viewId] || viewId;
     if (viewId === 'neural-core' && !graphInitialized) initGraph();
   });
@@ -496,7 +597,7 @@ function cronToHuman(cron) {
 
 // ── Data Fetching ──
 async function fetchAll() {
-  const [healthR, workersR, routinesR, approvalsR, auditR, memoryR, reasoningR] = await Promise.allSettled([
+  const [healthR, workersR, routinesR, approvalsR, auditR, memoryR, reasoningR, signalsR, decisionsR, foresightR, outcomesR, governanceR, goalsR] = await Promise.allSettled([
     fetch(`${BASE}/api/health`).then(r => r.json()),
     fetch(`${BASE}/api/workers`).then(r => r.json()),
     fetch(`${BASE}/api/routines`).then(r => r.json()),
@@ -504,6 +605,12 @@ async function fetchAll() {
     fetch(`${BASE}/api/audit`).then(r => r.json()),
     fetch(`${BASE}/api/memory`).then(r => r.json()),
     fetch(`${BASE}/api/reasoning`).then(r => r.json()),
+    fetch(`${BASE}/api/signals?limit=50`).then(r => r.json()),
+    fetch(`${BASE}/api/decisions?limit=50`).then(r => r.json()),
+    fetch(`${BASE}/api/foresight?limit=50`).then(r => r.json()),
+    fetch(`${BASE}/api/outcomes?limit=50`).then(r => r.json()),
+    fetch(`${BASE}/api/governance`).then(r => r.json()),
+    fetch(`${BASE}/api/goals`).then(r => r.json()),
   ]);
 
   const health = healthR.status === 'fulfilled' ? healthR.value : null;
@@ -513,6 +620,12 @@ async function fetchAll() {
   const audit = auditR.status === 'fulfilled' ? auditR.value : null;
   const memory = memoryR.status === 'fulfilled' ? memoryR.value : null;
   const reasoning = reasoningR.status === 'fulfilled' ? reasoningR.value : null;
+  const signals = signalsR.status === 'fulfilled' ? signalsR.value : null;
+  const decisions = decisionsR.status === 'fulfilled' ? decisionsR.value : null;
+  const foresight = foresightR.status === 'fulfilled' ? foresightR.value : null;
+  const outcomes = outcomesR.status === 'fulfilled' ? outcomesR.value : null;
+  const governance = governanceR.status === 'fulfilled' ? governanceR.value : null;
+  const goals = goalsR.status === 'fulfilled' ? goalsR.value : null;
 
   try { if (health) renderHealth(health); } catch (e) { console.error('renderHealth failed', e); }
   try { if (workers) renderWorkers(workers); } catch (e) { console.error('renderWorkers failed', e); }
@@ -521,8 +634,16 @@ async function fetchAll() {
   try { if (audit) renderAudit(audit); } catch (e) { console.error('renderAudit failed', e); }
   try { if (memory) renderMemory(memory); } catch (e) { console.error('renderMemory failed', e); }
   try { renderAgentMind(reasoning); } catch (e) { console.error('renderAgentMind failed', e); }
+  try { renderCommandCenterActivity(reasoning); } catch (e) { console.error('renderCommandCenterActivity failed', e); }
+  try { streamReasoningToFeed(reasoning); } catch (e) { console.error('streamReasoningToFeed failed', e); }
+  try { streamSignalsToFeed(signals, decisions, outcomes, routines); } catch (e) { console.error('streamSignalsToFeed failed', e); }
   try { renderTodaysPlan(routines); } catch (e) { console.error('renderTodaysPlan failed', e); }
   try { updateGraph(workers); } catch (e) { console.error('updateGraph failed', e); }
+  try { renderSignals(signals, decisions); } catch (e) { console.error('renderSignals failed', e); }
+  try { renderForesight(foresight); } catch (e) { console.error('renderForesight failed', e); }
+  try { renderOutcomes(outcomes); } catch (e) { console.error('renderOutcomes failed', e); }
+  try { renderGovernance(governance); } catch (e) { console.error('renderGovernance failed', e); }
+  try { renderGoals(goals); } catch (e) { console.error('renderGoals failed', e); }
 
   const healthBadge = byId('health-badge');
   if (healthBadge) {
@@ -599,9 +720,17 @@ function renderRoutines(data) {
     const name = r.name || r.id || '—';
     const cron = r.cron || r.schedule || '—';
     const status = r.status || r.state || 'idle';
+    const lastRun = r.lastRun ? timeAgo(r.lastRun) : 'never';
+    const summary = r.lastOutputSnippet || '';
+    const delivery = r.lastDelivery
+      ? [r.lastDelivery.teamsPosted ? 'Teams' : '', r.lastDelivery.emailSent ? 'Email' : '', r.lastDelivery.approvalRaised ? 'Approval' : '']
+          .filter(Boolean)
+          .join(', ')
+      : '';
     const statusColor = status === 'running' ? 'var(--blue)' : status === 'completed' ? 'var(--green)' : status === 'failed' ? 'var(--red)' : status === 'scheduled' ? 'var(--cyan)' : status === 'disabled' ? 'var(--text-dim)' : 'var(--text-muted)';
     return `<div class="metric-row">
-      <span class="metric-label">${escHtml(name)} <span style="color:var(--text-muted);font-size:10px">${escHtml(cronToHuman(cron))}</span></span>
+      <span class="metric-label">${escHtml(name)} <span style="color:var(--text-muted);font-size:10px">${escHtml(cronToHuman(cron))}</span><br/>
+      <span style="color:var(--text-muted);font-size:10px">last: ${escHtml(lastRun)}${delivery ? ` · via ${escHtml(delivery)}` : ''}</span>${summary ? `<br/><span style="color:var(--text-muted);font-size:10px">${escHtml(summary)}</span>` : ''}</span>
       <span style="font-size:11px;color:${statusColor};font-weight:600">${status}</span>
     </div>`;
   }).join('') : '<div class="empty-state"><div class="empty-icon">⏱</div><div class="empty-text">No routines configured</div></div>';
@@ -700,6 +829,161 @@ function renderMemory(data) {
       return `<div class="metric-row"><span class="metric-label" style="font-size:11px">${escHtml(key)}</span><span style="font-size:11px;color:var(--text-muted)">${escHtml(typeof val === 'string' ? val.substring(0, 40) : JSON.stringify(val).substring(0, 40))}</span></div>`;
     }).join('')}
   ` : '<div class="empty-state"><div class="empty-icon">🧠</div><div class="empty-text">No memory entries</div></div>';
+}
+
+// ── Render: Command Center "Agent Activity" panel + cross-cutting feed streamers ──
+// Shared trace metadata (used by Command Center activity, feed streamer, and Agent Mind)
+const CC_TYPE_ICONS = {
+  intent: '🎯', routing: '🔀', 'tool-call': '🔧', 'tool-result': '📊',
+  'llm-thinking': '🧠', delegation: '📤', escalation: '🚨', outcome: '✅',
+  error: '❌', approval: '👤'
+};
+const CC_TYPE_COLORS = {
+  intent: 'var(--cyan)', routing: 'var(--purple)', 'tool-call': 'var(--green)',
+  'tool-result': 'var(--blue)', 'llm-thinking': 'var(--purple)', delegation: 'var(--orange)',
+  escalation: 'var(--red)', outcome: 'var(--green)', error: 'var(--red)', approval: 'var(--orange)'
+};
+
+// Feed-streaming watermarks (so we only push new items into addFeed)
+let lastSeenTraceTs = 0;
+let lastSeenSignalIds = new Set();
+let lastSeenDecisionIds = new Set();
+let lastSeenOutcomeIds = new Set();
+let lastSeenRoutineRuns = new Map(); // routineId -> lastRun timestamp
+let feedBootDone = false;
+
+function renderCommandCenterActivity(reasoning) {
+  const el = byId('cc-activity');
+  if (!el) return;
+  if (!reasoning) return;
+  const traces = reasoning.traces || [];
+  const stats = reasoning.stats || {};
+
+  // Top stat tiles get refreshed too (so they aren't permanently 0).
+  safeText('s-conversations', String(stats.totalConversations || 0));
+  safeText('s-toolcalls', String((stats.byType && stats.byType['tool-call']) || 0));
+
+  if (!traces.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">⚡</div><div class="empty-text">No agent activity yet. Send a message to Alex or wait for a routine to fire.</div></div>';
+    return;
+  }
+
+  // Show the most recent 25 traces, newest first.
+  const recent = traces
+    .slice()
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, 25);
+
+  el.innerHTML = recent.map(t => {
+    const ts = new Date(t.timestamp).toLocaleTimeString('en-US', { hour12: false });
+    const icon = CC_TYPE_ICONS[t.type] || '•';
+    const color = CC_TYPE_COLORS[t.type] || 'var(--text-muted)';
+    const sourceIcon = (typeof WORKER_ICONS !== 'undefined' && WORKER_ICONS[t.source]) || '⚙';
+    const conf = t.confidence ? `<span style="font-size:10px;text-transform:uppercase;color:var(--text-muted);margin-left:6px">${escHtml(t.confidence)}</span>` : '';
+    const dur = t.durationMs ? `<span style="font-size:10px;color:var(--text-muted);margin-left:6px">${t.durationMs}ms</span>` : '';
+    const summary = escHtml(t.summary || t.detail || '(no summary)');
+    return `<div style="display:flex;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border)">
+      <div style="flex:0 0 22px;font-size:14px;text-align:center">${icon}</div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-muted);margin-bottom:2px">
+          <span style="color:${color};font-weight:600;text-transform:uppercase">${escHtml(t.type)}</span>
+          <span>·</span>
+          <span>${sourceIcon} ${escHtml(t.source || '—')}</span>
+          ${conf}${dur}
+          <span style="margin-left:auto">${ts}</span>
+        </div>
+        <div style="font-size:13px;color:var(--text);line-height:1.4;word-break:break-word">${summary}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function streamReasoningToFeed(reasoning) {
+  if (!reasoning || !reasoning.traces) return;
+  const traces = reasoning.traces;
+  // First time through: just record the high-water-mark; don't replay history.
+  if (!feedBootDone) {
+    let max = 0;
+    for (const t of traces) {
+      const ts = new Date(t.timestamp).getTime();
+      if (ts > max) max = ts;
+    }
+    lastSeenTraceTs = max;
+    return;
+  }
+  // Push new traces (newest watermark since last fetch) into the feed.
+  let newMax = lastSeenTraceTs;
+  // Iterate oldest-first so feed reads in real chronological order.
+  const sorted = traces.slice().sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  for (const t of sorted) {
+    const ts = new Date(t.timestamp).getTime();
+    if (ts <= lastSeenTraceTs) continue;
+    if (ts > newMax) newMax = ts;
+    // Filter to high-signal types so the feed isn't drowned in llm-thinking noise.
+    if (!['tool-call', 'outcome', 'escalation', 'error', 'approval', 'delegation'].includes(t.type)) continue;
+    const icon = CC_TYPE_ICONS[t.type] || '•';
+    const summary = (t.summary || t.detail || '').toString().slice(0, 140);
+    addFeed(`${icon} ${t.type} — ${summary}`, t.source || 'alex');
+  }
+  lastSeenTraceTs = newMax;
+}
+
+function streamSignalsToFeed(signalsResp, decisionsResp, outcomesResp, routinesResp) {
+  const signals = (signalsResp && signalsResp.signals) || [];
+  const decisions = (decisionsResp && decisionsResp.decisions) || [];
+  const outcomes = (outcomesResp && outcomesResp.outcomes) || [];
+  const routines = (routinesResp && routinesResp.routines) || [];
+
+  // Bootstrap watermarks on first fetch — don't replay all history.
+  if (!feedBootDone) {
+    for (const s of signals) lastSeenSignalIds.add(s.id);
+    for (const d of decisions) lastSeenDecisionIds.add(d.id || `${d.workflowId}-${d.timestamp}`);
+    for (const o of outcomes) lastSeenOutcomeIds.add(o.id || `${o.workflowId}-${o.timestamp}`);
+    for (const r of routines) {
+      if (r.id && r.lastRun) lastSeenRoutineRuns.set(r.id, r.lastRun);
+    }
+    feedBootDone = true;
+    return;
+  }
+
+  for (const s of signals) {
+    if (lastSeenSignalIds.has(s.id)) continue;
+    lastSeenSignalIds.add(s.id);
+    const sev = (s.severity || 'low').toUpperCase();
+    addFeed(`⚡ signal · ${sev} · ${s.source || '?'}/${s.type || '?'}${s.asset ? ' · ' + s.asset : ''}`, 'signal-router');
+  }
+
+  for (const d of decisions) {
+    const key = d.id || `${d.workflowId}-${d.timestamp}`;
+    if (lastSeenDecisionIds.has(key)) continue;
+    lastSeenDecisionIds.add(key);
+    const verdict = d.action || d.decision || 'decision';
+    addFeed(`🔀 ${verdict} → ${d.workflowId || 'workflow'}${d.reason ? ' · ' + d.reason : ''}`, 'trigger-policy');
+  }
+
+  for (const o of outcomes) {
+    const key = o.id || `${o.workflowId}-${o.timestamp}`;
+    if (lastSeenOutcomeIds.has(key)) continue;
+    lastSeenOutcomeIds.add(key);
+    const status = o.status || 'completed';
+    addFeed(`✅ outcome · ${status} · ${o.workflowId || o.routineId || '?'}`, 'outcomes');
+  }
+
+  for (const r of routines) {
+    if (!r.id || !r.lastRun) continue;
+    const prev = lastSeenRoutineRuns.get(r.id);
+    if (prev === r.lastRun) continue;
+    lastSeenRoutineRuns.set(r.id, r.lastRun);
+    if (!prev) continue; // first time we observed this routine; skip
+    const status = r.lastStatus || 'completed';
+    const ld = r.lastDelivery || {};
+    const channels = [];
+    if (ld.teamsPosted) channels.push('teams');
+    if (ld.emailSent) channels.push('email');
+    if (ld.approvalRaised) channels.push('approval');
+    const delivery = channels.length ? ` · ${channels.join('+')}` : '';
+    addFeed(`⏱ ${r.id} · ${status}${delivery}`, r.worker || 'scheduler');
+  }
 }
 
 // ── Render: Agent Mind (reasoning trace visualization) ──
@@ -841,6 +1125,211 @@ function renderAgentMind(reasoning) {
   }
 }
 
+// ── Render: Signals & Trigger-Policy Decisions ──
+function renderSignals(signalsResp, decisionsResp) {
+  const signals = (signalsResp && signalsResp.signals) || [];
+  const decisions = (decisionsResp && decisionsResp.decisions) || [];
+
+  const profile = (window.__missionControlProfile || 'prod');
+  const visible = profile === 'prod' ? signals.filter(s => s.origin !== 'scripted') : signals;
+
+  const totalEl = byId('sig-total'); if (totalEl) totalEl.textContent = String(visible.length);
+  const obsEl = byId('sig-observed'); if (obsEl) obsEl.textContent = String(visible.filter(s => s.origin === 'observed').length);
+  const predEl = byId('sig-predicted'); if (predEl) predEl.textContent = String(visible.filter(s => s.origin === 'predicted').length);
+  const scrEl = byId('sig-scripted'); if (scrEl) scrEl.textContent = String(visible.filter(s => s.origin === 'scripted').length);
+
+  const originColor = (o) => o === 'predicted' ? 'var(--purple)' : o === 'scripted' ? 'var(--green)' : 'var(--blue)';
+  const sevColor = (s) => s === 'critical' ? 'var(--red)' : s === 'high' ? 'var(--orange)' : s === 'medium' ? 'var(--blue)' : 'var(--text-muted)';
+  const sigList = byId('sig-list');
+  if (sigList) {
+    sigList.innerHTML = visible.length === 0
+      ? '<div class="empty-state"><div class="empty-icon">⚡</div><div class="empty-text">No signals to display.</div></div>'
+      : visible.slice(0, 50).map(s => `
+        <div class="metric-row" style="border-left:3px solid ${originColor(s.origin)};padding-left:8px">
+          <span class="metric-label">
+            <span style="color:${originColor(s.origin)};font-weight:600;font-size:11px;text-transform:uppercase">${escHtml(s.origin || 'observed')}</span>
+            <span style="color:var(--text-muted)"> · </span>
+            <span style="color:${sevColor(s.severity)};font-weight:600">${escHtml(s.severity || '—')}</span>
+            <span style="color:var(--text-muted)"> · </span>
+            <span>${escHtml(s.source || '—')}</span>
+            <span style="color:var(--text-muted)">/${escHtml(s.type || '—')}</span>
+            ${s.asset ? `<br/><span style="color:var(--text-muted);font-size:11px">asset: ${escHtml(s.asset)}</span>` : ''}
+          </span>
+          <span style="font-size:11px;color:var(--text-muted)">${escHtml((typeof timeAgo === 'function' ? timeAgo(s.occurredAt) : (s.occurredAt || '')))}</span>
+        </div>
+      `).join('');
+  }
+
+  const decList = byId('dec-list');
+  if (decList) {
+    decList.innerHTML = decisions.length === 0
+      ? '<div class="empty-state"><div class="empty-icon">⚙</div><div class="empty-text">No decisions logged yet.</div></div>'
+      : decisions.slice(0, 50).map(d => `
+        <div class="metric-row">
+          <span class="metric-label">
+            <strong>${escHtml(d.workflowId)}</strong>
+            <span style="color:var(--text-muted)"> · signal=${escHtml(d.signalId)}</span>
+            ${d.suppressedReason ? `<br/><span style="color:var(--orange);font-size:11px">suppressed: ${escHtml(d.suppressedReason)}</span>` : ''}
+          </span>
+          <span style="font-size:11px;color:${d.matched && !d.suppressedReason ? 'var(--green)' : 'var(--text-muted)'};font-weight:600">${d.matched ? (d.suppressedReason ? 'matched' : 'routed') : 'no-match'}</span>
+        </div>
+      `).join('');
+  }
+}
+
+// ── Render: Foresight (Pillar 3) ──
+function renderForesight(resp) {
+  const forecasts = (resp && resp.forecasts) || [];
+  const total = byId('fc-total'); if (total) total.textContent = String(forecasts.length);
+  const cluster = forecasts.filter(f => (f.signal && f.signal.type || '').includes('major-predicted')).length;
+  const cascade = forecasts.filter(f => (f.signal && f.signal.type || '').includes('cascade-predicted')).length;
+  safeText('fc-cluster', String(cluster));
+  safeText('fc-cascade', String(cascade));
+  const list = byId('fc-list');
+  if (!list) return;
+  list.innerHTML = forecasts.length === 0
+    ? '<div class="empty-state"><div class="empty-icon">△</div><div class="empty-text">No forecasts yet. Foresight engine ticks every 60s.</div></div>'
+    : forecasts.slice(0, 50).map(f => {
+        const s = f.signal || {};
+        return `
+        <div class="metric-row" style="border-left:3px solid var(--purple);padding-left:8px">
+          <span class="metric-label">
+            <strong>${escHtml(s.type || '—')}</strong>
+            ${s.asset ? `<span style="color:var(--text-muted)"> · ${escHtml(s.asset)}</span>` : ''}
+            <br/><span style="font-size:11px;color:var(--text-muted)">${escHtml(f.rationale || '')}</span>
+          </span>
+          <span style="font-size:11px;color:var(--purple);font-weight:600">conf ${(s.confidence || 0).toFixed(2)}</span>
+        </div>`;
+      }).join('');
+}
+
+// ── Render: Outcomes (Pillar 4) ──
+function renderOutcomes(resp) {
+  const outs = (resp && resp.outcomes) || [];
+  const success = outs.filter(o => o.label === 'success').length;
+  const partial = outs.filter(o => o.label === 'partial').length;
+  const failure = outs.filter(o => o.label === 'failure').length;
+  const rolled  = outs.filter(o => o.rolledBack).length;
+  safeText('out-success', String(success));
+  safeText('out-partial', String(partial));
+  safeText('out-failure', String(failure));
+  safeText('out-rolled', String(rolled));
+  const list = byId('out-list');
+  if (!list) return;
+  const color = (l) => l === 'success' ? 'var(--green)' : l === 'partial' ? 'var(--orange)' : l === 'failure' ? 'var(--red)' : 'var(--text-muted)';
+  list.innerHTML = outs.length === 0
+    ? '<div class="empty-state"><div class="empty-icon">●</div><div class="empty-text">No outcomes yet.</div></div>'
+    : outs.slice(0, 50).map(o => `
+        <div class="metric-row" style="border-left:3px solid ${color(o.label)};padding-left:8px">
+          <span class="metric-label">
+            <strong style="color:${color(o.label)};text-transform:uppercase;font-size:11px">${escHtml(o.label)}</strong>
+            <span style="color:var(--text-muted)"> · ${escHtml(o.workflowId)}</span>
+            ${o.signalType ? `<span style="color:var(--text-muted)">/${escHtml(o.signalType)}</span>` : ''}
+            ${o.rolledBack ? `<br/><span style="color:var(--purple);font-size:11px">rolled back</span>` : ''}
+            ${o.notes ? `<br/><span style="color:var(--text-muted);font-size:11px">${escHtml(o.notes)}</span>` : ''}
+          </span>
+          <span style="font-size:11px;color:var(--text-muted)">${escHtml((typeof timeAgo === 'function' ? timeAgo(o.observedAt) : (o.observedAt || '')))}</span>
+        </div>
+      `).join('');
+}
+
+// ── Render: Governance (Pillar 7) ──
+function renderGovernance(resp) {
+  if (!resp) return;
+  const killEl = byId('gov-kill');
+  if (killEl) {
+    if (resp.killSwitch && resp.killSwitch.engaged) {
+      killEl.textContent = 'ENGAGED';
+      killEl.style.color = 'var(--red)';
+    } else {
+      killEl.textContent = 'OK';
+      killEl.style.color = 'var(--green)';
+    }
+  }
+  const freezeEl = byId('gov-freeze');
+  if (freezeEl) {
+    if (resp.changeFreezeActive) {
+      freezeEl.textContent = 'ACTIVE';
+      freezeEl.style.color = 'var(--orange)';
+    } else {
+      freezeEl.textContent = 'OK';
+      freezeEl.style.color = 'var(--green)';
+    }
+  }
+  if (resp.budget) safeText('gov-budget', `${resp.budget.used}/${resp.budget.limit}`);
+  const stmts = resp.statementsOfAutonomy || [];
+  safeText('gov-workers', String(stmts.length));
+  const list = byId('gov-statements');
+  if (list) {
+    list.innerHTML = stmts.length === 0
+      ? '<div class="empty-state"><div class="empty-icon">⚠</div><div class="empty-text">No statements registered.</div></div>'
+      : stmts.map(s => `
+          <div class="metric-row" style="border-left:3px solid ${s.allowAutonomous ? 'var(--orange)' : 'var(--text-muted)'};padding-left:8px;align-items:flex-start">
+            <span class="metric-label" style="flex:1">
+              <strong>${escHtml(s.name)}</strong>
+              <span style="color:var(--text-muted)"> · blast=${(s.blastRadius || 0).toFixed(2)}</span>
+              <span style="color:${s.allowAutonomous ? 'var(--orange)' : 'var(--text-muted)'};font-size:11px;margin-left:8px">${s.allowAutonomous ? 'autonomous' : 'HITL only'}</span>
+              <br/><span style="color:var(--text-muted);font-size:11px">${escHtml(s.statement)}</span>
+            </span>
+          </div>
+        `).join('');
+  }
+}
+
+// ── Render: Goals (Pillar 5) ──
+function renderGoals(resp) {
+  const recipes = (resp && resp.recipes) || [];
+  safeText('goals-recipes', String(recipes.length));
+  const list = byId('goals-list');
+  if (list) {
+    list.innerHTML = recipes.length === 0
+      ? '<div class="empty-state"><div class="empty-icon">•</div><div class="empty-text">No recipes loaded.</div></div>'
+      : recipes.map(r => `
+          <div class="metric-row" style="border-left:3px solid var(--blue);padding-left:8px">
+            <span class="metric-label">
+              <strong>${escHtml(r.goal)}</strong>
+              <br/><span style="font-size:11px;color:var(--text-muted)">${(r.steps || []).map(s => escHtml(s.workflowId)).join(' → ')}</span>
+            </span>
+          </div>
+        `).join('');
+  }
+}
+
+// Goal pursuit + governance buttons (idempotent — bind once)
+let __goalsBound = false;
+function bindGovernanceButtons() {
+  if (__goalsBound) return;
+  __goalsBound = true;
+  const engage = byId('gov-engage');
+  const release = byId('gov-release');
+  const goalRun = byId('goal-run');
+  if (engage) engage.addEventListener('click', async () => {
+    const secret = (byId('gov-secret') || { value: '' }).value;
+    await fetch(`${BASE}/api/governance/kill`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-scheduled-secret': secret }, body: JSON.stringify({ by: 'mission-control', reason: 'manual' }) });
+    fetchAll().catch(() => {});
+  });
+  if (release) release.addEventListener('click', async () => {
+    const secret = (byId('gov-secret') || { value: '' }).value;
+    await fetch(`${BASE}/api/governance/release`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-scheduled-secret': secret }, body: JSON.stringify({ by: 'mission-control' }) });
+    fetchAll().catch(() => {});
+  });
+  if (goalRun) goalRun.addEventListener('click', async () => {
+    const goal = (byId('goal-input') || { value: '' }).value;
+    const secret = (byId('goal-secret') || { value: '' }).value;
+    if (!goal) return;
+    safeText('goals-status', 'running…');
+    try {
+      const r = await fetch(`${BASE}/api/goals/pursue`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-scheduled-secret': secret }, body: JSON.stringify({ goal }) });
+      const j = await r.json();
+      const pre = byId('goals-report'); if (pre) pre.textContent = JSON.stringify(j.report || j, null, 2);
+      safeText('goals-status', (j.report && j.report.status) || 'done');
+    } catch (e) {
+      safeText('goals-status', 'error');
+    }
+  });
+}
+bindGovernanceButtons();
+
 // ── Render: Today's Plan ──
 function renderTodaysPlan(routines) {
   const routineList = Array.isArray(routines) ? routines : (routines && routines.routines) || [];
@@ -914,11 +1403,18 @@ function renderTodaysPlan(routines) {
       const icon = statusIcons[status] || '○';
       const workerIcon = WORKER_ICONS[worker] || '⚙';
       const color = statusColors[status] || 'var(--text-muted)';
+      const summary = r.lastOutputSnippet || '';
+      const delivery = r.lastDelivery
+        ? [r.lastDelivery.teamsPosted ? 'Teams' : '', r.lastDelivery.emailSent ? 'Email' : '', r.lastDelivery.approvalRaised ? 'Approval' : '']
+            .filter(Boolean)
+            .join(', ')
+        : '';
       html += `<div class="plan-task">
         <div class="plan-task-icon ${status}">${icon}</div>
         <div class="plan-task-body">
           <div class="plan-task-name">${workerIcon} ${escHtml(name)}</div>
-          <div class="plan-task-desc">${escHtml(worker)} · ${escHtml(cronToHuman(cron))}</div>
+          <div class="plan-task-desc">${escHtml(worker)} · ${escHtml(cronToHuman(cron))}${delivery ? ` · ${escHtml(delivery)}` : ''}</div>
+          ${summary ? `<div class="plan-task-desc" style="font-size:11px;color:var(--text-muted)">${escHtml(summary)}</div>` : ''}
         </div>
         <div class="plan-task-time" style="color:${color}">${status}</div>
       </div>`;
@@ -1288,6 +1784,79 @@ fetchAll().catch(() => {
   addFeed('Connection failed — retrying in 10s', 'system');
 });
 setInterval(() => fetchAll().catch(() => {}), 10000);
+
+// ── Topbar quick actions ──
+async function postJson(path, body) {
+  const r = await fetch(`${BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {})
+  });
+  if (!r.ok) {
+    const txt = await r.text().catch(() => '');
+    throw new Error(`${r.status} ${r.statusText} ${txt}`);
+  }
+  return r.json();
+}
+
+const btnStorm = byId('cc-btn-storm');
+if (btnStorm) {
+  btnStorm.addEventListener('click', async () => {
+    btnStorm.disabled = true;
+    const orig = btnStorm.textContent;
+    btnStorm.textContent = '⏳ injecting…';
+    try {
+      const out = await postJson('/api/demo/scripted-storm', {});
+      addFeed(`🎬 demo storm injected — ${out.signalsInjected || 0} signals fired`, 'demo');
+    } catch (err) {
+      addFeed(`🎬 demo storm failed — ${err.message}`, 'demo');
+    } finally {
+      btnStorm.disabled = false;
+      btnStorm.textContent = orig;
+    }
+  });
+}
+
+const btnPageMe = byId('cc-btn-pageme');
+if (btnPageMe) {
+  btnPageMe.addEventListener('click', async () => {
+    btnPageMe.disabled = true;
+    const orig = btnPageMe.textContent;
+    btnPageMe.textContent = '⏳ paging…';
+    try {
+      const reason = prompt('Reason for the page?', 'Alex needs you on the bridge — major incident in progress');
+      if (reason === null) { btnPageMe.disabled = false; btnPageMe.textContent = orig; return; }
+      const out = await postJson('/api/voice/page-me', { reason });
+      const channels = (out.delivered || []).join(' + ') || 'voice-link';
+
+      // The Page Me endpoint returns one of four states:
+      //   'calling'     \u2014 Alex initiated an ACS Teams call to the user.
+      //   'sent'        \u2014 Page delivered via Teams chat / email.
+      //   'call-only'   \u2014 No ACS, only a Teams click-to-call deep link. Open it in Teams.
+      //   'voice-only'  \u2014 No Teams/email/call delivery available; surface the browser voice page.
+      // We only force the in-browser /voice page when there's literally no other way to reach the
+      // user; otherwise the unconditional pop-up was over-riding live Teams calls (rev 0000098 bug).
+      if (out.status === 'calling') {
+        addFeed(`\ud83d\udcde Alex is calling you on Teams now`, 'alex');
+      } else if (out.status === 'sent') {
+        addFeed(`\ud83d\udcde Alex paged you via ${channels}`, 'alex');
+      } else if (out.status === 'call-only' && out.teamsCallUrl) {
+        addFeed(`\ud83d\udcde Opening Teams to call you`, 'alex');
+        window.open(out.teamsCallUrl, '_blank', 'noopener');
+      } else if (out.status === 'voice-only' && out.voiceUrl) {
+        addFeed(`\ud83d\udcde no Teams/email delivery available \u2014 opening voice line`, 'alex');
+        window.open(out.voiceUrl, '_blank', 'noopener');
+      } else {
+        addFeed(`\ud83d\udcde page status: ${out.status || 'unknown'}`, 'alex');
+      }
+    } catch (err) {
+      addFeed(`📞 page failed — ${err.message}`, 'alex');
+    } finally {
+      btnPageMe.disabled = false;
+      btnPageMe.textContent = orig;
+    }
+  });
+}
 </script>
 </body>
 </html>

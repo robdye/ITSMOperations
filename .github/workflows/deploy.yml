@@ -27,8 +27,8 @@ env:
   MCP_RESOURCE_GROUP: ${{ vars.MCP_RESOURCE_GROUP }}
   DW_CONTAINER_APP: ${{ vars.DW_CONTAINER_APP_NAME }}
   MCP_CONTAINER_APP: ${{ vars.MCP_CONTAINER_APP_NAME }}
-  FUNCTIONS_APP: itsm-ops-functions
-  FUNCTIONS_RESOURCE_GROUP: rg-itsm-operations
+  FUNCTIONS_APP: ${{ vars.FUNCTIONS_APP_NAME || format('itsm-ops-{0}-func', github.event.inputs.environment || 'dev') }}
+  FUNCTIONS_RESOURCE_GROUP: ${{ vars.FUNCTIONS_RESOURCE_GROUP || vars.AZURE_RESOURCE_GROUP }}
 
 jobs:
   # ── Build & Push Images ────────────────────────────────────────
@@ -101,6 +101,51 @@ jobs:
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --image ${{ needs.build-push.outputs.dw-image }}
 
+      - name: Configure digital-worker runtime settings
+        shell: bash
+        env:
+          AGENT_EMAIL: ${{ vars.AGENT_EMAIL }}
+          MANAGER_EMAIL: ${{ vars.MANAGER_EMAIL }}
+          GRAPH_MAIL_SENDER: ${{ vars.GRAPH_MAIL_SENDER }}
+          GRAPH_APP_ID: ${{ vars.GRAPH_APP_ID }}
+          GRAPH_APP_SECRET: ${{ secrets.GRAPH_APP_SECRET }}
+          GRAPH_TENANT_ID: ${{ vars.GRAPH_TENANT_ID || secrets.AZURE_TENANT_ID }}
+          ITSM_TEAM_ID: ${{ vars.ITSM_TEAM_ID }}
+          ITSM_ALERTS_CHANNEL_ID: ${{ vars.ITSM_ALERTS_CHANNEL_ID }}
+          ROUTINE_REPORT_RECIPIENTS: ${{ vars.ROUTINE_REPORT_RECIPIENTS }}
+          SCHEDULED_SECRET: ${{ secrets.SCHEDULED_SECRET }}
+        run: |
+          ENV_ARGS=()
+
+          add_env() {
+            local key="$1"
+            local value="$2"
+            if [ -n "$value" ]; then
+              ENV_ARGS+=("${key}=${value}")
+            fi
+          }
+
+          add_env "AGENT_EMAIL" "$AGENT_EMAIL"
+          add_env "MANAGER_EMAIL" "$MANAGER_EMAIL"
+          add_env "GRAPH_MAIL_SENDER" "$GRAPH_MAIL_SENDER"
+          add_env "GRAPH_APP_ID" "$GRAPH_APP_ID"
+          add_env "GRAPH_APP_SECRET" "$GRAPH_APP_SECRET"
+          add_env "GRAPH_TENANT_ID" "$GRAPH_TENANT_ID"
+          add_env "ITSM_TEAM_ID" "$ITSM_TEAM_ID"
+          add_env "ITSM_ALERTS_CHANNEL_ID" "$ITSM_ALERTS_CHANNEL_ID"
+          add_env "ROUTINE_REPORT_RECIPIENTS" "$ROUTINE_REPORT_RECIPIENTS"
+          add_env "SCHEDULED_SECRET" "$SCHEDULED_SECRET"
+
+          if [ ${#ENV_ARGS[@]} -eq 0 ]; then
+            echo "No optional digital-worker runtime settings supplied via GitHub environment/secrets."
+            exit 0
+          fi
+
+          az containerapp update \
+            --name ${{ env.DW_CONTAINER_APP }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --set-env-vars "${ENV_ARGS[@]}"
+
       - name: Deploy mcp-server
         run: |
           az containerapp update \
@@ -127,6 +172,7 @@ jobs:
   # ── Deploy to Azure Functions ──────────────────────────────────
   deploy-functions:
     name: Deploy to Azure Functions
+    needs: deploy
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || 'dev' }}
     permissions:
@@ -160,13 +206,47 @@ jobs:
           zip -r ../deploy-functions.zip . \
             -x "node_modules/*" "*.git*" ".env*" "test/*" "tests/*"
 
+      - name: Validate Function App target
+        run: |
+          az functionapp show \
+            --resource-group ${{ env.FUNCTIONS_RESOURCE_GROUP }} \
+            --name ${{ env.FUNCTIONS_APP }} \
+            --output table
+
       - name: Deploy Functions (config-zip)
         run: |
           az functionapp deployment source config-zip \
             -g ${{ env.FUNCTIONS_RESOURCE_GROUP }} \
             -n ${{ env.FUNCTIONS_APP }} \
             --src deploy-functions.zip \
-            --verbose || true
+            --verbose
+
+      - name: Configure Function App runtime settings
+        shell: bash
+        env:
+          SCHEDULED_SECRET: ${{ secrets.SCHEDULED_SECRET }}
+        run: |
+          DW_URL=$(az containerapp show \
+            --name ${{ env.DW_CONTAINER_APP }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn -o tsv)
+
+          if [ -z "$DW_URL" ]; then
+            echo "Unable to resolve digital-worker ingress FQDN"
+            exit 1
+          fi
+
+          APP_SETTINGS=("DIGITAL_WORKER_URL=https://${DW_URL}")
+
+          if [ -n "$SCHEDULED_SECRET" ]; then
+            APP_SETTINGS+=("WORKER_SCHEDULED_SECRET=${SCHEDULED_SECRET}")
+            APP_SETTINGS+=("SCHEDULED_SECRET=${SCHEDULED_SECRET}")
+          fi
+
+          az functionapp config appsettings set \
+            --resource-group ${{ env.FUNCTIONS_RESOURCE_GROUP }} \
+            --name ${{ env.FUNCTIONS_APP }} \
+            --settings "${APP_SETTINGS[@]}"
 
 
 

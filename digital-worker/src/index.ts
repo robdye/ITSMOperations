@@ -26,6 +26,13 @@ import { getMemoryStoreSummary } from './memory-store';
 import { startScheduledRoutines, getRoutineStatus, stopScheduledRoutines, executeRoutine } from './scheduled-routines';
 import { getQueueSummary } from './approval-queue';
 import { attachVoiceWebSocket } from './voice/voiceProxy';
+import {
+  attachAcsMediaWebSocket,
+  handleAcsEvent,
+  initiateOutboundTeamsCall,
+  isAcsConfigured,
+  getActiveCallSnapshot,
+} from './voice/acsBridge';
 import { getTraces, getConversations, getReasoningStats } from './reasoning-trace';
 import { isVoiceEnabled } from './voice/voiceGate';
 import { initCosmosStore } from './cosmos-store';
@@ -37,6 +44,7 @@ import { handleApprovalCallback, cancelAllPendingApprovals } from './teams-appro
 import { handleFlowCallback, getPowerAutomateStatus } from './power-automate';
 import { trackEvent, trackWorkerRouting, getKqlTemplates } from './log-analytics';
 import { setupConnection as setupGraphConnector, getConnectorStatus } from './graph-connector';
+import { getEmailServiceStatus } from './email-service';
 import { getGraphMailStatus } from './graph-mail';
 import { getPlannerStatus } from './planner-tasks';
 import { getSharePointStatus } from './sharepoint-docs';
@@ -44,6 +52,28 @@ import { isApimEnabled, getApimStatus, getProxiedEndpoint } from './apim-gateway
 import { getComputerUseStatus } from './computer-use';
 import { getTuningStatus, createTuningDataset, extractResolvedIncidents, extractResolvedProblems } from './copilot-tuning';
 import { isFoundryEnabled, getFoundryStatus } from './foundry-agents';
+import { signalRouter, type Signal } from './signal-router';
+import { registerDefaultSubscriptions } from './workflow-subscriptions';
+import { DemoDirector, DemoTargetNotAllowedError } from './demo/demo-director';
+import { sendEmail as sendGraphMail } from './graph-mail';
+import { autonomousActions } from './autonomous-actions';
+import { startForesight, stopForesight, getRecentForecasts, runForesightOnce, backfillForesight } from './foresight';
+import {
+  isKillSwitchEngaged,
+  getKillState,
+  engageKillSwitch,
+  releaseKillSwitch,
+  getBudgetSnapshot,
+  isChangeFreezeActive,
+  getChangeFreezeWindows,
+  setChangeFreezeWindows,
+  statementsOfAutonomy,
+} from './governance';
+import { getRecentOutcomes, getRollingSuccessRate } from './outcome-verifier';
+import { getTunedThresholds } from './autonomy-tuner';
+import { pursueGoal, getRegisteredRecipes, planForGoal } from './goal-seeker';
+import { workflowEngine } from './workflow-engine';
+import { workerMap } from './worker-definitions';
 
 console.log(`ITSM Operations Digital Worker`);
 
@@ -52,6 +82,13 @@ export const credential = new DefaultAzureCredential();
 
 // Only NODE_ENV=development disables authentication
 const isDevelopment = process.env.NODE_ENV === 'development';
+
+function isEnvFlagEnabled(name: string): boolean {
+  const raw = process.env[name];
+  if (!raw) return false;
+  return ['1', 'true', 'yes', 'on'].includes(raw.trim().toLowerCase());
+}
+
 let authConfig: AuthConfiguration = {};
 if (!isDevelopment) {
   try {
@@ -100,6 +137,7 @@ server.get('/api/platform-status', (_req: Request, res: Response) => {
       foundry: getFoundryStatus(),
       serviceBus: getServiceBusStatus(),
       redis: getRedisStatus(),
+      email: getEmailServiceStatus(),
       graphMail: getGraphMailStatus(),
       planner: getPlannerStatus(),
       sharepoint: getSharePointStatus(),
@@ -323,10 +361,520 @@ server.get('/api/tuning/status', (_req: Request, res: Response) => {
   res.status(200).json(status);
 });
 
+// ── Signal bus surface (Phase 1/2) ──
+
+const SIGNAL_REPLAY_WINDOW_MS = 10 * 60 * 1000;
+const recentSignalIds: Array<{ id: string; expiresAt: number }> = [];
+function signalAlreadySeen(id: string): boolean {
+  const now = Date.now();
+  for (let i = recentSignalIds.length - 1; i >= 0; i--) {
+    if (recentSignalIds[i].expiresAt < now) recentSignalIds.splice(i, 1);
+  }
+  return recentSignalIds.some((e) => e.id === id);
+}
+function markSignalSeen(id: string): void {
+  recentSignalIds.push({ id, expiresAt: Date.now() + SIGNAL_REPLAY_WINDOW_MS });
+}
+
+function signalsAuthOk(req: Request): boolean {
+  const provided = String(req.headers['x-scheduled-secret'] || req.body?.secret || '');
+  const expected = process.env.SCHEDULED_SECRET || '';
+  if (!expected) return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+server.post('/api/signals', async (req: Request, res: Response) => {
+  if (!signalsAuthOk(req)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const signal = req.body?.signal as Signal | undefined;
+  if (!signal || !signal.id || !signal.source || !signal.type) {
+    res.status(400).json({ error: 'signal payload missing id/source/type' });
+    return;
+  }
+  if (signalAlreadySeen(signal.id)) {
+    res.status(202).json({ status: 'duplicate', signalId: signal.id });
+    return;
+  }
+  markSignalSeen(signal.id);
+  try {
+    const decisions = await signalRouter.publish(signal);
+    res.status(202).json({ status: 'accepted', signalId: signal.id, decisions });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+server.get('/api/signals', (req: Request, res: Response) => {
+  const limit = Math.max(1, Math.min(500, parseInt(String(req.query.limit || '50'), 10) || 50));
+  res.status(200).json({ signals: signalRouter.getRecentSignals(limit) });
+});
+
+server.get('/api/decisions', (req: Request, res: Response) => {
+  const limit = Math.max(1, Math.min(500, parseInt(String(req.query.limit || '50'), 10) || 50));
+  res.status(200).json({ decisions: signalRouter.getRecentDecisions(limit) });
+});
+
+// ── Demo Director surface (Phase 3) ──
+// Tenant-flagged, secret-protected. Refuses to run unless the tenant profile
+// has allowDemoDirector = true and the SNOW host is on the allow-list.
+server.post('/api/demo', async (req: Request, res: Response) => {
+  if (!signalsAuthOk(req)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const action = String(req.body?.action || '');
+  const tenantId = String(req.body?.tenantId || process.env.TENANT_ID || 'default');
+  const instanceUrl = String(req.body?.instanceUrl || process.env.SNOW_INSTANCE_URL || '');
+  const authHeader = String(req.body?.authHeader || process.env.SNOW_AUTH_HEADER || '');
+
+  try {
+    const director = new DemoDirector({ tenantId, instanceUrl, authHeader });
+    if (action === 'list') {
+      res.status(200).json({ scenarios: director.list(), profile: director.getProfile() });
+      return;
+    }
+    if (action === 'status') {
+      res.status(200).json({ profile: director.getProfile() });
+      return;
+    }
+    if (action === 'run') {
+      const scenario = String(req.body?.scenario || '');
+      if (!scenario) {
+        res.status(400).json({ error: 'scenario id required' });
+        return;
+      }
+      const report = await director.run(scenario);
+      res.status(200).json({ report });
+      return;
+    }
+    res.status(400).json({ error: `unknown action: ${action}` });
+  } catch (err) {
+    if (err instanceof DemoTargetNotAllowedError) {
+      res.status(403).json({ error: err.message });
+      return;
+    }
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// ── Demo: scripted P1 storm (no SNOW required) ─────────────────────────
+// One-click button on Mission Control fires this. It synthesizes the same
+// scripted signals that `verify-mir-workflow` used during validation so the
+// signal-router → trigger-policy → major-incident-bridge / sla-breach
+// workflows light up end-to-end without needing a live ServiceNow tenant.
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+server.post('/api/demo/scripted-storm', async (_req: Request, res: Response) => {
+  const now = Date.now();
+  const runId = `storm-${now}`;
+  const baseTime = new Date(now).toISOString();
+  const stormSignals: Signal[] = [
+    {
+      id: `${runId}-monitor-bgp`,
+      source: 'monitor',
+      type: 'edge-router.link-flap',
+      severity: 'high',
+      asset: 'edge-router-01',
+      payload: { runId, message: 'BGP session flapping on edge-router-01' },
+      occurredAt: baseTime,
+      origin: 'scripted',
+    },
+    {
+      id: `${runId}-snow-inc-001`,
+      source: 'servicenow',
+      type: 'incident.created',
+      severity: 'critical',
+      asset: 'edge-router-01',
+      payload: { runId, number: 'INC9000001', priority: '1', short_description: 'Customers reporting intermittent connectivity loss' },
+      occurredAt: baseTime,
+      origin: 'scripted',
+    },
+    {
+      id: `${runId}-snow-inc-002`,
+      source: 'servicenow',
+      type: 'incident.created',
+      severity: 'critical',
+      asset: 'vpn-gw-01',
+      payload: { runId, number: 'INC9000002', priority: '1', short_description: 'VPN gateway returning timeouts for remote workforce' },
+      occurredAt: baseTime,
+      origin: 'scripted',
+    },
+    {
+      id: `${runId}-snow-inc-003`,
+      source: 'servicenow',
+      type: 'incident.created',
+      severity: 'critical',
+      asset: 'checkout-svc',
+      payload: { runId, number: 'INC9000003', priority: '1', short_description: 'Production checkout latency spiking above 8s' },
+      occurredAt: baseTime,
+      origin: 'scripted',
+    },
+    {
+      id: `${runId}-snow-sla-breach`,
+      source: 'servicenow',
+      type: 'sla.breach-imminent',
+      severity: 'high',
+      asset: 'INC9000001',
+      payload: { runId, number: 'INC9000001', minutesToBreach: 12 },
+      occurredAt: baseTime,
+      origin: 'scripted',
+    },
+  ];
+
+  // Fire-and-forget: handlers may be long-running (LLM workflows). We
+  // return immediately so the demo button feels snappy; routing decisions
+  // surface in the Live Ops Feed via /api/decisions polling.
+  for (const s of stormSignals) {
+    void signalRouter.publish(s).catch((err) => {
+      console.warn('[demo:scripted-storm] publish failed', s.id, (err as Error).message);
+    });
+  }
+
+  res.status(202).json({
+    status: 'accepted',
+    runId,
+    signalsInjected: stormSignals.length,
+    note: 'Signals dispatched asynchronously — watch /mission-control or /api/decisions for routing outcomes.',
+  });
+});
+
+// ── ACS Call Automation callback events ──
+// ACS POSTs CloudEvents-formatted JSON arrays here for each call lifecycle
+// event (CallConnected, CallDisconnected, CreateCallFailed, etc.). Must be
+// publicly reachable — set PUBLIC_HOSTNAME / CONTAINER_APP_HOSTNAME so ACS
+// can build the callback URL on createCall.
+server.post('/api/calls/acs-events', (req: Request, res: Response) => {
+  try {
+    handleAcsEvent(req.body);
+  } catch (err) {
+    console.warn('[acs-bridge] event handler threw', (err as Error).message);
+  }
+  res.status(200).json({ ok: true });
+});
+
+// Diagnostics — list active ACS-bridged calls.
+server.get('/api/calls/active', (_req: Request, res: Response) => {
+  res.status(200).json({
+    acsConfigured: isAcsConfigured(),
+    activeCalls: getActiveCallSnapshot(),
+  });
+});
+
+// ── Voice: page me ──
+// Triggered by the "Page me" button on Mission Control or by Alex when she
+// needs the human on the bridge. Three delivery channels, in priority order:
+//   1. ACS Call Automation outbound Teams call (Cassidy pattern) — when ACS
+//      is configured AND we have an AAD object id for the manager. Alex
+//      actually rings the user's Teams client and speaks via Voice Live.
+//   2. Teams channel post + email — always attempted. Both contain a
+//      Teams click-to-call deep link as a fallback CTA.
+//   3. Browser /voice avatar page — debug/fallback link in the response.
+server.post('/api/voice/page-me', async (req: Request, res: Response) => {
+  const reason = String(req.body?.reason || 'Alex needs you on the bridge.');
+  const ownerEmail = process.env.MANAGER_EMAIL || process.env.OWNER_EMAIL || process.env.GRAPH_SENDER || '';
+  const teamId = process.env.ITSM_TEAM_ID || '';
+  const channelId = process.env.ITSM_ALERTS_CHANNEL_ID || process.env.ITSM_CHANNEL_ID || '';
+  const baseHost = req.get('x-forwarded-host') || req.get('host') || '';
+  const proto = (req.get('x-forwarded-proto') || 'https').split(',')[0].trim();
+  const voiceUrl = baseHost ? `${proto}://${baseHost}/voice` : '/voice';
+
+  // Teams click-to-call deep link target. Defaults to the GRAPH_MAIL_SENDER
+  // (alexitops UPN) which is the Alex IT Ops Teams identity. Override via
+  // ALEX_TEAMS_UPN if Alex moves to a different mailbox or a calling bot.
+  const alexTeamsUpn = process.env.ALEX_TEAMS_UPN || process.env.GRAPH_MAIL_SENDER || '';
+  const teamsCallUrl = alexTeamsUpn
+    ? `https://teams.microsoft.com/l/call/0/0?users=${encodeURIComponent(alexTeamsUpn)}&withVideo=false&source=itsm-page-me`
+    : '';
+
+  // Manager AAD Object ID — required for ACS outbound Teams call (the
+  // microsoftTeamsUserId field on the call invite must be the user's Entra
+  // OID, not their UPN). Set MANAGER_TEAMS_OID to enable the Cassidy-style
+  // outbound call path.
+  const managerOid =
+    String(req.body?.teamsUserAadOid || '').trim() ||
+    process.env.MANAGER_TEAMS_OID ||
+    process.env.OWNER_TEAMS_OID ||
+    '';
+  const requestedBy = String(req.body?.requestedBy || process.env.MANAGER_NAME || '').trim() || undefined;
+
+  const delivered: string[] = [];
+  const errors: Record<string, string> = {};
+  let acsCallConnectionId: string | undefined;
+
+  // 1. ACS Call Automation outbound Teams call (preferred) — Alex actually
+  // rings the user's Teams client and bridges to Voice Live.
+  if (isAcsConfigured() && managerOid) {
+    try {
+      const r = await initiateOutboundTeamsCall({
+        teamsUserAadOid: managerOid,
+        requestedBy,
+        reason,
+      });
+      acsCallConnectionId = r.callConnectionId;
+      delivered.push('acs-call');
+      console.log(`[page-me] ACS outbound call placed → ${managerOid} (${r.callConnectionId})`);
+    } catch (err) {
+      errors.acsCall = (err as Error).message;
+      console.warn('[page-me] ACS outbound call failed, falling back to chat/email', errors.acsCall);
+    }
+  } else if (!isAcsConfigured()) {
+    errors.acsCall = 'ACS not configured (set ACS_CONNECTION_STRING + PUBLIC_HOSTNAME)';
+  } else if (!managerOid) {
+    errors.acsCall = 'MANAGER_TEAMS_OID not set (need user Entra OID for ACS Teams interop)';
+  }
+
+  // 2a. Teams channel post (HTML) — always attempted as audit trail / mobile
+  // notification. CTA is the Teams click-to-call deep link.
+  if (teamId && channelId) {
+    try {
+      const acsLine = acsCallConnectionId
+        ? `<div style="margin:6px 0;font-size:12px;color:#16a34a">📞 Alex is calling you on Teams now (call id ${acsCallConnectionId.slice(0, 8)})</div>`
+        : '';
+      const primaryCta = teamsCallUrl
+        ? `<a href="${teamsCallUrl}" style="display:inline-block;background:#6264a7;color:#fff;padding:8px 14px;border-radius:6px;text-decoration:none;font-weight:600">📞 Call Alex on Teams</a>`
+        : `<a href="${voiceUrl}" style="display:inline-block;background:#2563eb;color:#fff;padding:8px 14px;border-radius:6px;text-decoration:none;font-weight:600">🎙 Talk to Alex now</a>`;
+      const html = `<div style="font-family:Segoe UI,sans-serif">
+  <div style="font-size:18px;font-weight:600;color:#dc2626">📞 Alex is paging you</div>
+  <div style="margin:8px 0">${escapeHtml(reason)}</div>
+  ${acsLine}
+  <div style="margin:12px 0">${primaryCta}</div>
+  <div style="font-size:11px;color:#64748b">Sent ${new Date().toLocaleString()}</div>
+</div>`;
+      const r = await autonomousActions.postToTeamsChannel(teamId, channelId, html);
+      if (r.success) delivered.push('teams');
+      else errors.teams = r.error || 'unknown';
+    } catch (err) {
+      errors.teams = (err as Error).message;
+    }
+  } else {
+    errors.teams = 'ITSM_TEAM_ID / ITSM_ALERTS_CHANNEL_ID not configured';
+  }
+
+  // 2b. Email — always attempted. Primary CTA is the Teams click-to-call link.
+  if (ownerEmail) {
+    try {
+      const acsLine = acsCallConnectionId
+        ? `<p style="margin:0 0 12px 0;font-size:13px;color:#16a34a">📞 Alex is calling you on Teams now — answer the incoming Teams call.</p>`
+        : '';
+      const primaryCta = teamsCallUrl
+        ? `<a href="${teamsCallUrl}" style="display:inline-block;background:#6264a7;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600">📞 Call Alex on Teams</a>`
+        : `<a href="${voiceUrl}" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600">🎙 Talk to Alex now</a>`;
+      const html = `<div style="font-family:Segoe UI,sans-serif;max-width:560px">
+  <div style="background:linear-gradient(135deg,#dc2626,#7f1d1d);color:#fff;padding:14px 18px;border-radius:8px 8px 0 0;font-size:18px;font-weight:600">📞 Alex is paging you</div>
+  <div style="border:1px solid #e5e7eb;border-top:none;padding:18px;border-radius:0 0 8px 8px">
+    <p style="margin:0 0 12px 0;font-size:14px">${escapeHtml(reason)}</p>
+    ${acsLine}
+    <p style="margin:0 0 16px 0">${primaryCta}</p>
+    <p style="margin:0;font-size:11px;color:#64748b">Sent ${new Date().toLocaleString()} from ITSM Operations Mission Control.</p>
+  </div>
+</div>`;
+      const r = await sendGraphMail({
+        to: [ownerEmail],
+        subject: `📞 Alex is paging you — ${reason.slice(0, 60)}`,
+        body: html,
+        isHtml: true,
+        importance: 'high',
+      });
+      if (r.sent) delivered.push('email');
+      else errors.email = r.error || 'send failed';
+    } catch (err) {
+      errors.email = (err as Error).message;
+    }
+  } else {
+    errors.email = 'MANAGER_EMAIL / OWNER_EMAIL not configured';
+  }
+
+  // Always return 200. status reflects what actually shipped.
+  const status = acsCallConnectionId
+    ? 'calling'
+    : delivered.length
+    ? 'sent'
+    : teamsCallUrl
+    ? 'call-only'
+    : 'voice-only';
+
+  res.status(200).json({
+    status,
+    reason,
+    acsCallConnectionId,
+    acsConfigured: isAcsConfigured(),
+    teamsCallUrl: teamsCallUrl || undefined,
+    alexTeamsUpn: alexTeamsUpn || undefined,
+    managerOid: managerOid || undefined,
+    voiceUrl,
+    delivered,
+    errors: Object.keys(errors).length ? errors : undefined,
+  });
+});
+
+// ── Foresight (Pillar 3) ──
+server.get('/api/foresight', (req: Request, res: Response) => {
+  const limit = Math.max(1, Math.min(500, parseInt(String(req.query.limit || '50'), 10) || 50));
+  res.status(200).json({ forecasts: getRecentForecasts(limit) });
+});
+
+server.post('/api/foresight/run', async (req: Request, res: Response) => {
+  if (!signalsAuthOk(req)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const tick = await runForesightOnce(signalRouter.getRecentSignals(200));
+  res.status(200).json({ tick });
+});
+
+// ── Outcomes (Pillar 4) ──
+server.get('/api/outcomes', (req: Request, res: Response) => {
+  const limit = Math.max(1, Math.min(500, parseInt(String(req.query.limit || '50'), 10) || 50));
+  const wf = String(req.query.workflowId || '');
+  const sigType = String(req.query.signalType || '');
+  const recent = getRecentOutcomes(limit);
+  const stats = wf ? getRollingSuccessRate(wf, sigType || undefined) : null;
+  res.status(200).json({ outcomes: recent, stats });
+});
+
+// ── Governance (Pillar 7) ──
+server.get('/api/governance', (req: Request, res: Response) => {
+  const tenantId = String(req.query.tenantId || 'default');
+  const workers = Array.from(workerMap.values());
+  res.status(200).json({
+    killSwitch: getKillState(),
+    changeFreezeActive: isChangeFreezeActive(),
+    changeFreezeWindows: getChangeFreezeWindows(),
+    budget: getBudgetSnapshot(tenantId),
+    statementsOfAutonomy: statementsOfAutonomy(workers),
+  });
+});
+
+server.post('/api/governance/kill', (req: Request, res: Response) => {
+  if (!signalsAuthOk(req)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const by = String(req.body?.by || 'api');
+  const reason = req.body?.reason ? String(req.body.reason) : undefined;
+  const state = engageKillSwitch(by, reason);
+  res.status(200).json({ killSwitch: state });
+});
+
+server.post('/api/governance/release', (req: Request, res: Response) => {
+  if (!signalsAuthOk(req)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const by = String(req.body?.by || 'api');
+  const state = releaseKillSwitch(by);
+  res.status(200).json({ killSwitch: state });
+});
+
+server.post('/api/governance/freeze', (req: Request, res: Response) => {
+  if (!signalsAuthOk(req)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const windows = Array.isArray(req.body?.windows) ? req.body.windows : [];
+  setChangeFreezeWindows(windows);
+  res.status(200).json({ changeFreezeWindows: getChangeFreezeWindows() });
+});
+
+// ── Tuner (Pillar 6) ──
+server.get('/api/autonomy/thresholds', (req: Request, res: Response) => {
+  const wf = String(req.query.workflowId || 'major-incident-response');
+  const st = req.query.signalType ? String(req.query.signalType) : undefined;
+  res.status(200).json({ workflowId: wf, signalType: st, tuned: getTunedThresholds(wf, st) });
+});
+
+// ── Goals (Pillar 5) ──
+server.get('/api/goals', (_req: Request, res: Response) => {
+  res.status(200).json({ recipes: getRegisteredRecipes() });
+});
+
+server.post('/api/goals/plan', (req: Request, res: Response) => {
+  const goal = String(req.body?.goal || '');
+  if (!goal) { res.status(400).json({ error: 'goal required' }); return; }
+  res.status(200).json({ plan: planForGoal(goal) });
+});
+
+server.post('/api/goals/pursue', async (req: Request, res: Response) => {
+  if (!signalsAuthOk(req)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const goal = String(req.body?.goal || '');
+  const ctx = (req.body?.context as Record<string, unknown> | undefined) ?? {};
+  if (!goal) { res.status(400).json({ error: 'goal required' }); return; }
+  try {
+    const report = await pursueGoal(workflowEngine, goal, { context: ctx });
+    res.status(200).json({ report });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// ── Experiential memory (Phase 9.4) ──
+server.get('/api/experience/recent', async (req: Request, res: Response) => {
+  const { getExperientialMemory } = await import('./experiential-memory');
+  const limit = Math.min(200, Number(req.query.limit) || 50);
+  res.status(200).json({ memory: getExperientialMemory(limit) });
+});
+
+server.post('/api/experience/find', async (req: Request, res: Response) => {
+  const signal = req.body?.signal;
+  if (!signal || typeof signal !== 'object') {
+    res.status(400).json({ error: 'signal required (Signal-shaped object)' });
+    return;
+  }
+  const { findPriorPattern } = await import('./experiential-memory');
+  const result = findPriorPattern(signal as any, {
+    topK: Number(req.body?.topK) || undefined,
+    minSimilarity: Number(req.body?.minSimilarity) || undefined,
+  });
+  res.status(200).json({ pattern: result });
+});
+
+// ── Cognition graph (Phase 9.5) ──
+server.get('/api/cognition/graph', async (_req: Request, res: Response) => {
+  const { buildCognitionGraph } = await import('./cognition-graph');
+  res.status(200).json(buildCognitionGraph());
+});
+
+// ── Async jobs (Phase 9.6) ──
+server.get('/api/jobs', async (req: Request, res: Response) => {
+  const { listJobs, getJobStats } = await import('./async-jobs');
+  const limit = Math.min(200, Number(req.query.limit) || 50);
+  res.status(200).json({ jobs: listJobs(limit), stats: getJobStats() });
+});
+
+server.get('/api/jobs/:id', async (req: Request, res: Response) => {
+  const { getJob } = await import('./async-jobs');
+  const job = getJob(req.params.id);
+  if (!job) {
+    res.status(404).json({ error: 'job not found' });
+    return;
+  }
+  res.status(200).json({ job });
+});
+
 // Apply JWT auth middleware for routes below — skip public routes
 server.use((req, res, next) => {
-  const publicPaths = ['/api/health', '/api/platform-status', '/api/voice/status', '/api/voice/avatar-config', '/voice', '/api/scheduled', '/api/workers', '/api/approvals', '/api/approvals/callback', '/api/routines', '/api/audit', '/api/memory', '/api/reasoning', '/mission-control', '/api/a2a/message', '/api/a2a/discover', '/api/flows/callback', '/api/tuning/extract', '/api/tuning/status'];
+  const publicPaths = ['/api/health', '/api/platform-status', '/api/voice/status', '/api/voice/avatar-config', '/api/voice/page-me', '/voice', '/api/scheduled', '/api/signals', '/api/decisions', '/api/demo', '/api/demo/scripted-storm', '/api/foresight', '/api/foresight/run', '/api/outcomes', '/api/governance', '/api/governance/kill', '/api/governance/release', '/api/governance/freeze', '/api/autonomy/thresholds', '/api/goals', '/api/goals/plan', '/api/goals/pursue', '/api/experience', '/api/experience/recent', '/api/experience/find', '/api/jobs', '/api/cognition', '/api/cognition/graph', '/api/workers', '/api/approvals', '/api/approvals/callback', '/api/routines', '/api/audit', '/api/memory', '/api/reasoning', '/mission-control', '/api/a2a/message', '/api/a2a/discover', '/api/flows/callback', '/api/tuning/extract', '/api/tuning/status'];
+  // Phase 9 — prefix matching for parameterised routes (e.g. /api/jobs/:id).
+  const publicPrefixes = ['/api/jobs/'];
   if (publicPaths.some(p => req.path === p)) {
+    return next();
+  }
+  if (publicPrefixes.some(p => req.path.startsWith(p))) {
     return next();
   }
   return authorizeJWT(authConfig)(req, res, next);
@@ -408,8 +956,9 @@ httpServer.listen(port, host, async () => {
   console.log(`  Mission Control: http://${host}:${port}/mission-control`);
 
   attachVoiceWebSocket(httpServer);
+  attachAcsMediaWebSocket(httpServer);
 
-  const cronDisabled = !!process.env.DISABLE_CRON;
+  const cronDisabled = isEnvFlagEnabled('DISABLE_CRON');
 
   console.log('\n  Starting autonomous services...');
   if (!cronDisabled) {
@@ -420,6 +969,37 @@ httpServer.listen(port, host, async () => {
   } else {
     console.log('  DISABLE_CRON=true — skipping in-process schedulers (using Durable Functions timers)');
   }
+  registerDefaultSubscriptions();
+  console.log('  Signal-router default subscriptions registered');
+
+  // Phase 9.1 — backfill anticipatory state from Azure Table Storage so that
+  // restart does not erase forecasts/outcomes/tuner-overrides/governance.
+  try {
+    const { backfillOutcomes } = await import('./outcome-verifier');
+    const { backfillTuner } = await import('./autonomy-tuner');
+    const { backfillGovernance } = await import('./governance');
+    const { backfillExperientialMemory } = await import('./experiential-memory');
+    const [forecasts, outcomes, tuner, gov, experiential] = await Promise.all([
+      backfillForesight().catch(() => 0),
+      backfillOutcomes().catch(() => 0),
+      backfillTuner().catch(() => 0),
+      backfillGovernance().catch(() => ({ kill: 0, freeze: 0, tenants: 0 })),
+      backfillExperientialMemory().catch(() => 0),
+    ]);
+    console.log(
+      `  Anticipatory state restored: forecasts=${forecasts} outcomes=${outcomes} tunerKeys=${tuner} governance(kill=${(gov as any).kill}, freeze=${(gov as any).freeze}, tenants=${(gov as any).tenants}) experiential=${experiential}`,
+    );
+  } catch (err) {
+    console.warn('  Anticipatory backfill skipped:', (err as Error).message);
+  }
+
+  if (!isEnvFlagEnabled('DISABLE_FORESIGHT')) {
+    startForesight();
+    console.log('  Foresight engine started');
+  } else {
+    console.log('  DISABLE_FORESIGHT=true — skipping foresight engine');
+  }
+
   initMetrics();
   console.log('  OpenTelemetry metrics initialized');
   console.log('\n  ITSM Operations Digital Worker is ready!\n');
@@ -437,11 +1017,12 @@ httpServer.listen(port, host, async () => {
 function gracefulShutdown(signal: string) {
   console.log(`\n  ${signal} received — shutting down gracefully...`);
   cancelAllPendingApprovals();
-  if (!process.env.DISABLE_CRON) {
+  if (!isEnvFlagEnabled('DISABLE_CRON')) {
     stopIncidentMonitor();
     stopHandoverScheduler();
     stopScheduledRoutines();
   }
+  stopForesight();
   closeServiceBus().catch(() => {});
   closeRedis().catch(() => {});
   httpServer.close(() => {

@@ -8,7 +8,7 @@
     "start": "node dist/index.js",
     "dev": "nodemon --watch src --exec ts-node src/index.ts",
     "test-tool": "agentsplayground",
-    "build": "tsc && node -e \"const fs=require('fs'),p=require('path');const s=p.join('src','voice','voice.html'),d=p.join('dist','voice');fs.mkdirSync(d,{recursive:true});fs.copyFileSync(s,p.join(d,'voice.html'));console.log('Copied voice.html');const mc=p.join('src','mission-control.html');fs.copyFileSync(mc,p.join('dist','mission-control.html'));console.log('Copied mission-control.html')\"",
+    "build": "tsc && node -e \"const fs=require('fs'),p=require('path');const s=p.join('src','voice','voice.html'),d=p.join('dist','voice');fs.mkdirSync(d,{recursive:true});fs.copyFileSync(s,p.join(d,'voice.html'));console.log('Copied voice.html');const mc=p.join('src','mission-control.html');fs.copyFileSync(mc,p.join('dist','mission-control.html'));console.log('Copied mission-control.html');function copyDir(src,dst){if(!fs.existsSync(src))return;fs.mkdirSync(dst,{recursive:true});for(const e of fs.readdirSync(src,{withFileTypes:true})){const sp=p.join(src,e.name),dp=p.join(dst,e.name);if(e.isDirectory())copyDir(sp,dp);else if(e.name.endsWith('.json'))fs.copyFileSync(sp,dp);}}copyDir(p.join('src','demo','scenarios'),p.join('dist','demo','scenarios'));copyDir(p.join('src','demo','seed-data'),p.join('dist','demo','seed-data'));copyDir(p.join('src','demo','tenant-profiles'),p.join('dist','demo','tenant-profiles'));console.log('Copied demo JSON resources')\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint --config ../eslint.config.mjs src/",
@@ -20,6 +20,9 @@
   "license": "MIT",
   "dependencies": {
     "@azure-rest/ai-content-safety": "^1.0.1",
+    "@azure/communication-call-automation": "^1.5.1",
+    "@azure/communication-common": "^2.4.0",
+    "@azure/communication-identity": "^1.3.1",
     "@azure/cosmos": "^4.9.3",
     "@azure/data-tables": "^13.3.2",
     "@azure/identity": "^4.13.1",
@@ -51,6 +54,7 @@
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "openai": "^4.77.0",
+    "pptxgenjs": "^4.0.1",
     "redis": "^5.12.1",
     "ws": "^8.20.0"
   },

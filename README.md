@@ -3,11 +3,25 @@
 > **Alex IT Ops** — an autonomous digital employee that manages IT Service Management operations across 18 specialist workers, 29 Azure services, and full ServiceNow integration. Not a chatbot — a digital colleague that triages incidents at 3 AM, predicts SLA breaches before they happen, and prepares your CAB agenda while you sleep.
 
 ![CI](https://img.shields.io/github/actions/workflow/status/ABS-Corp/ITSMOperations/ci.yml?label=CI&logo=github)
-![Tests](https://img.shields.io/badge/tests-94%2B%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-216%20passing-brightgreen)
 ![Deploy](https://img.shields.io/github/actions/workflow/status/ABS-Corp/ITSMOperations/deploy.yml?label=Deploy&logo=microsoft-azure)
 ![Node](https://img.shields.io/badge/node-20%20%7C%2022-339933?logo=node.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript)
 ![License](https://img.shields.io/badge/license-MIT-blue)
+
+---
+
+## Production Status (May 2026)
+
+| | |
+|---|---|
+| **Container App** | `itsm-operations-worker` in `rg-portfolio-agent` |
+| **Active Revision** | `itsm-operations-worker--0000099` (Healthy, 100% traffic, 1 replica) |
+| **Image Tag** | `cassidy-mcp-migration-20260501` |
+| **Endpoint** | `https://itsm-operations-worker.jollysand-88b78b02.eastus.azurecontainerapps.io` |
+| **Tests** | 28 files / 216 tests passing in ~5s (vitest) |
+| **TypeScript** | `tsc --noEmit` clean (zero errors) |
+| **Last deploy** | Cassidy-pattern MCP-first migration — TurnContext threaded through agent runtime, M365 Graph wrappers now MCP-first with Graph fallback |
 
 ---
 
@@ -27,13 +41,15 @@ ITSM Operations is a **production-grade digital worker** — not a chatbot, not 
 | **Scheduled Routines** | 18 autonomous jobs |
 | **Azure Resources** | 29 services (IaC via Bicep) |
 | **Managed Identities** | 3 Entra (incident-manager, change-manager, security-manager) |
-| **Unit Tests** | 94+ (digital-worker) + 33+ (mcp-server) |
+| **Unit Tests** | 216 (digital-worker, 28 files) + mcp-server suite |
 | **Durable Function Orchestrators** | 3 (major-incident-bridge, change-rollback, cab-voting-cycle) |
 | **Timer Triggers** | 11 (Azure Durable Functions) |
 | **Service Bus Topics** | 5 (incident, change, problem, SLA, notification) |
 | **Localization** | en-US, fr-FR, es-ES, ja-JP |
 
-**Core Frameworks**: Microsoft Agents SDK (`@microsoft/agents-hosting` v1.2), OpenAI Agents SDK (`@openai/agents` v0.1), Model Context Protocol (`@modelcontextprotocol/sdk` v1.12), ITIL 4, NIST 800-53.
+**Core Frameworks**: Microsoft Agents SDK (`@microsoft/agents-hosting` v1.2), Microsoft Agent 365 (`@microsoft/agents-a365-runtime` + `agents-a365-tooling` preview), OpenAI Agents SDK (`@openai/agents` v0.1), Model Context Protocol (`@modelcontextprotocol/sdk` v1.12), ITIL 4, NIST 800-53.
+
+**M365 surface integration pattern (Cassidy-aligned)**: All Microsoft 365 calls (mail, Teams, calendar, Planner, people lookup) go through static MCP-first wrappers in [`m365-tools.ts`](digital-worker/src/m365-tools.ts) backed by the Agent 365 tooling gateway via [`mcp-tool-setup.ts`](digital-worker/src/mcp-tool-setup.ts). When a `TurnContext` is present (real user message), the wrappers mint an OBO token and call the dedicated M365 MCP servers; when absent (cron / signal-router / mission-control), they fall back to direct Microsoft Graph application-permission calls. Every wrapper returns a tagged `source: 'mcp' | 'graph' | 'graph-webhook' | 'unavailable'` so callers can audit which path delivered the side effect.
 
 ---
 
@@ -49,6 +65,7 @@ ITSM Operations is a **production-grade digital worker** — not a chatbot, not 
                     │       ITOps Command Center            │
                     │   (Orchestrator / Parent Agent)       │
                     │   agent.ts → agent-harness.ts         │
+                    │   threads TurnContext as runContext   │
                     │   worker-registry + escalation-chain  │
                     └─────┬───────────┬───────────┬─────────┘
                           │           │           │
@@ -72,34 +89,64 @@ ITSM Operations is a **production-grade digital worker** — not a chatbot, not 
                                                 └────────────────────┘
                           │                           │
          ┌────────────────▼───────────────────────────▼─────────────────┐
-         │                    MCP Server (port 3002)                    │
-         │  snow-client.ts → ServiceNow REST API (CRUD)                │
-         │  eol-client.ts → endoflife.date API                         │
-         │  azure-monitor.ts → Azure Monitor Metrics                   │
-         │  search-client.ts → Azure AI Search (hybrid + vector)       │
-         │  purview-dlp.ts → Purview DLP classification + PII redact   │
-         │  snow-auth.ts → OAuth OBO for ServiceNow                    │
-         │  18 Skybridge widgets (Fluent v9, dark mode, accessible)    │
-         └──────────────────────────┬──────────────────────────────────┘
-                                    │
-         ┌──────────────────────────▼──────────────────────────────────┐
-         │                    Azure Services Layer                     │
-         │                                                             │
-         │  Cosmos DB          Redis Cache        Service Bus          │
-         │  (state, traces)    (session cache)    (5 pub/sub topics)   │
-         │                                                             │
-         │  AI Search          OpenAI (GPT-4o)    Content Safety       │
-         │  (vector + hybrid)  (reasoning: o4-mini)(prompt shields)    │
-         │                                                             │
-         │  Key Vault          Speech Avatar      App Insights         │
-         │  (secrets)          (Lisa/Ava voice)   (OTel + KQL alerts)  │
-         │                                                             │
-         │  Container Apps     ACR                Function App         │
-         │  (2 containers)     (image registry)   (Durable Functions)  │
-         │                                                             │
-         │  AI Foundry         APIM Gateway       Log Analytics        │
-         │  (hub + project)    (rate limiting)     (workspace)          │
-         └─────────────────────────────────────────────────────────────┘
+         │       Autonomous Platform (Pillars 3–10, Phase 9–10)         │
+         │                                                              │
+         │  signal-router    workflow-engine    foresight                │
+         │  (sub.match +     (DAG + linear,     (cluster mining,         │
+         │   cooldown)       parallel branches) trend forecasting)       │
+         │                                                              │
+         │  outcome-verifier  outcome-judge    autonomy-tuner            │
+         │  (post-action      (LLM-grade       (raises/lowers auto       │
+         │   success)         outcomes)        thresholds dynamically)   │
+         │                                                              │
+         │  autonomy-gate    governance        goal-seeker               │
+         │  (trigger-policy  (kill / freeze /  (proactive plan→pursue)   │
+         │   confidence×blast release switch)                            │
+         │   radius dampen)                                              │
+         │                                                              │
+         │  cognition-graph  experiential-     anticipatory-store +      │
+         │  (CIs ↔ services   memory           anticipatory-broadcaster  │
+         │   ↔ incidents)    (incident         (Azure Tables-backed)     │
+         │                    fingerprints)                              │
+         └──────────────────────────┬──────────────────────────┬─────────┘
+                                    │                          │
+         ┌──────────────────────────▼─────────────┐  ┌─────────▼────────────┐
+         │   M365 MCP-First Wrappers (Cassidy)    │  │    MCP Server        │
+         │   m365-tools.ts (7 static wrappers):   │  │    (port 3002)       │
+         │   sendEmail, sendTeamsMessage,         │  │  snow-client →       │
+         │   scheduleCalendarEvent, findUser,     │  │  ServiceNow REST     │
+         │   findMeetingTimes, createPlannerTask, │  │  18 Skybridge widgets│
+         │   updatePlannerTask                    │  │  Purview DLP redact  │
+         │                                        │  │  Azure AI Search     │
+         │   mcp-tool-setup.ts:                   │  │  endoflife.date      │
+         │     • OBO token via Agent 365 runtime  │  │                      │
+         │     • discovery → server map           │  └──────────┬───────────┘
+         │     • per-tool invokeMcpTool() with    │             │
+         │       configurable TTL cache           │             │
+         │   Graph fallback: client_credentials   │             │
+         │   (autonomous + when MCP unavailable)  │             │
+         └────────────────────────┬───────────────┘             │
+                                  │                             │
+                                  ▼                             ▼
+         ┌──────────────────────────────────────────────────────────────┐
+         │                    Azure Services Layer                      │
+         │                                                              │
+         │  Cosmos DB          Redis Cache        Service Bus           │
+         │  (state, traces)    (session cache)    (5 pub/sub topics)    │
+         │  Table Storage      OpenAI (GPT-4o)    Content Safety        │
+         │  (audit + AlexOutcomes/(reasoning: o4-mini)(prompt shields)  │
+         │   AlexTunerState)                                            │
+         │                                                              │
+         │  AI Search          Speech Avatar      App Insights          │
+         │  (vector + hybrid)  (Lisa/Ava voice)   (OTel + KQL alerts)   │
+         │                                                              │
+         │  Key Vault          Container Apps     ACR                   │
+         │  (secrets)          (worker + MCP)     (image registry)      │
+         │                                                              │
+         │  Function App       AI Foundry         Log Analytics         │
+         │  (Durable timers    (hub + project)    (workspace)           │
+         │   + orchestrators)                                           │
+         └──────────────────────────────────────────────────────────────┘
                                     │
          ┌──────────────────────────▼──────────────────────────────────┐
          │                    M365 Integration Layer                   │
@@ -183,13 +230,38 @@ ITSMOperations/
 │   │   │   └── connected-agents.ts          # A2A protocol (Agent-to-Agent discovery + messaging)
 │   │   │
 │   │   ├── [Cross-Cutting]
-│   │   │   ├── mcp-client.ts                # MCP client for ServiceNow MCP Server
+│   │   │   ├── mcp-tool-setup.ts            # Cassidy-pattern MCP discovery + invokeMcpTool (OBO)
+│   │   │   ├── m365-tools.ts                # 7 static M365 wrappers (MCP-first → Graph fallback)
+│   │   │   ├── mcp-client.ts                # Legacy MCP client for ServiceNow MCP Server
 │   │   │   ├── memory-store.ts              # Tiered memory persistence (Redis → Cosmos → in-memory)
 │   │   │   ├── conversation-memory.ts       # Conversation-scoped memory management
 │   │   │   ├── reasoning-rca.ts             # Automated root cause analysis engine
 │   │   │   ├── adaptive-cards.ts            # Adaptive Card 1.6 templates (4 card types)
 │   │   │   ├── doc-generator.ts             # Document generation (PIR reports, CAB packs)
+│   │   │   ├── presentation-generator.ts    # PPTX generator (pptxgenjs) for current-state decks
 │   │   │   └── email-service.ts             # Email composition and delivery
+│   │   │
+│   │   ├── [Autonomous Platform — Pillars 3–10]
+│   │   │   ├── signal-router.ts             # Subscription match + cooldown gating
+│   │   │   ├── workflow-engine.ts           # DAG + linear workflow execution
+│   │   │   ├── workflow-subscriptions.ts    # Signal→workflow subscription registry
+│   │   │   ├── snow-signal-mapper.ts        # ServiceNow webhook → internal Signal envelope
+│   │   │   ├── snow-client.ts               # Inbound webhook client
+│   │   │   ├── async-jobs.ts                # Long-running job tracker (/api/jobs)
+│   │   │   ├── foresight.ts                 # Cluster mining + 24h forecast
+│   │   │   ├── outcome-verifier.ts          # Post-action success/failure detection
+│   │   │   ├── outcome-judge.ts             # LLM-as-judge for outcome grading
+│   │   │   ├── trigger-policy.ts            # propose / approve / auto decision logic
+│   │   │   ├── autonomy-gate.ts             # confidence × (1 − 0.5 × blastRadius) dampener
+│   │   │   ├── autonomy-tuner.ts            # Dynamic threshold tuning from outcome history
+│   │   │   ├── governance.ts                # Kill switch / workflow freeze / release
+│   │   │   ├── goal-seeker.ts               # Proactive plan → pursue (Pillar 9)
+│   │   │   ├── cognition-graph.ts           # CI ↔ incident ↔ service relationship graph
+│   │   │   ├── experiential-memory.ts       # Past-incident fingerprint recall
+│   │   │   ├── anticipatory-store.ts        # Azure Tables persistence for outcomes / tuner / signals
+│   │   │   ├── anticipatory-broadcaster.ts  # SSE broadcaster for foresight / outcomes / governance
+│   │   │   ├── routine-delivery.ts          # Routine result delivery (Email + Teams)
+│   │   │   └── demo/                        # Scripted-storm + tenant-profile demo harness
 │   │   │
 │   │   ├── [Voice & Avatar]
 │   │   │   ├── voice/voiceProxy.ts          # WebSocket proxy → Azure Voice Live
@@ -223,15 +295,35 @@ ITSMOperations/
 │   │   ├── [UI]
 │   │   │   └── mission-control.html         # Mission Control dashboard (single-page)
 │   │   │
-│   │   └── [Tests]
+│   │   └── [Tests — 28 files / 216 tests]
+│   │       ├── __tests__/agent-harness.test.ts            # Verifies TurnContext threading via run({ context })
+│   │       ├── __tests__/anticipatory-store.test.ts       # Anticipatory Tables-backed store
 │   │       ├── __tests__/approval-queue.test.ts
+│   │       ├── __tests__/async-jobs.test.ts               # Long-running job tracking
 │   │       ├── __tests__/audit-trail.test.ts
+│   │       ├── __tests__/autonomy-gate.test.ts            # Trigger-policy confidence dampener
+│   │       ├── __tests__/autonomy-tuner.test.ts           # Auto-threshold raise/lower from outcomes
+│   │       ├── __tests__/cognition-graph.test.ts          # CI ↔ incident relationship graph
+│   │       ├── __tests__/contract-equivalence.test.ts     # Worker tool contract parity
+│   │       ├── __tests__/demo-runner.test.ts              # Scripted-storm scenario runner
 │   │       ├── __tests__/escalation-chain.test.ts
+│   │       ├── __tests__/experiential-memory.test.ts      # Past-incident fingerprint recall
+│   │       ├── __tests__/foresight.test.ts                # Cluster mining + trend forecast
+│   │       ├── __tests__/goal-seeker.test.ts              # Plan → pursue (Pillar 9)
+│   │       ├── __tests__/governance.test.ts               # Kill / freeze / release switches
 │   │       ├── __tests__/hitl.test.ts
+│   │       ├── __tests__/m365-tools.test.ts               # MCP-first wrappers + Graph fallback (23)
+│   │       ├── __tests__/mcp-tool-setup.test.ts           # Cassidy MCP discovery + invokeMcpTool (11)
 │   │       ├── __tests__/openai-config.test.ts
+│   │       ├── __tests__/outcome-verifier.test.ts         # Post-action success grading
 │   │       ├── __tests__/reasoning-trace.test.ts
+│   │       ├── __tests__/routine-delivery.test.ts         # 18 cron routines
+│   │       ├── __tests__/signal-router.test.ts            # Subscription match + cooldown
+│   │       ├── __tests__/snow-mapper.test.ts              # ServiceNow webhook → Signal
+│   │       ├── __tests__/trigger-policy.test.ts           # propose / approve / auto decision
 │   │       ├── __tests__/worker-delegation.test.ts
-│   │       └── __tests__/worker-registry.test.ts
+│   │       ├── __tests__/worker-registry.test.ts
+│   │       └── __tests__/workflow-engine-dag.test.ts      # DAG topological scheduler
 │   │
 │   └── eval/                                # Golden dataset (20 scenarios) for Foundry Evals
 │
@@ -370,6 +462,38 @@ ITSMOperations/
 | **Power Automate** | 4 flow integrations (CAB voting, change approval, emergency change, incident escalation) | `power-automate.ts`, `power-automate-flows.ts` |
 | **FinOps** | Azure cost anomaly detection, right-sizing recommendations, budget forecasting | `tools/finops-tools.ts` |
 | **DLP Classification** | Purview-based record classification with PII auto-redaction | `mcp-server/src/purview-dlp.ts` |
+
+---
+
+## Autonomous Platform (Pillars 3–10)
+
+The digital worker isn't just a chat-driven agent — it runs an autonomous control loop that observes signals, predicts breaches, takes graded action, verifies outcomes, and tunes its own thresholds.
+
+| Pillar | Module | Responsibility |
+|--------|--------|---------------|
+| **3. Signal ingestion** | [`signal-router.ts`](digital-worker/src/signal-router.ts), [`workflow-subscriptions.ts`](digital-worker/src/workflow-subscriptions.ts), [`snow-signal-mapper.ts`](digital-worker/src/snow-signal-mapper.ts) | Ingest ServiceNow webhooks, monitoring alerts, SLA breaches as `Signal` envelopes; route to subscriptions; enforce per-workflow cooldowns |
+| **4. DAG workflows** | [`workflow-engine.ts`](digital-worker/src/workflow-engine.ts) | Linear (legacy) + DAG (Kahn topological) execution. Failure semantics mark transitive descendants `skipped` while independent branches keep running |
+| **5. Foresight** | [`foresight.ts`](digital-worker/src/foresight.ts), [`anticipatory-store.ts`](digital-worker/src/anticipatory-store.ts), [`anticipatory-broadcaster.ts`](digital-worker/src/anticipatory-broadcaster.ts) | Mine clusters from incoming signals; 24h rolling forecast; SSE-broadcast forecasts and outcomes to mission-control |
+| **6. Outcome verification** | [`outcome-verifier.ts`](digital-worker/src/outcome-verifier.ts), [`outcome-judge.ts`](digital-worker/src/outcome-judge.ts) | Post-action: did the workflow actually fix the thing? Hybrid heuristic + LLM judge; record success/failure to `AlexOutcomes` Table |
+| **7. Trigger policy + autonomy** | [`trigger-policy.ts`](digital-worker/src/trigger-policy.ts), [`autonomy-gate.ts`](digital-worker/src/autonomy-gate.ts), [`autonomy-tuner.ts`](digital-worker/src/autonomy-tuner.ts) | Decide `propose` / `approve` / `auto`. Effective confidence = `confidence × (1 − 0.5 × blastRadius)`. Tuner raises auto-threshold after sustained failures, lowers after sustained successes |
+| **8. Governance** | [`governance.ts`](digital-worker/src/governance.ts) | Kill switch (per-workflow or platform-wide), freeze, release. Survives restart via `AlexGovernance` Table. Honored by signal-router and workflow-engine |
+| **9. Experiential memory + cognition graph** | [`experiential-memory.ts`](digital-worker/src/experiential-memory.ts), [`cognition-graph.ts`](digital-worker/src/cognition-graph.ts) | Past-incident fingerprint recall; CI ↔ incident ↔ service ↔ change graph queries via `/api/experience/*` and `/api/cognition/graph` |
+| **10. Goal pursuit** | [`goal-seeker.ts`](digital-worker/src/goal-seeker.ts) | Proactive plan→pursue: turn high-level goals into a sequence of investigative actions; surface plans on `/api/goals/plan`, execute on `/api/goals/pursue` |
+
+**State persistence**: All autonomous-loop state (outcomes, tuner state, governance flags, signal history, experience fingerprints) lives in Azure Table Storage under partitions `AlexOutcomes`, `AlexTunerState`, `AlexGovernance`, `AlexSignals`, `experiential` (the last partition is reused on the AlexOutcomes table — no new table needed). When Tables aren't configured, every store falls back to an in-memory implementation so unit tests and local dev work offline.
+
+**Public endpoints (Pillars 3–10)**:
+- `GET /api/foresight` (clusters + forecast)
+- `POST /api/foresight/run` (secret-gated)
+- `GET /api/outcomes`
+- `POST /api/governance/{kill,release,freeze}` (secret-gated)
+- `GET /api/autonomy/thresholds`
+- `GET /api/goals/plan`, `POST /api/goals/pursue` (secret-gated)
+- `GET /api/experience/recent`, `GET /api/experience/find`
+- `GET /api/cognition/graph`
+- `GET /api/jobs`, `GET /api/jobs/:id`
+
+All gated POSTs require the `x-scheduled-secret` header (timing-safe compare against `SCHEDULED_SECRET`).
 
 ---
 
@@ -873,8 +997,8 @@ cd ..
 # Edit mcp-server/.env with ServiceNow instance details
 
 # 4. Run tests
-cd digital-worker && npm test       # 94+ tests
-cd ../mcp-server && npm test        # 33+ tests
+cd digital-worker && npm test       # 216 tests across 28 files
+cd ../mcp-server && npm test        # MCP-server tests
 
 # 5. Start MCP Server (terminal 1)
 cd mcp-server && npm run dev        # http://localhost:3002

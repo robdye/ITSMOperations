@@ -1,0 +1,8 @@
+{
+  "users": [
+    { "user_name": "alice.kim", "name": "Alice Kim", "email": "alice.kim@demo.local", "group": "network-ops" },
+    { "user_name": "ben.ortiz", "name": "Ben Ortiz", "email": "ben.ortiz@demo.local", "group": "platform-engineering" },
+    { "user_name": "chen.wu", "name": "Chen Wu", "email": "chen.wu@demo.local", "group": "service-desk" },
+    { "user_name": "demo.alex", "name": "Alex (Digital Worker)", "email": "alex@demo.local", "group": "alex-system" }
+  ]
+}

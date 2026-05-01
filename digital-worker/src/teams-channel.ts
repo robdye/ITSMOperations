@@ -30,8 +30,12 @@ async function getGraphToken(): Promise<string> {
   return data.access_token;
 }
 
-export async function postToChannel(content: string, isHtml = false): Promise<void> {
-  if (!TEAM_ID || !ALERTS_CHANNEL_ID) { console.warn('[Teams] No team/channel configured'); return; }
+export async function postToChannel(content: string, isHtml = false): Promise<{ success: boolean; error?: string }> {
+  if (!TEAM_ID || !ALERTS_CHANNEL_ID) {
+    const msg = '[Teams] No team/channel configured';
+    console.warn(msg);
+    return { success: false, error: msg };
+  }
 
   try {
     const token = await getGraphToken();
@@ -46,10 +50,14 @@ export async function postToChannel(content: string, isHtml = false): Promise<vo
     if (!res.ok) {
       const err = await res.text();
       console.error(`[Teams] Post failed: ${res.status} — ${err.substring(0, 200)}`);
+      return { success: false, error: `Graph API ${res.status}: ${err.substring(0, 200)}` };
     } else {
       console.log('[Teams] Posted to ITSM Alerts channel');
+      return { success: true };
     }
   } catch (err) {
-    console.error('[Teams] Error:', (err as Error).message);
+    const msg = (err as Error).message;
+    console.error('[Teams] Error:', msg);
+    return { success: false, error: msg };
   }
 }

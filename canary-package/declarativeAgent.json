@@ -1,0 +1,10 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/copilot/declarative-agent/v1.6/schema.json",
+  "version": "v1.6",
+  "name": "ITSM Canary",
+  "description": "Minimal canary declarative agent package.",
+  "instructions": "$[file('instruction.txt')]",
+  "conversation_starters": [
+    { "title": "Health check", "text": "Say hello." }
+  ]
+}

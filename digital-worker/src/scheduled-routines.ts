@@ -4,6 +4,19 @@
 // going through the HITL confirmation flow for write operations.
 
 import { runWorker, type PromptContext } from './agent-harness';
+import { postToChannel } from './teams-channel';
+import { EmailService } from './email-service';
+import { queueAction } from './approval-queue';
+import { autonomousActions } from './autonomous-actions';
+import { buildApprovalCard } from './adaptive-cards';
+import { startConversation, logTrace, logOutcome, logError } from './reasoning-trace';
+import {
+  buildEmailHtml,
+  buildTeamsHtml,
+  buildRoutineSummaryCard,
+  extractFirstTable,
+  tableToCsv,
+} from './routine-delivery';
 import {
   incidentManager,
   changeManager,
@@ -28,6 +41,48 @@ interface ScheduledRoutine {
   prompt: string;
   enabled: boolean;
 }
+
+interface RoutineDeliveryState {
+  teamsPosted: boolean;
+  emailSent: boolean;
+  approvalRaised: boolean;
+  /** New rich-delivery shape — describes what was produced for this run. */
+  format?: 'rich-html';
+  /** Whether a real CSV (extracted from a markdown table in the output) was attached. */
+  csvAttached?: boolean;
+  /** Number of rows in the extracted CSV, when present. */
+  rowCount?: number;
+  error?: string;
+}
+
+interface RoutineRuntimeState {
+  lastRun?: string;
+  lastStatus: 'scheduled' | 'running' | 'completed' | 'failed' | 'disabled';
+  lastOutput?: string;
+  lastOutputSnippet?: string;
+  lastDelivery?: RoutineDeliveryState;
+}
+
+const emailService = new EmailService();
+const routineRuntime = new Map<string, RoutineRuntimeState>();
+
+const emailRoutineIds = new Set([
+  'incident-stale-check',
+  'daily-ops-standup',
+  'vendor-contract-expiry',
+  'vendor-license-compliance',
+  'asset-eol-scan',
+  'asset-warranty-check',
+  'monthly-health-report',
+]);
+
+const approvalRoutineIds = new Set([
+  'emergency-change-fast-track',
+  'major-incident-bridge',
+  'change-collision-check',
+  'sla-breach-escalation',
+  'monday-cab-prep',
+]);
 
 // ── Routine Registry ──
 
@@ -238,18 +293,62 @@ export async function executeRoutine(routineId: string): Promise<{ id: string; o
     throw new Error(`Routine is disabled: ${routineId}`);
   }
 
+  routineRuntime.set(routine.id, {
+    ...(routineRuntime.get(routine.id) || { lastStatus: 'scheduled' }),
+    lastStatus: 'running',
+    lastRun: new Date().toISOString(),
+  });
+
   console.log(`[ScheduledRoutines] Running: ${routine.id} (${routine.description})`);
   const worker = getWorkerForRoutine(routine.worker);
   if (!worker) {
     throw new Error(`Unknown worker: ${routine.worker}`);
   }
 
+  // Open a reasoning conversation so every tool call inside this routine
+  // pin-points back to the routine in the Mission Control "Agent Activity"
+  // panel.
+  const convId = startConversation();
+  const tStart = Date.now();
+  logTrace({
+    conversationId: convId,
+    type: 'intent',
+    source: 'scheduler',
+    summary: `Scheduled routine started: ${routine.id}`,
+    detail: `Worker ${routine.worker} — ${routine.description}\nCron: ${routine.schedule}`,
+    metadata: { routineId: routine.id, workerId: routine.worker, schedule: routine.schedule },
+  });
+
   const ctx: PromptContext = {
     userMessage: routine.prompt,
     displayName: 'System (Scheduled Routine)',
   };
 
-  const result = await runWorker(worker, routine.prompt, ctx);
+  let result;
+  try {
+    result = await runWorker(worker, routine.prompt, ctx, convId);
+  } catch (err) {
+    logError(convId, routine.worker, (err as Error).message || String(err));
+    routineRuntime.set(routine.id, {
+      ...(routineRuntime.get(routine.id) || {}),
+      lastStatus: 'failed',
+      lastRun: new Date().toISOString(),
+    });
+    throw err;
+  }
+
+  const delivery = await deliverRoutineOutput(routine, result.output);
+
+  routineRuntime.set(routine.id, {
+    lastRun: new Date().toISOString(),
+    lastStatus: 'completed',
+    lastOutput: result.output,
+    lastOutputSnippet: summarizeOutput(result.output),
+    lastDelivery: delivery,
+  });
+
+  logOutcome(convId, routine.worker, `${routine.id} completed (${result.output.length} chars; teams=${delivery.teamsPosted ? 'ok' : 'no'} email=${delivery.emailSent ? 'ok' : 'no'})`, Date.now() - tStart);
+
   console.log(`[ScheduledRoutines] Completed: ${routine.id} — ${result.output.substring(0, 100)}...`);
   return { id: routine.id, output: result.output };
 }
@@ -265,16 +364,141 @@ export function getRoutineStatus(): Array<{
   enabled: boolean;
   active: boolean;
   status: string;
+  lastRun?: string;
+  lastOutputSnippet?: string;
+  lastDelivery?: RoutineDeliveryState;
 }> {
   return routines.map(r => ({
+    ...(routineRuntime.get(r.id) || {}),
     id: r.id,
     worker: r.worker,
     schedule: r.schedule,
     description: r.description,
     enabled: r.enabled,
     active: r.enabled,
-    status: r.enabled ? 'scheduled' : 'disabled',
+    status: (routineRuntime.get(r.id)?.lastStatus) || (r.enabled ? 'scheduled' : 'disabled'),
   }));
+}
+
+function summarizeOutput(output: string): string {
+  const compact = output.replace(/\s+/g, ' ').trim();
+  return compact.length > 280 ? `${compact.slice(0, 280)}...` : compact;
+}
+
+function getRecipients(): string[] {
+  const raw = process.env.ROUTINE_REPORT_RECIPIENTS || process.env.MANAGER_EMAIL || process.env.AGENT_EMAIL || '';
+  return raw.split(',').map(v => v.trim()).filter(Boolean);
+}
+
+/**
+ * Build a real CSV attachment if (and only if) the LLM output contained a
+ * markdown table. Avoids the previous behaviour of attaching pointless
+ * 4-line key/value "Excel" or text-as-PowerPoint files.
+ */
+function buildCsvAttachmentIfTabular(routine: ScheduledRoutine, output: string):
+  { attachment: { name: string; contentBytes: string; contentType: string }; rowCount: number } | null {
+  const table = extractFirstTable(output);
+  if (!table || table.rows.length === 0) return null;
+  const csv = tableToCsv(table);
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  return {
+    attachment: {
+      name: `${routine.id}-${ts}.csv`,
+      contentBytes: Buffer.from(csv, 'utf8').toString('base64'),
+      contentType: 'text/csv',
+    },
+    rowCount: table.rows.length,
+  };
+}
+
+async function deliverRoutineOutput(routine: ScheduledRoutine, output: string): Promise<RoutineDeliveryState> {
+  const result: RoutineDeliveryState = {
+    teamsPosted: false,
+    emailSent: false,
+    approvalRaised: false,
+    format: 'rich-html',
+  };
+
+  const summary = {
+    routineId: routine.id,
+    description: routine.description,
+    worker: routine.worker,
+    generatedAt: new Date().toISOString(),
+    output,
+  };
+
+  try {
+    // Teams: prefer rich Adaptive Card when channel is configured; fall back to
+    // an HTML message that renders the LLM markdown into headings/lists/tables.
+    const channelId = process.env.ITSM_ALERTS_CHANNEL_ID || '';
+    const summaryCard = buildRoutineSummaryCard(summary);
+    let teamsOk = false;
+    if (channelId) {
+      try {
+        await autonomousActions.sendAdaptiveCard(channelId, summaryCard as unknown as Record<string, unknown>);
+        teamsOk = true;
+      } catch (err) {
+        console.warn('[ScheduledRoutines] Adaptive card post failed, falling back to HTML:', (err as Error).message);
+      }
+    }
+    if (!teamsOk) {
+      const teamsHtml = buildTeamsHtml(summary);
+      const teams = await postToChannel(teamsHtml, true);
+      teamsOk = teams.success;
+      if (!teams.success && teams.error) result.error = teams.error;
+    }
+    result.teamsPosted = teamsOk;
+
+    // Email: send a polished branded HTML body. Attach a CSV only when the LLM
+    // actually produced a markdown table (genuine list data) — never fake docs.
+    if (emailRoutineIds.has(routine.id)) {
+      const recipients = getRecipients();
+      if (recipients.length > 0) {
+        const html = buildEmailHtml(summary);
+        const csv = buildCsvAttachmentIfTabular(routine, output);
+        const email = await emailService.sendEmailAdvanced({
+          to: recipients,
+          subject: `[ITSM Scheduled] ${routine.description}`,
+          body: html,
+          bodyType: 'HTML',
+          attachments: csv ? [csv.attachment] : undefined,
+        });
+        result.emailSent = email.success;
+        result.csvAttached = !!csv;
+        if (csv) result.rowCount = csv.rowCount;
+        if (!email.success) result.error = email.error;
+      }
+    }
+
+    // Approval flow unchanged — keeps existing approval queue + approval card.
+    const indicatesApproval = /(approve|approval|requires\s+approval|high\s+risk|critical|escalat(e|ion))/i.test(output);
+    if (approvalRoutineIds.has(routine.id) && indicatesApproval) {
+      const queued = queueAction(
+        routine.worker,
+        routine.worker,
+        `scheduled:${routine.id}`,
+        { summary: summarizeOutput(output), generatedAt: summary.generatedAt },
+        'system',
+        'ITSM Scheduler',
+      );
+
+      if (channelId) {
+        const card = buildApprovalCard(
+          queued.actionId,
+          'Scheduled ITSM Action',
+          `Routine ${routine.id} produced output that may require approval. Review summary and approve/reject follow-up actions.`,
+          'ITSM Scheduler',
+        );
+        await autonomousActions.sendAdaptiveCard(channelId, card as unknown as Record<string, unknown>);
+      }
+
+      result.approvalRaised = true;
+    }
+  } catch (err: unknown) {
+    result.error = (err as Error).message || String(err);
+  }
+
+  return result;
 }
 
 // ── Helper ──

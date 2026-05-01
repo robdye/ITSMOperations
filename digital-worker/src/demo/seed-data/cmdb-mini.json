@@ -1,0 +1,15 @@
+{
+  "cis": [
+    { "name": "edge-router-01", "class": "Router", "criticality": "high", "owner_group": "network-ops" },
+    { "name": "vpn-gw-01", "class": "Gateway", "criticality": "high", "owner_group": "network-ops" },
+    { "name": "checkout-svc", "class": "Application", "criticality": "critical", "owner_group": "platform-engineering" },
+    { "name": "payments-api", "class": "Application", "criticality": "critical", "owner_group": "platform-engineering" },
+    { "name": "auth-svc", "class": "Application", "criticality": "high", "owner_group": "platform-engineering" }
+  ],
+  "relationships": [
+    { "parent": "edge-router-01", "child": "vpn-gw-01" },
+    { "parent": "vpn-gw-01", "child": "checkout-svc" },
+    { "parent": "auth-svc", "child": "checkout-svc" },
+    { "parent": "auth-svc", "child": "payments-api" }
+  ]
+}

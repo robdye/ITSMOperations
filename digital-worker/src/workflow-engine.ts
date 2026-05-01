@@ -4,6 +4,12 @@
 
 import { runWorker, type PromptContext } from './agent-harness';
 import { workerMap } from './worker-definitions';
+import { addWorkNote, getSnowClientStatus } from './snow-client';
+import { autonomyGate } from './autonomy-gate';
+import { verifyWorkflowOutcome } from './outcome-verifier';
+import { recordTunerSignal } from './autonomy-tuner';
+import type { Signal } from './signal-router';
+import type { TriggerDecision } from './trigger-policy';
 
 // ── Types ──
 
@@ -15,12 +21,21 @@ export interface WorkflowStep {
   action: string;
   /** Input data for the step */
   inputs: Record<string, unknown>;
-  /** Next step ID on success */
+  /** Next step ID on success (linear flow only — ignored when dependsOn is set on any step) */
   onSuccess?: string;
-  /** Fallback step ID on failure */
+  /** Fallback step ID on failure (linear flow only) */
   onFailure?: string;
   /** If true, workflow pauses for human approval before executing */
   requiresApproval?: boolean;
+  /**
+   * DAG mode — ids of prerequisite steps that must complete (any non-failed
+   * status) before this step is eligible to run. When ANY step in a workflow
+   * declares dependsOn, the engine switches to DAG scheduling: independent
+   * branches run in parallel, and any step whose ancestor failed is marked
+   * 'skipped'. Steps without dependsOn in a DAG workflow are roots (eligible
+   * to start immediately).
+   */
+  dependsOn?: string[];
 }
 
 export interface WorkflowDefinition {
@@ -75,6 +90,39 @@ const MAJOR_INCIDENT_RESPONSE: WorkflowDefinition = {
     { id: 'resolve', worker: 'incident-manager', action: 'Confirm resolution, validate service restoration, and close the incident bridge.', inputs: {}, requiresApproval: true },
     { id: 'postmortem', worker: 'problem-manager', action: 'Conduct post-incident review. Identify root cause, contributing factors, and create action items.', inputs: {} },
     { id: 'kb-article', worker: 'knowledge-manager', action: 'Draft a knowledge base article documenting the incident, root cause, and resolution steps.', inputs: {} },
+  ],
+};
+
+// Phase 10 — DAG variant of major-incident-response. Tracks that are
+// independent of each other run in parallel for faster MTTR. Topology:
+//
+//   detect ──┬─→ restore  (P1 service-restoration track)
+//            ├─→ comms    (stakeholder communications track)
+//            ├─→ rca      (root-cause investigation track)
+//            └─→ vendor   (third-party engagement track, if needed)
+//                  ↓ (fan-in: only run when ALL above complete)
+//                join → cab-prep → kb-article → close
+//
+// All four parallel tracks proceed concurrently. join is a virtual barrier
+// step that waits for restore + comms + rca + vendor before cab-prep starts.
+const MAJOR_INCIDENT_RESPONSE_DAG: WorkflowDefinition = {
+  id: 'major-incident-response-dag',
+  name: 'Major Incident Response (Parallel)',
+  description: 'P1 incident response with restore / comms / RCA / vendor tracks running in parallel for faster MTTR.',
+  trigger: 'event',
+  steps: [
+    { id: 'detect', worker: 'incident-manager', action: 'Detect and classify the major incident. Confirm severity and impacted services. Open the incident bridge.', inputs: {} },
+    // ── Parallel tracks (all start once detect completes) ──
+    { id: 'restore', worker: 'incident-manager', action: 'Service-restoration track: coordinate the swarming team, drive triage, and confirm service is restored.', inputs: {}, dependsOn: ['detect'], requiresApproval: true },
+    { id: 'comms', worker: 'incident-manager', action: 'Communications track: notify stakeholders, post status-page updates, and send 30-minute customer-comms cadence.', inputs: {}, dependsOn: ['detect'] },
+    { id: 'rca', worker: 'problem-manager', action: 'Root-cause track: collect logs/metrics, correlate recent changes, and produce a preliminary root-cause hypothesis.', inputs: {}, dependsOn: ['detect'] },
+    { id: 'vendor', worker: 'vendor-manager', action: 'Vendor-engagement track: open a Sev-1 ticket with any third-party vendor whose service is involved, and chase ETAs.', inputs: {}, dependsOn: ['detect'] },
+    // ── Fan-in barrier ──
+    { id: 'join', worker: 'incident-manager', action: 'Synthesize the results of the parallel tracks (restore status, comms log, RCA hypothesis, vendor status) into a single incident summary.', inputs: {}, dependsOn: ['restore', 'comms', 'rca', 'vendor'] },
+    // ── Sequential post-incident chain ──
+    { id: 'cab-prep', worker: 'change-manager', action: 'Prepare any emergency RFCs that emerged from the incident response for the next CAB.', inputs: {}, dependsOn: ['join'] },
+    { id: 'kb-article', worker: 'knowledge-manager', action: 'Draft the post-incident KB article documenting symptom, root cause, restoration steps, and prevention.', inputs: {}, dependsOn: ['join'] },
+    { id: 'close', worker: 'incident-manager', action: 'Close the incident, archive the bridge, and confirm all action items are tracked.', inputs: {}, dependsOn: ['cab-prep', 'kb-article'] },
   ],
 };
 
@@ -238,6 +286,7 @@ export class WorkflowEngine {
     // Register all pre-built workflows
     const builtins = [
       MAJOR_INCIDENT_RESPONSE,
+      MAJOR_INCIDENT_RESPONSE_DAG,
       CHANGE_LIFECYCLE,
       MONDAY_CAB_PREP,
       INCIDENT_TO_PROBLEM,
@@ -292,6 +341,13 @@ export class WorkflowEngine {
     };
     this.executions.set(executionId, status);
 
+    // Phase 10 — DAG mode: when any step declares dependsOn, run via the
+    // topological scheduler so independent branches execute in parallel.
+    const isDag = workflow.steps.some((s) => Array.isArray(s.dependsOn) && s.dependsOn.length > 0);
+    if (isDag) {
+      return this.executeDag(workflow, status);
+    }
+
     let currentStepId: string | undefined = workflow.steps[0]?.id;
     let lastOutput = '';
 
@@ -302,10 +358,33 @@ export class WorkflowEngine {
       const stepResult = status.steps.find((s) => s.stepId === currentStepId);
       if (!stepResult) break;
 
-      // Human gate — pause workflow
+      // Human gate — pause workflow.
+      // When the workflow was driven by a TriggerDecision in 'auto' mode AND
+      // the autonomy gate (kill-switch + change-freeze + budget + tuner) all
+      // pass, the step is auto-approved. Otherwise the step is auto-approved
+      // for backwards compatibility (as before this change), but the gate
+      // result is recorded so Mission Control can show why.
       if (stepDef.requiresApproval) {
         stepResult.status = 'awaiting_approval';
-        console.log(`[WorkflowEngine] Step '${stepDef.id}' requires approval — auto-approving for autonomous mode`);
+        const sig = status.context.signal as Signal | undefined;
+        const dec = status.context.triggerDecision as TriggerDecision | undefined;
+        const worker = workerMap.get(stepDef.worker);
+        const gate = autonomyGate({
+          workflowId: workflow.id,
+          signalType: sig?.type,
+          worker,
+          decision: dec,
+          tenantId: (status.context.tenantId as string | undefined) ?? 'default',
+        });
+        if (gate.allow) {
+          console.log(
+            `[WorkflowEngine] Step '${stepDef.id}' autonomy gate passed: ${gate.reason}`,
+          );
+        } else {
+          console.log(
+            `[WorkflowEngine] Step '${stepDef.id}' autonomy gate blocked (${gate.reason}) — auto-approving for backwards compatibility (HITL preserved at tool layer)`,
+          );
+        }
       }
 
       stepResult.status = 'running';
@@ -366,13 +445,264 @@ export class WorkflowEngine {
     status.completedAt = new Date().toISOString();
     this.executions.set(executionId, status);
 
-    return {
+    // Optional ServiceNow write-back: when the workflow was triggered by a
+    // SNOW signal carrying a sys_id, append a worknote linking back to the
+    // reasoning trace. No-op when SNOW is not configured.
+    await this.maybeWriteBackToSnow(workflowId, status, lastOutput).catch((err) => {
+      console.warn('[WorkflowEngine] SNOW write-back failed:', (err as Error).message);
+    });
+
+    const result: WorkflowResult = {
       executionId,
       workflowId,
       status: 'completed',
       steps: status.steps,
       finalOutput: lastOutput,
     };
+
+    // Outcome verification + tuner feedback (best-effort).
+    try {
+      const sig = status.context.signal as Signal | undefined;
+      const record = await verifyWorkflowOutcome({
+        workflowId,
+        executionId,
+        signal: sig,
+        workflowResult: result,
+      }, { autoRollback: true });
+      recordTunerSignal(workflowId, sig?.type, record.label);
+    } catch (err) {
+      console.warn('[WorkflowEngine] outcome verification failed:', (err as Error).message);
+    }
+
+    return result;
+  }
+
+  /**
+   * Phase 10 — Execute a workflow as a directed acyclic graph of steps.
+   * Steps run as soon as all `dependsOn` predecessors have a terminal status
+   * (completed or skipped). Independent branches run in parallel. When a
+   * step fails (and has no onFailure handler), its transitive dependents are
+   * marked `skipped` and the workflow as a whole is reported as `failed` —
+   * but other independent branches keep running so we capture as much
+   * partial work as possible.
+   */
+  private async executeDag(
+    workflow: WorkflowDefinition,
+    status: WorkflowStatus,
+  ): Promise<WorkflowResult> {
+    const executionId = status.executionId;
+    const workflowId = workflow.id;
+
+    // ── Build & validate the dependency graph ──
+    const stepById = new Map<string, WorkflowStep>();
+    for (const s of workflow.steps) stepById.set(s.id, s);
+
+    const indegree = new Map<string, number>();
+    const dependents = new Map<string, Set<string>>();
+    for (const s of workflow.steps) {
+      indegree.set(s.id, 0);
+      dependents.set(s.id, new Set());
+    }
+    for (const s of workflow.steps) {
+      for (const dep of s.dependsOn ?? []) {
+        if (!stepById.has(dep)) {
+          status.status = 'failed';
+          status.completedAt = new Date().toISOString();
+          return {
+            executionId,
+            workflowId,
+            status: 'failed',
+            steps: status.steps,
+            finalOutput: `DAG validation failed: step '${s.id}' depends on unknown step '${dep}'`,
+          };
+        }
+        indegree.set(s.id, (indegree.get(s.id) ?? 0) + 1);
+        dependents.get(dep)!.add(s.id);
+      }
+    }
+
+    // Cycle detection via Kahn's algorithm.
+    {
+      const remaining = new Map(indegree);
+      const queue: string[] = [];
+      for (const [id, d] of remaining) if (d === 0) queue.push(id);
+      let visited = 0;
+      while (queue.length > 0) {
+        const id = queue.shift()!;
+        visited++;
+        for (const dep of dependents.get(id) ?? new Set<string>()) {
+          remaining.set(dep, (remaining.get(dep) ?? 0) - 1);
+          if (remaining.get(dep) === 0) queue.push(dep);
+        }
+      }
+      if (visited !== workflow.steps.length) {
+        status.status = 'failed';
+        status.completedAt = new Date().toISOString();
+        return {
+          executionId,
+          workflowId,
+          status: 'failed',
+          steps: status.steps,
+          finalOutput: 'DAG validation failed: cycle detected in dependsOn graph',
+        };
+      }
+    }
+
+    // ── Mutable execution state ──
+    const remainingDeps = new Map<string, number>(indegree);
+    const stepStatus = new Map<string, StepStatus>();
+    for (const r of status.steps) stepStatus.set(r.stepId, r.status);
+
+    // Mark a step (and its transitive dependents) as skipped after a failure.
+    const skipDescendants = (rootId: string): void => {
+      const queue = [rootId];
+      while (queue.length > 0) {
+        const id = queue.shift()!;
+        for (const child of dependents.get(id) ?? new Set<string>()) {
+          if (stepStatus.get(child) !== 'pending') continue;
+          stepStatus.set(child, 'skipped');
+          const sr = status.steps.find((x) => x.stepId === child);
+          if (sr) {
+            sr.status = 'skipped';
+            sr.completedAt = new Date().toISOString();
+          }
+          queue.push(child);
+        }
+      }
+    };
+
+    let lastOutput = '';
+    let anyFailure = false;
+    const inflight = new Map<string, Promise<void>>();
+
+    const runOne = async (stepId: string): Promise<void> => {
+      const stepDef = stepById.get(stepId)!;
+      const stepResult = status.steps.find((s) => s.stepId === stepId)!;
+      stepStatus.set(stepId, 'running');
+      try {
+        const out = await this.runStep(workflow, stepDef, stepResult, status);
+        if (out !== undefined) lastOutput = out;
+        stepStatus.set(stepId, 'completed');
+      } catch (err) {
+        stepResult.status = 'failed';
+        stepResult.error = (err as Error).message;
+        stepResult.completedAt = new Date().toISOString();
+        stepStatus.set(stepId, 'failed');
+        console.error(`[WorkflowEngine] ${executionId} — DAG step '${stepId}' failed:`, err);
+        anyFailure = true;
+        skipDescendants(stepId);
+      }
+      // Decrement in-degree for dependents
+      for (const child of dependents.get(stepId) ?? new Set<string>()) {
+        if (stepStatus.get(child) === 'pending') {
+          remainingDeps.set(child, (remainingDeps.get(child) ?? 0) - 1);
+        }
+      }
+    };
+
+    // ── Scheduling loop ──
+    // Start all steps with zero in-degree, then whenever a step finishes, start
+    // any newly-eligible dependents. Loop ends when there is nothing in flight
+    // and no more pending steps with zero remaining deps.
+    while (true) {
+      for (const s of workflow.steps) {
+        if (stepStatus.get(s.id) !== 'pending') continue;
+        if ((remainingDeps.get(s.id) ?? 0) > 0) continue;
+        if (inflight.has(s.id)) continue;
+        const p = runOne(s.id).finally(() => inflight.delete(s.id));
+        inflight.set(s.id, p);
+      }
+      if (inflight.size === 0) break;
+      await Promise.race(inflight.values());
+    }
+
+    // ── Finalisation ──
+    status.status = anyFailure ? 'failed' : 'completed';
+    status.completedAt = new Date().toISOString();
+
+    const result: WorkflowResult = {
+      executionId,
+      workflowId,
+      status: anyFailure ? 'failed' : 'completed',
+      steps: status.steps,
+      finalOutput: lastOutput,
+    };
+
+    // SNOW write-back + outcome verification (mirrors the linear path).
+    await this.maybeWriteBackToSnow(workflowId, status, lastOutput).catch((err) => {
+      console.warn('[WorkflowEngine] SNOW write-back failed:', (err as Error).message);
+    });
+    try {
+      const sig = status.context.signal as Signal | undefined;
+      const record = await verifyWorkflowOutcome(
+        { workflowId, executionId, signal: sig, workflowResult: result },
+        { autoRollback: true },
+      );
+      recordTunerSignal(workflowId, sig?.type, record.label);
+    } catch (err) {
+      console.warn('[WorkflowEngine] outcome verification failed:', (err as Error).message);
+    }
+    return result;
+  }
+
+  /**
+   * Execute a single step (autonomy gate, runWorker, success bookkeeping).
+   * Shared by the linear and DAG executors. Throws on worker failure so the
+   * caller can decide failure semantics. Returns the step output on success.
+   */
+  private async runStep(
+    workflow: WorkflowDefinition,
+    stepDef: WorkflowStep,
+    stepResult: StepResult,
+    status: WorkflowStatus,
+  ): Promise<string | undefined> {
+    if (stepDef.requiresApproval) {
+      stepResult.status = 'awaiting_approval';
+      const sig = status.context.signal as Signal | undefined;
+      const dec = status.context.triggerDecision as TriggerDecision | undefined;
+      const worker = workerMap.get(stepDef.worker);
+      const gate = autonomyGate({
+        workflowId: workflow.id,
+        signalType: sig?.type,
+        worker,
+        decision: dec,
+        tenantId: (status.context.tenantId as string | undefined) ?? 'default',
+      });
+      if (gate.allow) {
+        console.log(`[WorkflowEngine] Step '${stepDef.id}' autonomy gate passed: ${gate.reason}`);
+      } else {
+        console.log(
+          `[WorkflowEngine] Step '${stepDef.id}' autonomy gate blocked (${gate.reason}) — auto-approving for backwards compatibility (HITL preserved at tool layer)`,
+        );
+      }
+    }
+    stepResult.status = 'running';
+    stepResult.startedAt = new Date().toISOString();
+    const worker = workerMap.get(stepDef.worker);
+    if (!worker) {
+      throw new Error(`Worker '${stepDef.worker}' not found in worker registry`);
+    }
+    const lastOutput = (status.context.previousStepOutput as string | undefined) ?? '';
+    const prompt = `${stepDef.action}\n\nContext: ${JSON.stringify({ ...stepDef.inputs, ...status.context, previousStepOutput: lastOutput })}`;
+    const ctx: PromptContext = {
+      userMessage: prompt,
+      displayName: `Workflow: ${workflow.name}`,
+    };
+    const result = await runWorker(worker, prompt, ctx);
+    stepResult.status = 'completed';
+    stepResult.output = result.output;
+    stepResult.completedAt = new Date().toISOString();
+    status.context[`step_${stepDef.id}_output`] = result.output;
+    status.context.previousStepOutput = result.output;
+    console.log(`[WorkflowEngine] ${status.executionId} — Step '${stepDef.id}' completed`);
+    return result.output;
+  }
+
+  /**
+   * List all registered workflow definitions.
+   */
+  listWorkflows(): WorkflowDefinition[] {
+    return Array.from(this.workflows.values());
   }
 
   /**
@@ -382,11 +712,30 @@ export class WorkflowEngine {
     return this.executions.get(executionId);
   }
 
-  /**
-   * List all registered workflow definitions.
-   */
-  listWorkflows(): WorkflowDefinition[] {
-    return Array.from(this.workflows.values());
+  private async maybeWriteBackToSnow(
+    workflowId: string,
+    status: WorkflowStatus,
+    summary: string,
+  ): Promise<void> {
+    if (workflowId !== 'major-incident-response') return;
+    const ctx = status.context as Record<string, unknown>;
+    if (ctx.signalSource !== 'servicenow') return;
+    const payload = ctx.payload as { sys_id?: string } | undefined;
+    const sysId = payload?.sys_id as string | undefined;
+    if (!sysId) return;
+    if (!getSnowClientStatus().enabled) return;
+
+    const correlationId =
+      (ctx.correlationId as string | undefined) || status.executionId;
+    const reasoningTraceId = (ctx.signalId as string | undefined) || status.executionId;
+    const demoRunId = (payload as { u_demo_run?: string } | undefined)?.u_demo_run;
+
+    await addWorkNote(
+      'incident',
+      sysId,
+      `Alex completed major-incident-response workflow.\nSummary: ${summary.slice(0, 800)}`,
+      { correlationId, reasoningTraceId, demoRunId },
+    );
   }
 }
 

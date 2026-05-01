@@ -2,19 +2,25 @@
 // Registers ITSM, incident, change, problem, SLA, CMDB, and communication tools.
 
 import { tool } from '@openai/agents';
+import type { RunContext } from '@openai/agents';
 import { z } from 'zod';
 import { ItsmMcpClient } from './mcp-client';
 import { WorkIqClient } from './workiq-client';
-import { EmailService } from './email-service';
-import { postToChannel } from './teams-channel';
+import { sendEmail, sendTeamsMessage } from './m365-tools';
+import type { WorkerRunContext } from './agent-harness';
 
 const mcp = new ItsmMcpClient();
 const workiq = new WorkIqClient();
-const emailService = new EmailService();
 
 function stringify(data: unknown): string {
   if (typeof data === 'string') return data;
   return JSON.stringify(data, null, 2);
+}
+
+/** Pull the live Microsoft Agents TurnContext that the harness threaded
+ * through `runContext.context`. Returns undefined for autonomous runs. */
+function getTurnContext(runContext?: RunContext<WorkerRunContext>) {
+  return runContext?.context?.turnContext;
 }
 
 export const agentTools = [
@@ -242,25 +248,24 @@ export const agentTools = [
     execute: async ({ product, version }) => stringify(await mcp.checkEolStatus(product, version)),
   }),
 
-  // ── Communication ──
+  // ── Communication (Cassidy-style: MCP-first, Graph fallback) ──
   tool({
     name: 'send_email',
-    description: 'Send an email via Microsoft Graph. Use for escalations, notifications, and reports.',
+    description:
+      'Send an email (Microsoft Mail MCP when a user session is present, Microsoft Graph otherwise). Use for escalations, notifications, and reports.',
     parameters: z.object({
       to: z.string().describe('Recipient email address'),
       subject: z.string().describe('Email subject line'),
       body: z.string().describe('Email body in HTML or plain text'),
     }),
-    execute: async ({ to, subject, body }) => {
-      const result = await emailService.sendEmailAdvanced({
-        to: [to],
-        subject,
-        body,
-        bodyType: 'HTML',
-      });
+    execute: async ({ to, subject, body }, runContext) => {
+      const result = await sendEmail(
+        { to, subject, body, bodyType: 'HTML' },
+        getTurnContext(runContext as RunContext<WorkerRunContext>),
+      );
 
       if (result.success) {
-        return `Email sent to ${to} with subject "${subject}" (requestId: ${result.messageId || 'n/a'})`;
+        return `Email sent to ${to} via ${result.source} with subject "${subject}" (id: ${result.messageId || 'n/a'})`;
       }
 
       return `Email delivery failed to ${to}: ${result.error || 'unknown error'}`;
@@ -269,16 +274,24 @@ export const agentTools = [
 
   tool({
     name: 'post_to_channel',
-    description: 'Post a message to the IT Operations alerts channel in Microsoft Teams.',
+    description:
+      'Post a message to the IT Operations alerts channel (Teams MCP when a user session is present, Graph webhook otherwise).',
     parameters: z.object({
       message: z.string().describe('The message to post to the team channel'),
     }),
-    execute: async ({ message }) => {
+    execute: async ({ message }, runContext) => {
       try {
-        await postToChannel(message, false);
-        return 'Message posted to the IT Operations alerts channel';
+        const target = process.env.ITSM_ALERTS_CHANNEL_ID || '';
+        const result = await sendTeamsMessage(
+          { target, message, surface: 'channel' },
+          getTurnContext(runContext as RunContext<WorkerRunContext>),
+        );
+        if (result.success) {
+          return `Message posted to the IT Operations alerts channel via ${result.source}`;
+        }
+        return `Failed to post to channel: ${result.error || 'unknown error'}`;
       } catch (err) {
-        return `Failed to post to channel: ${(err as any).message || err}`;
+        return `Failed to post to channel: ${(err as Error).message || err}`;
       }
     },
   }),

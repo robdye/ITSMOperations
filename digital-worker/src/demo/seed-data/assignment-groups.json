@@ -1,0 +1,8 @@
+{
+  "groups": [
+    { "name": "network-ops", "manager": "alice.kim", "description": "Network and edge infrastructure" },
+    { "name": "platform-engineering", "manager": "ben.ortiz", "description": "Platform / SRE team" },
+    { "name": "service-desk", "manager": "chen.wu", "description": "Tier-1 service desk" },
+    { "name": "alex-system", "manager": "demo.alex", "description": "Alex digital worker system account" }
+  ]
+}

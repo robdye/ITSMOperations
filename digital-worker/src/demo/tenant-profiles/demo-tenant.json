@@ -1,0 +1,11 @@
+{
+  "tenantId": "demo-tenant",
+  "profile": "demo",
+  "allowDemoDirector": true,
+  "snowAllowList": [
+    "*.service-now.com",
+    "127.0.0.1",
+    "localhost",
+    "mock-snow"
+  ]
+}

@@ -124,25 +124,35 @@ export function attachVoiceWebSocket(server: Server): void {
     function wireServiceEvents(ws: WebSocket) {
       ws.on('open', () => {
         console.log(`[voice] Connected to Voice Live (deployment: ${VOICELIVE_MODEL})`);
-        // GA Realtime API uses flat session config (not nested audio object)
+        // GA Realtime API (Aug 2025): session config is nested under `audio`,
+        // top-level uses `output_modalities` (not `modalities`), and per-channel
+        // format/voice/transcription/turn_detection live inside `audio.input`/
+        // `audio.output`. Sending the legacy flat shape returns
+        // `unknown_parameter: session.modalities` and the session never updates.
         ws.send(JSON.stringify({
           type: 'session.update',
           session: {
             type: 'realtime',
-            modalities: ['audio', 'text'],
+            output_modalities: ['audio'],
             instructions: VOICE_SYSTEM_PROMPT,
-            voice: 'ash',
-            input_audio_format: 'pcm16',
-            output_audio_format: 'pcm16',
-            input_audio_transcription: { model: 'whisper-1' },
-            turn_detection: {
-              type: 'server_vad',
-              threshold: 0.5,
-              prefix_padding_ms: 300,
-              silence_duration_ms: 500,
-            },
             tools: VOICE_TOOLS,
             tool_choice: 'auto',
+            audio: {
+              input: {
+                format: { type: 'audio/pcm', rate: 24000 },
+                transcription: { model: 'whisper-1' },
+                turn_detection: {
+                  type: 'server_vad',
+                  threshold: 0.5,
+                  prefix_padding_ms: 300,
+                  silence_duration_ms: 500,
+                },
+              },
+              output: {
+                format: { type: 'audio/pcm', rate: 24000 },
+                voice: 'ash',
+              },
+            },
           },
         }));
       });

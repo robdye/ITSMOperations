@@ -12,7 +12,7 @@
     "durableTask": {
       "hubName": "ITSMOpsHub",
       "storageProvider": {
-        "type": "azure-storage"
+        "type": "AzureStorage"
       }
     }
   },

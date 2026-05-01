@@ -8,11 +8,14 @@
 
 import { Client } from '@microsoft/microsoft-graph-client';
 import { TokenCredentialAuthenticationProvider } from '@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials';
-import { DefaultAzureCredential } from '@azure/identity';
+import { ClientSecretCredential, DefaultAzureCredential, type TokenCredential } from '@azure/identity';
 
 // ── Configuration ──
 const GRAPH_SENDER = process.env.GRAPH_MAIL_SENDER || ''; // UPN or object ID of sending user/mailbox
 const GRAPH_SCOPES = ['https://graph.microsoft.com/.default'];
+const GRAPH_TENANT_ID = process.env.GRAPH_TENANT_ID || '';
+const GRAPH_APP_ID = process.env.GRAPH_APP_ID || '';
+const GRAPH_APP_SECRET = process.env.GRAPH_APP_SECRET || '';
 
 let graphClient: Client | null = null;
 
@@ -111,7 +114,18 @@ function getGraphClient(): Client | null {
   }
 
   try {
-    const credential = new DefaultAzureCredential();
+    // Prefer the dedicated mail app's client credentials when configured
+    // (GRAPH_APP_ID/GRAPH_APP_SECRET/GRAPH_TENANT_ID). The container app's
+    // managed identity does not own the Exchange RBAC role assignment for
+    // sending mail — only the dedicated mail SP does.
+    let credential: TokenCredential;
+    if (GRAPH_TENANT_ID && GRAPH_APP_ID && GRAPH_APP_SECRET) {
+      credential = new ClientSecretCredential(GRAPH_TENANT_ID, GRAPH_APP_ID, GRAPH_APP_SECRET);
+      console.log(`[GraphMail] Using ClientSecretCredential for app ${GRAPH_APP_ID}`);
+    } else {
+      credential = new DefaultAzureCredential();
+      console.log('[GraphMail] Using DefaultAzureCredential (managed identity)');
+    }
     const authProvider = new TokenCredentialAuthenticationProvider(credential, { scopes: GRAPH_SCOPES });
     graphClient = Client.initWithMiddleware({ authProvider });
     console.log('[GraphMail] Microsoft Graph client initialized');

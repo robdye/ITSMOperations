@@ -327,6 +327,8 @@
   let nextPlaybackTime = 0;
   let activeResponseText = '';
   let activeSources = [];
+  let micChunkCount = 0;
+  let micHealthTimer = null;
 
   function setStatus(text, cls = '') {
     statusEl.textContent = text;
@@ -346,6 +348,46 @@
     div.appendChild(body);
     transcriptEl.appendChild(div);
     transcriptEl.scrollTop = transcriptEl.scrollHeight;
+  }
+
+  async function ensureAudioContextReady() {
+    if (!audioContext) {
+      const Ctor = window.AudioContext || window.webkitAudioContext;
+      if (!Ctor) throw new Error('Web Audio is not supported in this browser');
+      audioContext = new Ctor({ sampleRate: 24000 });
+    }
+
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume();
+    }
+
+    if (audioContext.state !== 'running') {
+      throw new Error(`Audio context is ${audioContext.state}. Check browser autoplay/microphone permissions.`);
+    }
+  }
+
+  function startMicHealthCheck() {
+    stopMicHealthCheck();
+    micChunkCount = 0;
+    micHealthTimer = setTimeout(async () => {
+      if (!audioContext) return;
+      if (audioContext.state === 'suspended') {
+        try {
+          await audioContext.resume();
+        } catch (_) {}
+      }
+      if (micChunkCount === 0) {
+        console.warn('[voice] No microphone audio frames detected after connect');
+        setStatus('Connected, but no microphone audio is flowing. Check mic permission and input device.', 'error');
+      }
+    }, 4000);
+  }
+
+  function stopMicHealthCheck() {
+    if (micHealthTimer) {
+      clearTimeout(micHealthTimer);
+      micHealthTimer = null;
+    }
   }
 
   // ── Azure Speech Avatar ──
@@ -479,9 +521,15 @@
       btnConnect.disabled = true;
       setStatus('Requesting microphone access...', '');
       micStream = await navigator.mediaDevices.getUserMedia({
-        audio: { sampleRate: 24000, channelCount: 1, echoCancellation: true, noiseSuppression: true }
+        audio: {
+          sampleRate: 24000,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        }
       });
-      audioContext = new AudioContext();
+      await ensureAudioContextReady();
       nextPlaybackTime = 0;
 
       // Try to start avatar
@@ -497,6 +545,10 @@
         setStatus('Connected — waiting for session...', 'active');
         btnDisconnect.disabled = false;
         btnMute.disabled = false;
+        ensureAudioContextReady().catch((err) => {
+          console.error('[voice] Failed to resume audio context:', err);
+          setStatus('Audio init failed: ' + (err.message || err), 'error');
+        });
         startMicCapture();
       };
 
@@ -541,6 +593,8 @@
   // --- Microphone capture: PCM16 at 24kHz via AudioWorklet ---
   async function startMicCapture() {
     if (!micStream || !ws) return;
+    await ensureAudioContextReady();
+    startMicHealthCheck();
     const nativeSR = audioContext.sampleRate;
 
     const workletCode = `
@@ -579,6 +633,7 @@
     micWorklet.port.onmessage = (e) => {
       if (!ws || ws.readyState !== WebSocket.OPEN) return;
       const float32 = e.data.samples;
+      micChunkCount++;
       const ratio = nativeSR / 24000;
       const targetLen = Math.floor(float32.length / ratio);
       const pcm16 = new Int16Array(targetLen);
@@ -612,6 +667,7 @@
     processor.onaudioprocess = (e) => {
       if (!ws || ws.readyState !== WebSocket.OPEN) return;
       const float32 = e.inputBuffer.getChannelData(0);
+      micChunkCount++;
       const ratio = nativeSR / 24000;
       const targetLen = Math.floor(float32.length / ratio);
       const pcm16 = new Int16Array(targetLen);
@@ -632,6 +688,7 @@
   }
 
   function stopMicCapture() {
+    stopMicHealthCheck();
     if (micWorklet) { micWorklet.disconnect(); micWorklet = null; }
     if (micSource) { micSource.disconnect(); micSource = null; }
     if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }

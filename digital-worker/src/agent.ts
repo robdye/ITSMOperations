@@ -342,6 +342,7 @@ export class ItsmAgent extends AgentApplication<TurnState> {
     }
 
     const asksEmailSelf = /\b(email|send)\b[\s\S]{0,120}\b(me|myself|my mail|my email)\b/i.test(text) || /\bemail me\b/i.test(text);
+    const asksEmailRequest = /\b(email|mail)\b/i.test(text) && /\b(send|latest|overview|incident|report|brief)\b/i.test(text);
 
     if (asksEmailSelf && !requesterEmail) {
       stopTypingLoop();
@@ -352,6 +353,46 @@ export class ItsmAgent extends AgentApplication<TurnState> {
     if (asksEmailSelf && requesterEmail) {
       enrichedPrompt += `\n\nIMPORTANT: The user asked to email themselves. Use recipient email: ${requesterEmail}. DO NOT ask who to email.`;
       enrichedPrompt = `${enrichedPrompt}\n\nResolved self-email recipient: ${requesterEmail}. If sending email, the \"to\" field must be exactly this value unless the user explicitly overrides it.`;
+    }
+
+    if (asksEmailRequest) {
+      const defaultRecipient = requesterEmail || process.env.MANAGER_EMAIL || '';
+      enrichedPrompt += `\n\nMANDATORY EMAIL EXECUTION RULES:`;
+      enrichedPrompt += `\n- If the user asks to email/send a report, you MUST execute the send_email tool in this run.`;
+      enrichedPrompt += `\n- Never say you cannot send email, never provide a copy/paste template, and never claim this environment cannot send real emails.`;
+      enrichedPrompt += `\n- Generate concise, executive-ready HTML content with clear headings and bullet points.`;
+      if (defaultRecipient) {
+        enrichedPrompt += `\n- If the user did not specify recipient, send to: ${defaultRecipient}.`;
+      }
+      enrichedPrompt += `\n- After tool success, reply with a short confirmation only.`;
+    }
+
+    // Detect a PowerPoint / deck request \u2014 route to send_presentation, never reply with HTML slides.
+    const asksPresentation = /\b(power\s*point|powerpoint|pptx?|presentation|deck|slide\s*deck|slides)\b/i.test(text);
+    if (asksPresentation) {
+      const defaultRecipient = requesterEmail || process.env.MANAGER_EMAIL || '';
+      enrichedPrompt += `\n\nMANDATORY PRESENTATION EXECUTION RULES:`;
+      enrichedPrompt += `\n- The user asked for a PowerPoint / deck / slides. You MUST execute the send_presentation tool in this run.`;
+      enrichedPrompt += `\n- DO NOT compose HTML pretending to be slides. DO NOT use send_email for the deck \u2014 send_presentation generates a real .pptx attachment.`;
+      enrichedPrompt += `\n- If the user did not provide explicit slide content, omit the \"slides\" parameter so a current-state briefing is generated from live ITSM telemetry.`;
+      if (defaultRecipient) {
+        enrichedPrompt += `\n- If the user did not specify recipient, send to: ${defaultRecipient}.`;
+      }
+      enrichedPrompt += `\n- After tool success, reply with a short confirmation only.`;
+    }
+
+    // Detect a calendar / meeting request \u2014 route to schedule_teams_meeting (or find_meeting_time first).
+    const asksMeeting = /\b(schedule|set\s*up|book|arrange|create|send)\b[\s\S]{0,40}\b(meeting|call|bridge|sync|catch[-\s]?up|stand[-\s]?up|cab|review|invite|calendar\s*invite)\b/i.test(text)
+      || /\b(invite|invite\s*me|book\s*a\s*time)\b[\s\S]{0,40}\b(call|meeting|bridge)\b/i.test(text);
+    if (asksMeeting) {
+      enrichedPrompt += `\n\nMANDATORY MEETING EXECUTION RULES:`;
+      enrichedPrompt += `\n- The user asked to schedule a meeting / call / bridge. You MUST execute the schedule_teams_meeting tool in this run.`;
+      enrichedPrompt += `\n- If the user did not give a clear start/end time, FIRST call find_meeting_time, then call schedule_teams_meeting with the chosen slot.`;
+      enrichedPrompt += `\n- Always include a Teams join link (isOnlineMeeting: true).`;
+      if (requesterEmail) {
+        enrichedPrompt += `\n- The requester (${requesterEmail}) must be one of the attendees unless explicitly excluded.`;
+      }
+      enrichedPrompt += `\n- After tool success, reply with a short confirmation that includes the Teams join link.`;
     }
 
     // Get AI response with agentic auth context
@@ -365,7 +406,8 @@ export class ItsmAgent extends AgentApplication<TurnState> {
     try {
       await baggageScope.run(async () => {
         const startedAt = Date.now();
-        const ctx: PromptContext = { userMessage: text, displayName, requesterEmail };
+        // Pass the live TurnContext so M365 MCP tools can mint OBO tokens.
+        const ctx: PromptContext = { userMessage: text, displayName, requesterEmail, turnContext: context };
         const result = await runWorker(classification.worker, enrichedPrompt, ctx);
         addMessage(userId, 'assistant', result.output);
         stopTypingLoop();
