@@ -40,7 +40,7 @@ A reference instance runs in Azure Container Apps with the latest revision, imag
 | **Autonomous control loop** | Signal ingestion → DAG workflow execution → outcome verification → automatic threshold tuning → governance kill-switches |
 | **MCP-first M365 integration** | Mail, Teams, Calendar, Planner, People delivered over Microsoft Agent 365 OBO MCP servers, with direct Microsoft Graph as a graceful fallback |
 | **ServiceNow integration** | Full CRUD on incidents, changes, problems, assets, knowledge and vendors via a dedicated MCP server |
-| **Voice & avatar** | Azure Speech Avatar (Lisa/Ava) over WebRTC, with voice-optimised ITSM tooling |
+| **Voice & calling** | Three-path delivery: Teams call (ACS outbound or click-to-call), browser voice avatar, email/channel fallback |
 | **Mission control** | Real-time SPA showing active workers, pending approvals, foresight forecasts, and governance state |
 | **Scheduled routines** | 18+ cron-driven autonomous jobs — SLA prediction, stale-ticket sweeps, CMDB audits, shift handover, monthly health report |
 | **Foresight & memory** | Cluster mining + 24 h forecast, experiential memory of past incidents, CI ↔ incident cognition graph |
@@ -402,7 +402,7 @@ ITSMOperations/
 │   │   │   ├── routine-delivery.ts          # Routine result delivery (Email + Teams)
 │   │   │   └── demo/                        # Scripted-storm + tenant-profile demo harness
 │   │   │
-│   │   ├── [Voice & Avatar]
+│   │   ├── [Voice & Calling]
 │   │   │   ├── voice/voiceProxy.ts          # WebSocket proxy → Azure Voice Live
 │   │   │   ├── voice/voiceTools.ts          # Voice-optimized ITSM tool definitions
 │   │   │   ├── voice/voiceGate.ts           # Feature gate for voice enablement
@@ -1069,18 +1069,34 @@ The MCP Server (`mcp-server/`, port 3002) bridges M365 Copilot to ServiceNow and
 
 ---
 
-## Voice & Avatar
+## Voice & Calling
 
-- **Azure Speech Avatar**: Lisa character, casual-sitting style
-- **Voice**: `en-US-AvaMultilingualNeural`
-- **Authentication**: Entra token auth via Managed Identity (no subscription key required)
-- **Custom Subdomain**: `itsm-speech-avatar.cognitiveservices.azure.com` (required when `disableLocalAuth=true`)
-- **WebRTC ICE Relay**: Token fetched server-side via `/api/voice/avatar-config`
-- **WebSocket Proxy**: `voiceProxy.ts` bridges browser audio ↔ Azure Voice Live
-- **Voice-Optimized Tools**: `voiceTools.ts` provides concise, spoken-format ITSM queries
-- **Feature Gate**: `voiceGate.ts` controls voice enablement per environment
-- **Client**: `voice/voice.html` served at `/voice`
-- **Configuration**: `AZURE_SPEECH_REGION=westus2`, `VOICELIVE_MODEL=gpt-4o`
+Alex offers three call paths, ordered from "most natural for incident response" to "fallback for demos when nothing else is configured". The agent picks the highest-fidelity path that is configured at runtime.
+
+### 1. Teams Call (primary)
+
+Used when an operator says **"call me on Teams"**, **"ring me"**, **"page me"**, or presses the **Page Me** button in Mission Control.
+
+- **Tool**: `call_me_on_teams` (`digital-worker/src/tools/comms-tools.ts`) — registered with the agent and surfaced via the `MANDATORY CALL EXECUTION RULES` block in `agent.ts`. Intent detection lives in `digital-worker/src/intent-detection.ts` so it is pure-function and unit-tested.
+- **HTTP endpoint**: `POST /api/voice/page-me` (`digital-worker/src/index.ts`) chains ACS call → Teams channel post → email and returns the resulting status.
+- **Two delivery modes**:
+  - **ACS outbound (preferred)** — when `ACS_CONNECTION_STRING` and a `MANAGER_TEAMS_OID` are configured, Alex actually rings the operator's Teams client via `acsBridge.initiateOutboundTeamsCall`. The operator just answers the incoming Teams call.
+  - **Click-to-call deep-link (fallback)** — when ACS is not configured, the tool returns `https://teams.microsoft.com/l/call/0/0?users=<ALEX_TEAMS_UPN>` which opens the Teams client and dials Alex with one tap.
+- **Required env**: `ACS_CONNECTION_STRING`, `MANAGER_TEAMS_OID`, `ALEX_TEAMS_UPN`, `PUBLIC_HOSTNAME` (all consumed by `acsBridge.ts`).
+
+### 2. Browser voice avatar (demo / fallback)
+
+Served at `/voice` for showcases or when neither ACS nor Teams click-to-call is wired up.
+
+- **Avatar**: Azure Speech Avatar (Lisa, casual-sitting) over WebRTC.
+- **Voice**: `en-US-AvaMultilingualNeural` neural TTS via Azure Voice Live.
+- **Auth**: Entra token via Managed Identity (`AZURE_SPEECH_ENDPOINT` custom subdomain required when `disableLocalAuth=true`). No subscription key.
+- **Plumbing**: `voiceProxy.ts` bridges browser audio ↔ Azure Voice Live; `voiceTools.ts` exposes voice-optimised ITSM tools; `voiceGate.ts` controls per-environment enablement.
+- **Required env**: `AZURE_SPEECH_REGION`, `AZURE_SPEECH_ENDPOINT`, `VOICELIVE_ENDPOINT`, `VOICELIVE_MODEL`.
+
+### 3. Email + Teams channel post (last-resort)
+
+If ACS, the click-to-call link, and the avatar are all unavailable, `/api/voice/page-me` still posts to the alerts channel and emails the on-call manager with the call reason. Operator pages never silently fail.
 
 ---
 
@@ -1161,7 +1177,7 @@ The MCP Server (`mcp-server/`, port 3002) bridges M365 Copilot to ServiceNow and
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Application Insights connection string |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP endpoint for dev tracing |
 
-### Voice & Avatar
+### Voice & Calling
 
 | Variable | Description |
 |----------|-------------|
@@ -1172,6 +1188,10 @@ The MCP Server (`mcp-server/`, port 3002) bridges M365 Copilot to ServiceNow and
 | `AVATAR_VOICE` | Voice name (default: `en-US-AvaMultilingualNeural`) |
 | `VOICELIVE_ENDPOINT` | Voice Live endpoint for real-time conversation |
 | `VOICELIVE_MODEL` | Voice Live model (default: `gpt-4o`) |
+| `ACS_CONNECTION_STRING` | Azure Communication Services connection string — enables ACS outbound Teams call. |
+| `MANAGER_TEAMS_OID` | Entra Object ID of the on-call manager (required for ACS outbound). |
+| `ALEX_TEAMS_UPN` | Alex's Teams UPN — used for the Teams click-to-call deep link. Falls back to `GRAPH_MAIL_SENDER`. |
+| `PUBLIC_HOSTNAME` | Public hostname Alex listens on — ACS uses this for the media WebSocket and event callbacks. |
 
 ### M365 Integration
 

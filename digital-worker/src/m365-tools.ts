@@ -16,8 +16,9 @@
 import type { TurnContext } from '@microsoft/agents-hosting';
 import {
   getLiveMcpTools,
-  hasMcpToolServer,
+  findMcpTool,
   invokeMcpTool,
+  getDiscoveredToolNames,
 } from './mcp-tool-setup';
 import { EmailService, type EmailOptions } from './email-service';
 import { postToChannel } from './teams-channel';
@@ -27,18 +28,30 @@ import { AutonomousActions, type CalendarAttendee } from './autonomous-actions';
 // Result types (Cassidy parity)
 // ---------------------------------------------------------------------------
 
+// ── Cassidy-strict result-source contract ─────────────────────────────────
+//   'mcp'            → MCP tool succeeded (preferred path).
+//   'graph' / 'graph-webhook' → Autonomous (no TurnContext) Graph fallback.
+//   'unavailable'    → Turn request but MCP missing/failed; we DO NOT silently
+//                      fall back to Graph for user turns because (a) Graph
+//                      app-only acts as a service principal which lacks Application
+//                      Access Policies for most user mailboxes (resulting in 403)
+//                      and (b) it hides MCP outages from the user. Per the
+//                      Cassidy pattern (cassidy/src/tools/mcpToolSetup.ts), the
+//                      LLM gets a clear "unavailable — cannot do X without an
+//                      active user session" message instead.
+
 export interface EmailResult {
   success: boolean;
   messageId?: string;
   error?: string;
-  source: 'mcp' | 'graph';
+  source: 'mcp' | 'graph' | 'unavailable';
 }
 
 export interface TeamsMessageResult {
   success: boolean;
   messageId?: string;
   error?: string;
-  source: 'mcp' | 'graph-webhook';
+  source: 'mcp' | 'graph-webhook' | 'unavailable';
 }
 
 export interface CalendarEventResult {
@@ -47,14 +60,14 @@ export interface CalendarEventResult {
   joinUrl?: string;
   webLink?: string;
   error?: string;
-  source: 'mcp' | 'graph';
+  source: 'mcp' | 'graph' | 'unavailable';
 }
 
 export interface FindUserResult {
   success: boolean;
   users: Array<{ displayName: string; email: string; jobTitle?: string; department?: string }>;
   error?: string;
-  source: 'mcp' | 'graph';
+  source: 'mcp' | 'graph' | 'unavailable';
 }
 
 export interface PlannerTaskResult {
@@ -74,7 +87,7 @@ export interface FindMeetingTimesResult {
   success: boolean;
   suggestions: MeetingTimeSuggestion[];
   error?: string;
-  source: 'mcp' | 'graph';
+  source: 'mcp' | 'graph' | 'unavailable';
 }
 
 // ---------------------------------------------------------------------------
@@ -101,13 +114,12 @@ async function ensureMcpDiscovered(context?: TurnContext): Promise<void> {
 /**
  * Find the first MCP tool whose name matches one of the provided candidates.
  * The tooling gateway sometimes prefixes tool names (e.g. `mcp_MailTools_sendMail`),
- * sometimes returns bare names (`sendMail`) — we accept both.
+ * sometimes returns bare names (`sendMail`) — we accept both, plus fuzzy /
+ * substring matches via `findMcpTool` so renames in the gateway don't silently
+ * push us onto the Graph fallback.
  */
 function pickMcpTool(candidates: string[]): string | null {
-  for (const name of candidates) {
-    if (hasMcpToolServer(name)) return name;
-  }
-  return null;
+  return findMcpTool(candidates);
 }
 
 // ---------------------------------------------------------------------------
@@ -126,12 +138,15 @@ export async function sendEmail(
   },
   context?: TurnContext,
 ): Promise<EmailResult> {
-  // ── MCP path ──
+  // ── MCP path (Cassidy-strict for turn requests) ──
   if (context) {
     await ensureMcpDiscovered(context);
     const toolName = pickMcpTool([
       'mcp_MailTools_sendMail',
+      'mcp_MailServer_sendMail',
+      'mcp_Mail_sendMail',
       'sendMail',
+      'sendEmail',
       'mcp_MailTools_send_mail',
     ]);
     if (toolName) {
@@ -146,12 +161,26 @@ export async function sendEmail(
         return { success: true, messageId: result?.messageId, source: 'mcp' };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[M365] sendEmail MCP "${toolName}" failed, falling back to Graph: ${msg}`);
+        console.warn(`[M365] sendEmail MCP "${toolName}" failed: ${msg}`);
+        return {
+          success: false,
+          error: `MCP MailTools.sendMail failed: ${msg}. Cannot send email without an active user session.`,
+          source: 'unavailable',
+        };
       }
     }
+    console.warn(
+      `[M365] No MCP mail tool discovered (have: ${getDiscoveredToolNames().join(', ') || 'none'})`,
+    );
+    return {
+      success: false,
+      error:
+        'MCP MailTools unavailable — cannot send email without an active user session. Try again in a moment, or ask an admin to verify the Microsoft Agent 365 mail tool registration.',
+      source: 'unavailable',
+    };
   }
 
-  // ── Graph fallback ──
+  // ── Autonomous Graph fallback (no TurnContext) ──
   const result = await emailService.sendEmailAdvanced({
     to: [params.to],
     cc: params.cc,
@@ -188,7 +217,7 @@ export async function sendTeamsMessage(
   },
   context?: TurnContext,
 ): Promise<TeamsMessageResult> {
-  // ── MCP path ──
+  // ── MCP path (Cassidy-strict for turn requests) ──
   if (context) {
     await ensureMcpDiscovered(context);
     const surface = params.surface ?? 'channel';
@@ -196,12 +225,17 @@ export async function sendTeamsMessage(
       surface === 'chat'
         ? [
             'mcp_TeamsServer_sendChatMessage',
+            'mcp_TeamsTools_sendChatMessage',
             'sendChatMessage',
+            'sendChat',
             'mcp_TeamsServer_postChatMessage',
+            'postChatMessage',
           ]
         : [
             'mcp_TeamsServer_sendChannelMessage',
+            'mcp_TeamsTools_sendChannelMessage',
             'sendChannelMessage',
+            'postChannelMessage',
             'mcp_TeamsServer_postChannelMessage',
           ];
     const toolName = pickMcpTool(candidates);
@@ -221,9 +255,30 @@ export async function sendTeamsMessage(
         return { success: true, messageId: result?.messageId, source: 'mcp' };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[M365] sendTeamsMessage MCP "${toolName}" failed, falling back: ${msg}`);
+        console.warn(`[M365] sendTeamsMessage MCP "${toolName}" failed: ${msg}`);
+        return {
+          success: false,
+          error: `MCP TeamsServer.${surface === 'chat' ? 'sendChatMessage' : 'sendChannelMessage'} failed: ${msg}.`,
+          source: 'unavailable',
+        };
       }
     }
+    // Chat (1:1 / group) requires MCP — there is no Graph webhook equivalent.
+    if (surface === 'chat') {
+      console.warn(
+        `[M365] No MCP TeamsServer chat tool discovered (have: ${getDiscoveredToolNames().join(', ') || 'none'})`,
+      );
+      return {
+        success: false,
+        error:
+          'MCP TeamsServer chat tool unavailable — cannot send a 1:1/group Teams chat without an active user session.',
+        source: 'unavailable',
+      };
+    }
+    // Channel surface but no MCP tool: fall through to webhook (alerts channel).
+    console.warn(
+      `[M365] No MCP TeamsServer channel tool discovered (have: ${getDiscoveredToolNames().join(', ') || 'none'}); using webhook`,
+    );
   }
 
   // ── Graph webhook fallback (channel-only, fixed alerts channel) ──
@@ -260,42 +315,64 @@ export async function scheduleCalendarEvent(
   },
   context?: TurnContext,
 ): Promise<CalendarEventResult> {
-  // ── MCP path ──
+  // ── MCP path (Cassidy-strict for turn requests) ──
   if (context) {
     await ensureMcpDiscovered(context);
     const toolName = pickMcpTool([
       'mcp_CalendarTools_createEvent',
+      'mcp_CalendarServer_createEvent',
+      'mcp_Calendar_createEvent',
       'createEvent',
+      'createCalendarEvent',
+      'createMeeting',
+      'scheduleMeeting',
       'mcp_CalendarTools_create_event',
     ]);
     if (toolName) {
       try {
         const result = (await invokeMcpTool(toolName, {
           title: params.title,
+          subject: params.title,
           attendees: params.attendees,
           startDateTime: params.startDateTime,
           endDateTime: params.endDateTime,
+          start: params.startDateTime,
+          end: params.endDateTime,
           body: params.body ?? '',
           isOnlineMeeting: params.isOnlineMeeting ?? true,
           timeZone: params.timeZone,
           location: params.location,
-        })) as { eventId?: string; joinUrl?: string; webLink?: string };
+        })) as { eventId?: string; id?: string; joinUrl?: string; webLink?: string };
         console.log(`[M365] scheduleCalendarEvent via MCP "${toolName}" → "${params.title}"`);
         return {
           success: true,
-          eventId: result?.eventId,
+          eventId: result?.eventId ?? result?.id,
           joinUrl: result?.joinUrl,
           webLink: result?.webLink,
           source: 'mcp',
         };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[M365] scheduleCalendarEvent MCP "${toolName}" failed, falling back to Graph: ${msg}`);
+        console.warn(`[M365] scheduleCalendarEvent MCP "${toolName}" failed: ${msg}`);
+        return {
+          success: false,
+          error: `MCP CalendarTools.createEvent failed: ${msg}. Cannot schedule a meeting without an active user session.`,
+          source: 'unavailable',
+        };
       }
     }
+    console.warn(
+      `[M365] No MCP calendar tool discovered (have: ${getDiscoveredToolNames().join(', ') || 'none'})`,
+    );
+    return {
+      success: false,
+      error:
+        'MCP CalendarTools unavailable — cannot schedule a meeting without an active user session. Try again in a moment, or ask an admin to verify the Microsoft Agent 365 calendar tool registration.',
+      source: 'unavailable',
+    };
   }
 
-  // ── Graph fallback ──
+  // ── Autonomous Graph fallback (no TurnContext) ──
   const attendees: CalendarAttendee[] = params.attendees.map((email) => ({
     email,
     name: email.split('@')[0],
@@ -338,11 +415,13 @@ export async function findMeetingTimes(
   },
   context?: TurnContext,
 ): Promise<FindMeetingTimesResult> {
-  // ── MCP path ──
+  // ── MCP path (Cassidy-strict for turn requests) ──
   if (context) {
     await ensureMcpDiscovered(context);
     const toolName = pickMcpTool([
       'mcp_CalendarTools_findMeetingTimes',
+      'mcp_CalendarServer_findMeetingTimes',
+      'mcp_Calendar_findMeetingTimes',
       'findMeetingTimes',
       'mcp_CalendarTools_find_meeting_times',
     ]);
@@ -359,12 +438,28 @@ export async function findMeetingTimes(
         return { success: true, suggestions: result?.suggestions ?? [], source: 'mcp' };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[M365] findMeetingTimes MCP "${toolName}" failed, falling back to Graph: ${msg}`);
+        console.warn(`[M365] findMeetingTimes MCP "${toolName}" failed: ${msg}`);
+        return {
+          success: false,
+          suggestions: [],
+          error: `MCP CalendarTools.findMeetingTimes failed: ${msg}.`,
+          source: 'unavailable',
+        };
       }
     }
+    console.warn(
+      `[M365] No MCP findMeetingTimes tool discovered (have: ${getDiscoveredToolNames().join(', ') || 'none'})`,
+    );
+    return {
+      success: false,
+      suggestions: [],
+      error:
+        'MCP CalendarTools.findMeetingTimes unavailable — cannot find meeting times without an active user session.',
+      source: 'unavailable',
+    };
   }
 
-  // ── Graph fallback ──
+  // ── Autonomous Graph fallback (no TurnContext) ──
   const attendees: CalendarAttendee[] = params.attendees.map((email) => ({
     email,
     name: email.split('@')[0],
@@ -427,13 +522,16 @@ export async function findUser(
   params: { query: string },
   context?: TurnContext,
 ): Promise<FindUserResult> {
-  // ── MCP path ──
+  // ── MCP path (Cassidy-strict for turn requests) ──
   if (context) {
     await ensureMcpDiscovered(context);
     const toolName = pickMcpTool([
       'mcp_PeopleTools_searchUsers',
       'mcp_DirectoryTools_searchUsers',
+      'mcp_People_searchUsers',
       'searchUsers',
+      'findUser',
+      'findPeople',
     ]);
     if (toolName) {
       try {
@@ -444,12 +542,28 @@ export async function findUser(
         return { success: true, users: result?.users ?? [], source: 'mcp' };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[M365] findUser MCP "${toolName}" failed, falling back to Graph: ${msg}`);
+        console.warn(`[M365] findUser MCP "${toolName}" failed: ${msg}`);
+        return {
+          success: false,
+          users: [],
+          error: `MCP PeopleTools.searchUsers failed: ${msg}.`,
+          source: 'unavailable',
+        };
       }
     }
+    console.warn(
+      `[M365] No MCP findUser tool discovered (have: ${getDiscoveredToolNames().join(', ') || 'none'})`,
+    );
+    return {
+      success: false,
+      users: [],
+      error:
+        'MCP PeopleTools unavailable — cannot resolve users without an active user session.',
+      source: 'unavailable',
+    };
   }
 
-  // ── Graph fallback ──
+  // ── Autonomous Graph fallback (no TurnContext) ──
   const token = await getGraphAppToken();
   if (!token) {
     return { success: false, users: [], error: 'No Graph token available', source: 'graph' };
@@ -509,7 +623,9 @@ export async function createPlannerTask(
     const toolName = pickMcpTool([
       'mcp_PlannerTools_createTask',
       'mcp_PlannerServer_createTask',
+      'mcp_Planner_createTask',
       'createTask',
+      'createPlannerTask',
     ]);
     if (toolName) {
       try {
@@ -565,7 +681,9 @@ export async function updatePlannerTask(
     const toolName = pickMcpTool([
       'mcp_PlannerTools_updateTask',
       'mcp_PlannerServer_updateTask',
+      'mcp_Planner_updateTask',
       'updateTask',
+      'updatePlannerTask',
     ]);
     if (toolName) {
       try {

@@ -24,6 +24,13 @@ import { createConfirmationCard } from './adaptive-cards';
 import { publishIncidentEvent, publishChangeEvent, publishProblemEvent } from './service-bus';
 import { startConversation, logIntent, logRouting, logOutcome, logError } from './reasoning-trace';
 import { logAuditEntry } from './audit-trail';
+import {
+  asksEmailSelf,
+  asksEmailRequest,
+  asksPresentation,
+  asksMeeting,
+  asksTeamsCall,
+} from './intent-detection';
 
 const mcp = new ItsmMcpClient();
 const workiq = new WorkIqClient();
@@ -341,21 +348,21 @@ export class ItsmAgent extends AgentApplication<TurnState> {
       enrichedPrompt += `\n\nRequester context:\n- Name: ${displayName}\n- Email: ${requesterEmail}`;
     }
 
-    const asksEmailSelf = /\b(email|send)\b[\s\S]{0,120}\b(me|myself|my mail|my email)\b/i.test(text) || /\bemail me\b/i.test(text);
-    const asksEmailRequest = /\b(email|mail)\b/i.test(text) && /\b(send|latest|overview|incident|report|brief)\b/i.test(text);
+    const asksEmailSelfFlag = asksEmailSelf(text);
+    const asksEmailRequestFlag = asksEmailRequest(text);
 
-    if (asksEmailSelf && !requesterEmail) {
+    if (asksEmailSelfFlag && !requesterEmail) {
       stopTypingLoop();
       await context.sendActivity("I couldn't resolve your mailbox from your Teams identity in this session. Please share your email address once (e.g., 'send it to name@contoso.com') and I’ll use it.");
       return;
     }
 
-    if (asksEmailSelf && requesterEmail) {
+    if (asksEmailSelfFlag && requesterEmail) {
       enrichedPrompt += `\n\nIMPORTANT: The user asked to email themselves. Use recipient email: ${requesterEmail}. DO NOT ask who to email.`;
       enrichedPrompt = `${enrichedPrompt}\n\nResolved self-email recipient: ${requesterEmail}. If sending email, the \"to\" field must be exactly this value unless the user explicitly overrides it.`;
     }
 
-    if (asksEmailRequest) {
+    if (asksEmailRequestFlag) {
       const defaultRecipient = requesterEmail || process.env.MANAGER_EMAIL || '';
       enrichedPrompt += `\n\nMANDATORY EMAIL EXECUTION RULES:`;
       enrichedPrompt += `\n- If the user asks to email/send a report, you MUST execute the send_email tool in this run.`;
@@ -368,8 +375,7 @@ export class ItsmAgent extends AgentApplication<TurnState> {
     }
 
     // Detect a PowerPoint / deck request \u2014 route to send_presentation, never reply with HTML slides.
-    const asksPresentation = /\b(power\s*point|powerpoint|pptx?|presentation|deck|slide\s*deck|slides)\b/i.test(text);
-    if (asksPresentation) {
+    if (asksPresentation(text)) {
       const defaultRecipient = requesterEmail || process.env.MANAGER_EMAIL || '';
       enrichedPrompt += `\n\nMANDATORY PRESENTATION EXECUTION RULES:`;
       enrichedPrompt += `\n- The user asked for a PowerPoint / deck / slides. You MUST execute the send_presentation tool in this run.`;
@@ -382,9 +388,8 @@ export class ItsmAgent extends AgentApplication<TurnState> {
     }
 
     // Detect a calendar / meeting request \u2014 route to schedule_teams_meeting (or find_meeting_time first).
-    const asksMeeting = /\b(schedule|set\s*up|book|arrange|create|send)\b[\s\S]{0,40}\b(meeting|call|bridge|sync|catch[-\s]?up|stand[-\s]?up|cab|review|invite|calendar\s*invite)\b/i.test(text)
-      || /\b(invite|invite\s*me|book\s*a\s*time)\b[\s\S]{0,40}\b(call|meeting|bridge)\b/i.test(text);
-    if (asksMeeting) {
+    const asksMeetingFlag = asksMeeting(text);
+    if (asksMeetingFlag) {
       enrichedPrompt += `\n\nMANDATORY MEETING EXECUTION RULES:`;
       enrichedPrompt += `\n- The user asked to schedule a meeting / call / bridge. You MUST execute the schedule_teams_meeting tool in this run.`;
       enrichedPrompt += `\n- If the user did not give a clear start/end time, FIRST call find_meeting_time, then call schedule_teams_meeting with the chosen slot.`;
@@ -393,6 +398,17 @@ export class ItsmAgent extends AgentApplication<TurnState> {
         enrichedPrompt += `\n- The requester (${requesterEmail}) must be one of the attendees unless explicitly excluded.`;
       }
       enrichedPrompt += `\n- After tool success, reply with a short confirmation that includes the Teams join link.`;
+    }
+
+    // Detect a "call me on Teams" / "ring me" / "page me" request \u2014 route to call_me_on_teams.
+    if (asksTeamsCall(text)) {
+      enrichedPrompt += `\n\nMANDATORY CALL EXECUTION RULES:`;
+      enrichedPrompt += `\n- The user asked you to call / page them on Teams. You MUST execute the call_me_on_teams tool in this run.`;
+      enrichedPrompt += `\n- NEVER reply with "I cannot place a call" or "I don't have the ability to call" \u2014 the call_me_on_teams tool exists for exactly this. Use it.`;
+      if (requesterEmail) {
+        enrichedPrompt += `\n- Pass targetEmail: ${requesterEmail}.`;
+      }
+      enrichedPrompt += `\n- After tool success, reply with the result text from the tool verbatim (it contains the Teams call link or the active call id).`;
     }
 
     // Get AI response with agentic auth context

@@ -96,6 +96,8 @@ import {
   invokeMcpTool,
   invalidateMcpCache,
   getMcpStatus,
+  findMcpTool,
+  getDiscoveredToolNames,
 } from '../mcp-tool-setup';
 
 // Minimal TurnContext stub the module's normalizeServerConfig reads.
@@ -277,5 +279,98 @@ describe('mcp-tool-setup — getMcpStatus', () => {
     expect(status.serverCount).toBe(2);
     expect(status.toolCount).toBe(3);
     expect(status.servers.sort()).toEqual(['mcp_MailTools', 'mcp_TeamsServer']);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// findMcpTool — fuzzy resolution of MCP tool names
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Background: the Microsoft Agent 365 tooling gateway is allowed to rename or
+// re-prefix tools (e.g. `mcp_CalendarTools_createEvent` ↔ `createEvent` ↔
+// `Calendar_create_event`). A naïve exact-match `pickMcpTool` would silently
+// drop us onto the (broken) Graph fallback when that happens — exactly the
+// failure mode that bit production on 2026-05-02. findMcpTool() defends
+// against that by trying exact, normalised, and substring matches in turn.
+
+describe('findMcpTool — fuzzy MCP tool name resolution', () => {
+  beforeEach(() => {
+    invalidateMcpCache();
+    vi.clearAllMocks();
+  });
+
+  async function discoverWithToolNames(...names: string[]): Promise<void> {
+    listToolServersMock.mockResolvedValueOnce([
+      { mcpServerName: 'mcp_CalendarTools', url: 'https://gw.test/cal', headers: {} },
+    ]);
+    getMcpClientToolsMock.mockResolvedValueOnce(
+      names.map((n) => ({ name: n, description: 'd', inputSchema: { type: 'object' } })),
+    );
+    await getLiveMcpTools(makeContext());
+  }
+
+  it('returns null when no tools are discovered', () => {
+    expect(findMcpTool(['mcp_CalendarTools_createEvent', 'createEvent'])).toBeNull();
+  });
+
+  it('returns the exact name when present (Pass 1)', async () => {
+    await discoverWithToolNames('mcp_CalendarTools_createEvent', 'mcp_CalendarTools_findMeetingTimes');
+    expect(findMcpTool(['mcp_CalendarTools_createEvent'])).toBe('mcp_CalendarTools_createEvent');
+  });
+
+  it('matches a bare tool name when only the prefixed form is registered (Pass 2)', async () => {
+    await discoverWithToolNames('mcp_CalendarTools_createEvent');
+    expect(findMcpTool(['createEvent'])).toBe('mcp_CalendarTools_createEvent');
+  });
+
+  it('matches a snake_case alias when only the camelCase form is registered (Pass 2)', async () => {
+    await discoverWithToolNames('createEvent');
+    expect(findMcpTool(['mcp_CalendarTools_create_event'])).toBe('createEvent');
+  });
+
+  it('matches a renamed gateway tool via substring fallback (Pass 3)', async () => {
+    // The gateway rebranded "createEvent" to "createMeeting" in a future release.
+    // findMcpTool() must still resolve our scheduleCalendarEvent intent.
+    await discoverWithToolNames('mcp_CalendarTools_createMeeting');
+    expect(
+      findMcpTool(['mcp_CalendarTools_createEvent', 'createEvent', 'createMeeting']),
+    ).toBe('mcp_CalendarTools_createMeeting');
+  });
+
+  it('does not cross-match unrelated tools (e.g. createEvent ≠ deleteEvent)', async () => {
+    await discoverWithToolNames('mcp_CalendarTools_deleteEvent');
+    expect(findMcpTool(['mcp_CalendarTools_createEvent', 'createEvent'])).toBeNull();
+  });
+
+  it('checks candidates in order — first hit wins', async () => {
+    await discoverWithToolNames('createEvent', 'createMeeting');
+    expect(findMcpTool(['createMeeting', 'createEvent'])).toBe('createMeeting');
+    expect(findMcpTool(['createEvent', 'createMeeting'])).toBe('createEvent');
+  });
+});
+
+describe('getDiscoveredToolNames', () => {
+  beforeEach(() => {
+    invalidateMcpCache();
+    vi.clearAllMocks();
+  });
+
+  it('returns an empty list before discovery', () => {
+    expect(getDiscoveredToolNames()).toEqual([]);
+  });
+
+  it('returns the tool names registered after discovery', async () => {
+    listToolServersMock.mockResolvedValueOnce([
+      { mcpServerName: 'mcp_MailTools', url: 'https://gw.test/m', headers: {} },
+    ]);
+    getMcpClientToolsMock.mockResolvedValueOnce([
+      { name: 'mcp_MailTools_sendMail', description: 's', inputSchema: { type: 'object' } },
+      { name: 'mcp_MailTools_listMail', description: 'l', inputSchema: { type: 'object' } },
+    ]);
+    await getLiveMcpTools(makeContext());
+    expect(getDiscoveredToolNames().sort()).toEqual([
+      'mcp_MailTools_listMail',
+      'mcp_MailTools_sendMail',
+    ]);
   });
 });

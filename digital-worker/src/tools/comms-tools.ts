@@ -25,6 +25,7 @@ import {
   createPlannerTask,
   updatePlannerTask,
 } from '../m365-tools';
+import { initiateOutboundTeamsCall, isAcsConfigured } from '../voice/acsBridge';
 import type { WorkerRunContext } from '../agent-harness';
 
 const mcp = new ItsmMcpClient();
@@ -400,6 +401,87 @@ export const commsTools = [
       } catch (err) {
         return `Find meeting times failed: ${(err as Error).message}`;
       }
+    },
+  }),
+
+  // ── Voice / Teams calling ──
+  tool({
+    name: 'call_me_on_teams',
+    description:
+      'Place a Microsoft Teams audio call to the requester (or the named user). Use whenever the user says "call me", "call me on Teams", "ring me", "page me on Teams", or "phone me". Two delivery paths: (1) when Azure Communication Services is configured AND the target Entra Object ID is known, Alex rings the user\'s Teams client directly; (2) otherwise returns a Teams click-to-call deep link the user can tap. NEVER reply with "I cannot place a call" — always invoke this tool.',
+    parameters: z.object({
+      targetEmail: z
+        .string()
+        .optional()
+        .describe('Optional UPN/email of the person to call. Defaults to the requester.'),
+      targetTeamsOid: z
+        .string()
+        .optional()
+        .describe('Optional Entra Object ID of the target. Required for ACS outbound; not needed for click-to-call.'),
+      reason: z
+        .string()
+        .optional()
+        .describe('Short reason shown in the call invite. Defaults to a generic "Alex needs you" line.'),
+    }),
+    execute: async ({ targetEmail, targetTeamsOid, reason }, runContext) => {
+      const tc = getTurnContext(runContext as RunContext<WorkerRunContext>);
+      const requesterEmail = (runContext as RunContext<WorkerRunContext> | undefined)?.context?.requesterEmail;
+      const callee = targetEmail || requesterEmail || process.env.MANAGER_EMAIL || '';
+      const callReason = reason || 'Alex needs you on a quick call.';
+      const oid = targetTeamsOid || process.env.MANAGER_TEAMS_OID || '';
+
+      // Path 1 — ACS outbound Teams call (Alex actually rings the user).
+      if (isAcsConfigured() && oid) {
+        try {
+          const result = await initiateOutboundTeamsCall({
+            teamsUserAadOid: oid,
+            requestedBy: callee || undefined,
+            reason: callReason,
+          });
+          return [
+            `📞 Calling ${callee || oid} on Teams now (call id ${result.callConnectionId.slice(0, 8)}).`,
+            'Answer the incoming Teams call from Alex — IT Operations Manager.',
+          ].join('\n');
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          // Fall through to click-to-call link.
+          console.warn(`[call_me_on_teams] ACS path failed, returning deep link: ${msg}`);
+        }
+      }
+
+      // Path 2 — Teams click-to-call deep link.
+      const alexUpn = process.env.ALEX_TEAMS_UPN || process.env.GRAPH_MAIL_SENDER || '';
+      if (!alexUpn) {
+        return 'Cannot start a Teams call — neither ACS nor ALEX_TEAMS_UPN is configured. Configure ACS_CONNECTION_STRING + MANAGER_TEAMS_OID, or set ALEX_TEAMS_UPN to enable the click-to-call link.';
+      }
+      const teamsCallUrl = `https://teams.microsoft.com/l/call/0/0?users=${encodeURIComponent(alexUpn)}&withVideo=false&source=alex-itops-tool`;
+
+      // Best-effort: post the link to the user via Teams chat / email when we have a session.
+      if (tc && callee) {
+        try {
+          await sendTeamsMessage(
+            {
+              target: callee,
+              subject: '📞 Call Alex on Teams',
+              message: `Hi — tap the link to call Alex IT Ops on Teams now.\n\n${teamsCallUrl}\n\nReason: ${callReason}`,
+              surface: 'chat',
+              isHtml: false,
+            },
+            tc,
+          );
+        } catch {
+          /* non-fatal */
+        }
+      }
+
+      return [
+        `📞 Tap to call Alex on Teams: ${teamsCallUrl}`,
+        callee ? `(I also messaged ${callee} on Teams with the link.)` : '',
+        '',
+        'Click the link from your phone or desktop Teams client to start the audio call.',
+      ]
+        .filter(Boolean)
+        .join('\n');
     },
   }),
 

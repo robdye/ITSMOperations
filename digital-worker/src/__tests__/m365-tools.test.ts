@@ -19,7 +19,9 @@ import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 const {
   getLiveMcpToolsMock,
   hasMcpToolServerMock,
+  findMcpToolMock,
   invokeMcpToolMock,
+  getDiscoveredToolNamesMock,
   sendEmailAdvancedMock,
   postToChannelMock,
   createCalendarEventMock,
@@ -31,7 +33,11 @@ const {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   hasMcpToolServerMock: vi.fn(() => false) as ReturnType<typeof vi.fn> & any,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  findMcpToolMock: vi.fn(() => null) as ReturnType<typeof vi.fn> & any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   invokeMcpToolMock: vi.fn() as ReturnType<typeof vi.fn> & any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getDiscoveredToolNamesMock: vi.fn(() => [] as string[]) as ReturnType<typeof vi.fn> & any,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sendEmailAdvancedMock: vi.fn() as ReturnType<typeof vi.fn> & any,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -45,7 +51,9 @@ const {
 vi.mock('../mcp-tool-setup', () => ({
   getLiveMcpTools: getLiveMcpToolsMock,
   hasMcpToolServer: hasMcpToolServerMock,
+  findMcpTool: findMcpToolMock,
   invokeMcpTool: invokeMcpToolMock,
+  getDiscoveredToolNames: getDiscoveredToolNamesMock,
 }));
 
 vi.mock('../email-service', () => ({
@@ -87,6 +95,17 @@ const fakeContext = {
 beforeEach(() => {
   vi.clearAllMocks();
   hasMcpToolServerMock.mockReturnValue(false);
+  // Bridge the legacy hasMcpToolServerMock-driven tests to the new findMcpTool
+  // contract: findMcpTool returns the first candidate that hasMcpToolServer says
+  // it has. Tests can still override findMcpToolMock directly when they want to
+  // exercise the fuzzy-match path.
+  findMcpToolMock.mockImplementation((candidates: string[]) => {
+    for (const name of candidates) {
+      if (hasMcpToolServerMock(name)) return name;
+    }
+    return null;
+  });
+  getDiscoveredToolNamesMock.mockReturnValue([]);
   // Default: no MCP available; each test opts in by calling
   // hasMcpToolServerMock.mockReturnValueOnce(true) etc.
 });
@@ -111,32 +130,35 @@ describe('sendEmail', () => {
     expect(sendEmailAdvancedMock).not.toHaveBeenCalled();
   });
 
-  it('falls back to Graph when no MCP tool is discovered (source=graph)', async () => {
+  it('returns source=unavailable when no MCP tool is discovered (Cassidy-strict, no Graph fallback for turn)', async () => {
     hasMcpToolServerMock.mockReturnValue(false);
-    sendEmailAdvancedMock.mockResolvedValueOnce({ success: true, messageId: 'graph-msg-1' });
 
     const result = await sendEmail(
       { to: 'a@b.com', subject: 'S', body: 'B' },
       fakeContext,
     );
 
-    expect(result).toEqual({ success: true, messageId: 'graph-msg-1', source: 'graph' });
-    expect(sendEmailAdvancedMock).toHaveBeenCalledTimes(1);
+    expect(result.source).toBe('unavailable');
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/MCP MailTools unavailable/i);
+    // CRITICAL: Graph app-only must NOT have been called for a user turn
+    // (it would 403 in production). The user gets a clear MCP-down error.
+    expect(sendEmailAdvancedMock).not.toHaveBeenCalled();
   });
 
-  it('falls back to Graph when MCP throws (source=graph)', async () => {
+  it('returns source=unavailable when MCP throws (Cassidy-strict, no Graph fallback for turn)', async () => {
     hasMcpToolServerMock.mockImplementation((n: string) => n === 'mcp_MailTools_sendMail');
     invokeMcpToolMock.mockRejectedValueOnce(new Error('boom'));
-    sendEmailAdvancedMock.mockResolvedValueOnce({ success: true, messageId: 'graph-msg-2' });
 
     const result = await sendEmail(
       { to: 'a@b.com', subject: 'S', body: 'B' },
       fakeContext,
     );
 
-    expect(result.source).toBe('graph');
-    expect(result.success).toBe(true);
-    expect(sendEmailAdvancedMock).toHaveBeenCalledTimes(1);
+    expect(result.source).toBe('unavailable');
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/MCP MailTools.sendMail failed.*boom/);
+    expect(sendEmailAdvancedMock).not.toHaveBeenCalled();
   });
 
   it('autonomous path (no context) skips MCP and goes straight to Graph', async () => {
@@ -269,23 +291,31 @@ describe('scheduleCalendarEvent', () => {
     expect(createCalendarEventMock).not.toHaveBeenCalled();
   });
 
-  it('falls back to Graph when MCP fails (source=graph)', async () => {
+  it('returns source=unavailable when MCP throws on a turn request (Cassidy-strict, no Graph fallback)', async () => {
     hasMcpToolServerMock.mockImplementation(
       (n: string) => n === 'mcp_CalendarTools_createEvent',
     );
     invokeMcpToolMock.mockRejectedValueOnce(new Error('mcp down'));
-    createCalendarEventMock.mockResolvedValueOnce({
-      success: true,
-      id: 'g-evt-1',
-      joinUrl: 'https://graph/join',
-      webLink: 'https://graph/web',
-    });
 
     const result = await scheduleCalendarEvent(baseParams, fakeContext);
 
-    expect(result.source).toBe('graph');
-    expect(result.eventId).toBe('g-evt-1');
-    expect(createCalendarEventMock).toHaveBeenCalledTimes(1);
+    expect(result.source).toBe('unavailable');
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/MCP CalendarTools\.createEvent failed.*mcp down/);
+    // CRITICAL: Graph app-only must NOT have been called for a user turn
+    // (this is exactly the path that 403'd on /users/alexitops/events).
+    expect(createCalendarEventMock).not.toHaveBeenCalled();
+  });
+
+  it('returns source=unavailable when no MCP calendar tool is discovered on a turn', async () => {
+    hasMcpToolServerMock.mockReturnValue(false);
+
+    const result = await scheduleCalendarEvent(baseParams, fakeContext);
+
+    expect(result.source).toBe('unavailable');
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/MCP CalendarTools unavailable/i);
+    expect(createCalendarEventMock).not.toHaveBeenCalled();
   });
 
   it('autonomous path goes straight to Graph', async () => {
@@ -300,6 +330,44 @@ describe('scheduleCalendarEvent', () => {
     expect(result.source).toBe('graph');
     expect(result.eventId).toBe('g-evt-2');
     expect(invokeMcpToolMock).not.toHaveBeenCalled();
+  });
+
+  // Regression: 2026-05-02 production bug. The gateway returned the calendar
+  // tool under a non-canonical name and the wrapper silently fell through to
+  // the Graph fallback (which then 403'd). With findMcpTool's fuzzy match,
+  // ANY recognisable variant of the calendar tool must be picked up.
+  it.each([
+    'mcp_CalendarServer_createEvent',
+    'mcp_Calendar_createEvent',
+    'createEvent',
+    'createCalendarEvent',
+    'createMeeting',
+    'scheduleMeeting',
+    'mcp_CalendarTools_create_event',
+  ])('uses MCP path when gateway exposes the calendar tool as "%s"', async (gatewayName) => {
+    // Simulate the gateway publishing the tool under a non-canonical name.
+    findMcpToolMock.mockImplementation((candidates: string[]) =>
+      candidates.includes(gatewayName) ? gatewayName : null,
+    );
+    invokeMcpToolMock.mockResolvedValueOnce({
+      eventId: 'evt-fuzzy',
+      joinUrl: 'https://teams/join-fuzzy',
+    });
+
+    const result = await scheduleCalendarEvent(
+      {
+        title: 'CAB Review',
+        attendees: ['user@contoso.com'],
+        startDateTime: '2026-05-04T14:00:00',
+        endDateTime: '2026-05-04T15:00:00',
+      },
+      fakeContext,
+    );
+
+    expect(result.source).toBe('mcp');
+    expect(result.eventId).toBe('evt-fuzzy');
+    // CRITICAL: must NOT have hit the Graph fallback (which 403's in prod).
+    expect(createCalendarEventMock).not.toHaveBeenCalled();
   });
 });
 
@@ -500,5 +568,104 @@ describe('updatePlannerTask', () => {
 
     expect(result.success).toBe(false);
     expect(result.source).toBe('unavailable');
+  });
+});
+
+// ─── Cassidy-strict policy: turn requests NEVER fall back to Graph ──────────
+//
+// Locks down the architectural decision: when a user is in a Teams session and
+// MCP is unavailable, we surface a clear error rather than silently calling
+// Graph app-only (which 403'd in production on /users/alexitops/events).
+
+describe('Cassidy-strict policy — turn requests never silently fall back to Graph', () => {
+  it('sendTeamsMessage chat: returns unavailable when MCP missing on a turn', async () => {
+    hasMcpToolServerMock.mockReturnValue(false);
+
+    const result = await sendTeamsMessage(
+      { target: 'chat-x', message: 'hi', surface: 'chat' },
+      fakeContext,
+    );
+
+    expect(result.source).toBe('unavailable');
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/MCP TeamsServer chat tool unavailable/i);
+    expect(postToChannelMock).not.toHaveBeenCalled();
+  });
+
+  it('sendTeamsMessage chat: returns unavailable when MCP throws on a turn', async () => {
+    hasMcpToolServerMock.mockImplementation(
+      (n: string) => n === 'mcp_TeamsServer_sendChatMessage',
+    );
+    invokeMcpToolMock.mockRejectedValueOnce(new Error('chat broken'));
+
+    const result = await sendTeamsMessage(
+      { target: 'chat-x', message: 'hi', surface: 'chat' },
+      fakeContext,
+    );
+
+    expect(result.source).toBe('unavailable');
+    expect(result.error).toMatch(/MCP TeamsServer\.sendChatMessage failed.*chat broken/);
+  });
+
+  it('findMeetingTimes: returns unavailable when MCP throws on a turn', async () => {
+    hasMcpToolServerMock.mockImplementation(
+      (n: string) => n === 'mcp_CalendarTools_findMeetingTimes',
+    );
+    invokeMcpToolMock.mockRejectedValueOnce(new Error('cal down'));
+
+    const result = await findMeetingTimes({ attendees: ['a@b.com'] }, fakeContext);
+
+    expect(result.source).toBe('unavailable');
+    expect(result.success).toBe(false);
+    expect(result.suggestions).toEqual([]);
+    expect(result.error).toMatch(/MCP CalendarTools\.findMeetingTimes failed.*cal down/);
+    expect(findMeetingTimesGraphMock).not.toHaveBeenCalled();
+  });
+
+  it('findMeetingTimes: returns unavailable when no MCP tool discovered on a turn', async () => {
+    hasMcpToolServerMock.mockReturnValue(false);
+
+    const result = await findMeetingTimes({ attendees: ['a@b.com'] }, fakeContext);
+
+    expect(result.source).toBe('unavailable');
+    expect(result.error).toMatch(/MCP CalendarTools\.findMeetingTimes unavailable/i);
+    expect(findMeetingTimesGraphMock).not.toHaveBeenCalled();
+  });
+
+  it('findUser: returns unavailable when MCP throws on a turn', async () => {
+    hasMcpToolServerMock.mockImplementation(
+      (n: string) => n === 'mcp_PeopleTools_searchUsers',
+    );
+    invokeMcpToolMock.mockRejectedValueOnce(new Error('graph denied'));
+
+    const result = await findUser({ query: 'sarah' }, fakeContext);
+
+    expect(result.source).toBe('unavailable');
+    expect(result.success).toBe(false);
+    expect(result.users).toEqual([]);
+    expect(result.error).toMatch(/MCP PeopleTools\.searchUsers failed.*graph denied/);
+  });
+
+  it('findUser: returns unavailable when no MCP tool discovered on a turn', async () => {
+    hasMcpToolServerMock.mockReturnValue(false);
+
+    const result = await findUser({ query: 'sarah' }, fakeContext);
+
+    expect(result.source).toBe('unavailable');
+    expect(result.error).toMatch(/MCP PeopleTools unavailable/i);
+  });
+
+  it('autonomous calls (no TurnContext) STILL use Graph fallback (sanity)', async () => {
+    // This is the contract for option A — only turn requests go strict.
+    sendEmailAdvancedMock.mockResolvedValueOnce({ success: true, messageId: 'g-1' });
+    const r1 = await sendEmail({ to: 'a@b.com', subject: 'S', body: 'B' });
+    expect(r1.source).toBe('graph');
+
+    findMeetingTimesGraphMock.mockResolvedValueOnce({
+      success: true,
+      suggestions: [{ start: 'A', end: 'B' }],
+    });
+    const r2 = await findMeetingTimes({ attendees: ['a@b.com'] });
+    expect(r2.source).toBe('graph');
   });
 });

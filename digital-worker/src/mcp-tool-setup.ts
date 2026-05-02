@@ -326,6 +326,58 @@ export function hasMcpToolServer(toolName: string): boolean {
 }
 
 /**
+ * Read-only snapshot of every tool name discovered in the current cache.
+ * Intended for diagnostics and the fuzzy `findMcpTool` helper below.
+ */
+export function getDiscoveredToolNames(): string[] {
+  return Array.from(_toolServerMap.keys());
+}
+
+/**
+ * Normalise a tool name for fuzzy matching: lowercase, strip the
+ * `mcp_*Tools_` / `mcp_*Server_` prefix, drop underscores. So
+ *   `mcp_CalendarTools_createEvent`
+ *   `Calendar_create_event`
+ *   `createEvent`
+ * all collapse to `createevent`.
+ */
+function normaliseToolName(name: string): string {
+  return name
+    .replace(/^mcp_[A-Za-z]+(Tools|Server)_/i, '')
+    .replace(/^mcp_/i, '')
+    .replace(/_/g, '')
+    .toLowerCase();
+}
+
+/**
+ * Find the first discovered MCP tool that matches one of the supplied
+ * candidate names. Tries exact match first, then falls back to
+ * normalised-name matching so the tooling gateway can rename / re-prefix
+ * tools without breaking the wrappers.
+ */
+export function findMcpTool(candidates: string[]): string | null {
+  // Pass 1 — exact match (preserves prior behaviour).
+  for (const name of candidates) {
+    if (_toolServerMap.has(name)) return name;
+  }
+  if (_toolServerMap.size === 0) return null;
+
+  // Pass 2 — fuzzy match by normalised suffix.
+  const wanted = candidates.map(normaliseToolName);
+  for (const discovered of _toolServerMap.keys()) {
+    const norm = normaliseToolName(discovered);
+    if (wanted.includes(norm)) return discovered;
+  }
+
+  // Pass 3 — substring match (last resort, for "createMeeting"/"createEvent" drift).
+  for (const discovered of _toolServerMap.keys()) {
+    const norm = normaliseToolName(discovered);
+    if (wanted.some(w => norm.includes(w) || w.includes(norm))) return discovered;
+  }
+  return null;
+}
+
+/**
  * Invoke an MCP tool via StreamableHTTP. Caller must have called
  * getLiveMcpTools(context) first in the same process so the server map is
  * populated.
