@@ -248,7 +248,7 @@ export const agentTools = [
     execute: async ({ product, version }) => stringify(await mcp.checkEolStatus(product, version)),
   }),
 
-  // ── Communication (Cassidy-style: MCP-first, Graph fallback) ──
+  // ── Communication (MCP-first, Graph fallback) ──
   tool({
     name: 'send_email',
     description:

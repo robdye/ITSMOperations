@@ -3,9 +3,9 @@
 // Builds a force-graph-compatible JSON view of Alex's current anticipatory
 // state — workers, recent signals, foresight forecasts, recent outcomes,
 // and the inferred CMDB CI relationships from monitoring evidence. This is
-// the ITSM equivalent of Cassidy's "Agent Mind" knowledge graph. Customers
-// can see Alex thinking: which workers are firing, which signals connect
-// to which forecasts, and which outcomes link back to which workflows.
+// Alex's "Agent Mind" knowledge graph. Customers can see Alex thinking:
+// which workers are firing, which signals connect to which forecasts, and
+// which outcomes link back to which workflows.
 //
 // Output shape (consumed by force-graph in Mission Control):
 //   {

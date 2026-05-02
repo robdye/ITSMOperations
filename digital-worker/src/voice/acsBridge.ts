@@ -1,9 +1,8 @@
 // ITSM Operations Digital Worker — ACS Call Automation <-> Foundry Realtime audio bridge
 //
-// Pattern ported from Cassidy (cassidy/src/voice/acsBridge.ts). Lets Alex
-// place a real outbound voice call to a Microsoft Teams user (by AAD object
-// id) and have a real-time conversation — same UX as Cassidy's "page me"
-// briefing, no browser tab, no Teams deep-link click required.
+// Lets Alex place a real outbound voice call to a Microsoft Teams user (by
+// AAD object id) and have a real-time conversation — the "page me" briefing
+// UX, no browser tab, no Teams deep-link click required.
 //
 // Flow:
 //   1. /api/voice/page-me POSTs -> initiateOutboundTeamsCall(aadOid)
@@ -54,8 +53,8 @@ const PUBLIC_HOSTNAME =
 const VOICELIVE_ENDPOINT = process.env.VOICELIVE_ENDPOINT || '';
 const VOICELIVE_MODEL = process.env.VOICELIVE_MODEL || 'gpt-realtime';
 
-// Match Cassidy's preview API + session shape — known to work end-to-end with
-// ACS bidirectional media streaming. ITSMOperations browser /voice path uses
+// Use the preview API + session shape known to work end-to-end with ACS
+// bidirectional media streaming. The ITSMOperations browser /voice path uses
 // the GA shape; we keep them on different paths.
 const REALTIME_API_VERSION = '2025-04-01-preview';
 

@@ -8,8 +8,7 @@
 // completed=true but did not actually restore service is now correctly
 // graded `partial` or `failure`).
 //
-// Cassidy parity: Cassidy uses LLM-as-judge per artefact. For ITSM the
-// dimensions are:
+// Uses LLM-as-judge per artefact. For ITSM the dimensions are:
 //   - serviceRestored:  was the asserted outcome actually achieved?
 //   - rootCauseClear:   was a probable cause identified?
 //   - communicationDone: were stakeholders informed?

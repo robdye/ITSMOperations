@@ -1,7 +1,6 @@
-// Test suite for src/mcp-tool-setup.ts (Cassidy-pattern Agent 365 MCP layer).
+// Test suite for src/mcp-tool-setup.ts (Agent 365 MCP layer, MCP-first pattern).
 //
-// Modelled after Cassidy's `cassidy/src/tools/mcpToolSetup.test.ts` — we mock
-// every external SDK dependency (tooling gateway, runtime auth, MCP transport)
+// We mock every external SDK dependency (tooling gateway, runtime auth, MCP transport)
 // before importing the module so the unit tests run with zero network IO.
 //
 // We focus on the public contract:

@@ -1,9 +1,8 @@
-// ITSM Operations — Agent 365 MCP Tool Setup (Cassidy-pattern port)
+// ITSM Operations — Agent 365 MCP Tool Setup (MCP-first pattern)
 //
 // Discovers the live MCP tool catalogue from the Microsoft Agent 365 tooling
 // gateway via OBO (delegated user token), then invokes individual tools using
-// the StreamableHTTP transport. Mirrors Cassidy's mcpToolSetup.ts:
-//   https://github.com/ITSpecialist111/Cassidy-Enterprise-Operations-Manager
+// the StreamableHTTP transport.
 //
 // Key auth details (matching ITSMOps blueprint registration):
 //   - Agent blueprint:     871592dc-ffa9-42d0-aa31-46a679817d26
@@ -157,7 +156,7 @@ async function getAuthorization(): Promise<unknown> {
 }
 
 /**
- * OBO token exchange + tooling header construction (Cassidy parity).
+ * OBO token exchange + tooling header construction.
  */
 async function getOboToolHeaders(
   context: TurnContext,

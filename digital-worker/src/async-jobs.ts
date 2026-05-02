@@ -6,16 +6,15 @@
 // that long. This module provides a small, in-memory job ledger so callers
 // can fire-and-forget a workflow and poll for status with /api/jobs/:id.
 //
-// Cassidy parity: Cassidy ships an async job runner with TTL + 200-job cap
-// so its CorpGen workdays can run beyond the App Service response window.
-// For ITSM the same pattern applies.
+// An async job runner with TTL + capacity cap lets long-running ITSM
+// workflows continue past the Container Apps response window.
 //
 // Design:
 //   - Each job has id, kind, status, createdAt, completedAt?, output?, error?
 //   - Jobs older than `JOB_TTL_MS` are purged on each access (lazy GC).
 //   - Capacity capped at MAX_JOBS — oldest evicted FIFO.
-//   - In-memory only (matches Cassidy's pattern). Persistence is unnecessary
-//     because jobs are short-lived by design and clients re-issue on restart.
+//   - In-memory only. Persistence is unnecessary because jobs are short-lived
+//     by design and clients re-issue on restart.
 
 import crypto from 'crypto';
 

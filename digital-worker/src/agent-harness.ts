@@ -195,7 +195,8 @@ export async function runWorker(
   }
 
   // Build the run-time context the tool layer reads via `runContext.context`.
-  // Cassidy threads TurnContext into MCP OBO; we mirror that pattern.
+  // The MCP-first pattern threads TurnContext into MCP OBO so the agent can
+  // act as the signed-in user when a turn is active.
   const workerContext: WorkerRunContext = {
     turnContext: ctx?.turnContext,
     displayName: ctx?.displayName,

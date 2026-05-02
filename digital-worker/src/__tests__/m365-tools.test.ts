@@ -1,4 +1,4 @@
-// Test suite for src/m365-tools.ts (Cassidy-pattern static M365 wrappers).
+// Test suite for src/m365-tools.ts (MCP-first static M365 wrappers).
 //
 // Each wrapper has two paths:
 //   1) MCP path — when a TurnContext is supplied AND a matching MCP tool is
@@ -130,7 +130,7 @@ describe('sendEmail', () => {
     expect(sendEmailAdvancedMock).not.toHaveBeenCalled();
   });
 
-  it('returns source=unavailable when no MCP tool is discovered (Cassidy-strict, no Graph fallback for turn)', async () => {
+  it('returns source=unavailable when no MCP tool is discovered (MCP-first strict, no Graph fallback for turn)', async () => {
     hasMcpToolServerMock.mockReturnValue(false);
 
     const result = await sendEmail(
@@ -146,7 +146,7 @@ describe('sendEmail', () => {
     expect(sendEmailAdvancedMock).not.toHaveBeenCalled();
   });
 
-  it('returns source=unavailable when MCP throws (Cassidy-strict, no Graph fallback for turn)', async () => {
+  it('returns source=unavailable when MCP throws (MCP-first strict, no Graph fallback for turn)', async () => {
     hasMcpToolServerMock.mockImplementation((n: string) => n === 'mcp_MailTools_sendMail');
     invokeMcpToolMock.mockRejectedValueOnce(new Error('boom'));
 
@@ -291,7 +291,7 @@ describe('scheduleCalendarEvent', () => {
     expect(createCalendarEventMock).not.toHaveBeenCalled();
   });
 
-  it('returns source=unavailable when MCP throws on a turn request (Cassidy-strict, no Graph fallback)', async () => {
+  it('returns source=unavailable when MCP throws on a turn request (MCP-first strict, no Graph fallback)', async () => {
     hasMcpToolServerMock.mockImplementation(
       (n: string) => n === 'mcp_CalendarTools_createEvent',
     );
@@ -571,13 +571,13 @@ describe('updatePlannerTask', () => {
   });
 });
 
-// ─── Cassidy-strict policy: turn requests NEVER fall back to Graph ──────────
+// ─── MCP-first strict policy: turn requests NEVER fall back to Graph ───────
 //
 // Locks down the architectural decision: when a user is in a Teams session and
 // MCP is unavailable, we surface a clear error rather than silently calling
 // Graph app-only (which 403'd in production on /users/alexitops/events).
 
-describe('Cassidy-strict policy — turn requests never silently fall back to Graph', () => {
+describe('MCP-first strict policy — turn requests never silently fall back to Graph', () => {
   it('sendTeamsMessage chat: returns unavailable when MCP missing on a turn', async () => {
     hasMcpToolServerMock.mockReturnValue(false);
 

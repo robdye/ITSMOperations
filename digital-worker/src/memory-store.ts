@@ -1,5 +1,5 @@
 // ITSM Operations — Durable Memory Store
-// Tiered memory using Azure Table Storage (Cassidy pattern):
+// Tiered memory using Azure Table Storage:
 // - Short-term: Per-conversation context (last 10 messages)
 // - Medium-term: Per-user session state (active tickets, preferences)
 // - Long-term: Cross-session knowledge (patterns, decisions, escalations)

@@ -1,6 +1,6 @@
-// ITSM Operations — Static M365 wrappers (Cassidy-pattern port)
+// ITSM Operations — Static M365 wrappers (MCP-first / Graph-fallback)
 //
-// Each wrapper follows Cassidy's two-path design:
+// Each wrapper has a two-path design:
 //   1. If a TurnContext is available, prefer the live MCP server via OBO.
 //   2. Otherwise (autonomous / cron / signal-router paths), fall back to
 //      direct Microsoft Graph using the GRAPH_APP app-only credential.
@@ -9,9 +9,6 @@
 // context, and still operate autonomously the rest of the time. The shape of
 // the tool result is stable across both paths so the LLM never has to
 // branch on transport.
-//
-// Reference (Cassidy):
-//   https://github.com/ITSpecialist111/Cassidy-Enterprise-Operations-Manager/blob/master/cassidy/src/tools/mcpToolSetup.ts
 
 import type { TurnContext } from '@microsoft/agents-hosting';
 import {
@@ -25,20 +22,19 @@ import { postToChannel } from './teams-channel';
 import { AutonomousActions, type CalendarAttendee } from './autonomous-actions';
 
 // ---------------------------------------------------------------------------
-// Result types (Cassidy parity)
+// Result types
 // ---------------------------------------------------------------------------
 
-// ── Cassidy-strict result-source contract ─────────────────────────────────
+// ── MCP-first strict result-source contract ───────────────────────────────
 //   'mcp'            → MCP tool succeeded (preferred path).
 //   'graph' / 'graph-webhook' → Autonomous (no TurnContext) Graph fallback.
 //   'unavailable'    → Turn request but MCP missing/failed; we DO NOT silently
 //                      fall back to Graph for user turns because (a) Graph
 //                      app-only acts as a service principal which lacks Application
 //                      Access Policies for most user mailboxes (resulting in 403)
-//                      and (b) it hides MCP outages from the user. Per the
-//                      Cassidy pattern (cassidy/src/tools/mcpToolSetup.ts), the
-//                      LLM gets a clear "unavailable — cannot do X without an
-//                      active user session" message instead.
+//                      and (b) it hides MCP outages from the user. The LLM gets
+//                      a clear "unavailable — cannot do X without an active user
+//                      session" message instead.
 
 export interface EmailResult {
   success: boolean;
@@ -138,7 +134,7 @@ export async function sendEmail(
   },
   context?: TurnContext,
 ): Promise<EmailResult> {
-  // ── MCP path (Cassidy-strict for turn requests) ──
+  // \u2500\u2500 MCP path (MCP-first strict for turn requests) \u2500\u2500
   if (context) {
     await ensureMcpDiscovered(context);
     const toolName = pickMcpTool([
@@ -217,7 +213,7 @@ export async function sendTeamsMessage(
   },
   context?: TurnContext,
 ): Promise<TeamsMessageResult> {
-  // ── MCP path (Cassidy-strict for turn requests) ──
+  // \u2500\u2500 MCP path (MCP-first strict for turn requests) \u2500\u2500
   if (context) {
     await ensureMcpDiscovered(context);
     const surface = params.surface ?? 'channel';
@@ -315,7 +311,7 @@ export async function scheduleCalendarEvent(
   },
   context?: TurnContext,
 ): Promise<CalendarEventResult> {
-  // ── MCP path (Cassidy-strict for turn requests) ──
+  // \u2500\u2500 MCP path (MCP-first strict for turn requests) \u2500\u2500
   if (context) {
     await ensureMcpDiscovered(context);
     const toolName = pickMcpTool([
@@ -415,7 +411,7 @@ export async function findMeetingTimes(
   },
   context?: TurnContext,
 ): Promise<FindMeetingTimesResult> {
-  // ── MCP path (Cassidy-strict for turn requests) ──
+  // \u2500\u2500 MCP path (MCP-first strict for turn requests) \u2500\u2500
   if (context) {
     await ensureMcpDiscovered(context);
     const toolName = pickMcpTool([
@@ -522,7 +518,7 @@ export async function findUser(
   params: { query: string },
   context?: TurnContext,
 ): Promise<FindUserResult> {
-  // ── MCP path (Cassidy-strict for turn requests) ──
+  // \u2500\u2500 MCP path (MCP-first strict for turn requests) \u2500\u2500
   if (context) {
     await ensureMcpDiscovered(context);
     const toolName = pickMcpTool([

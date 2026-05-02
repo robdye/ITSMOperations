@@ -5,7 +5,7 @@
 //
 // Each external action prefers the live Microsoft Agent 365 MCP server when a
 // user TurnContext is present, and falls back to direct Microsoft Graph for
-// autonomous (cron/signal) paths. This mirrors Cassidy's pattern.
+// autonomous (cron/signal) paths.
 //
 // Side effects: send_email, send_teams_chat, post_to_channel,
 //               schedule_teams_meeting, send_presentation,

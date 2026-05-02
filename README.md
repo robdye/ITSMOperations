@@ -28,7 +28,7 @@ The system follows **ITIL 4** practice boundaries, applies **NIST 800-53** contr
 
 ### Live deployment
 
-A reference instance runs in Azure Container Apps with the latest revision, image tag `cassidy-mcp-migration-20260501`, on the Cassidy MCP-first contract. **216 unit tests** across **28 files** pass against every commit (run in ~5 s). All infrastructure is reproducible via Bicep.
+A reference instance runs in Azure Container Apps with the latest commit-pinned image tag, on the MCP-first / Graph-fallback contract. **216 unit tests** across **28 files** pass against every commit (run in ~5 s). All infrastructure is reproducible via Bicep.
 
 ---
 
@@ -369,7 +369,7 @@ ITSMOperations/
 │   │   │   └── connected-agents.ts          # A2A protocol (Agent-to-Agent discovery + messaging)
 │   │   │
 │   │   ├── [Cross-Cutting]
-│   │   │   ├── mcp-tool-setup.ts            # Cassidy-pattern MCP discovery + invokeMcpTool (OBO)
+│   │   │   ├── mcp-tool-setup.ts            # Agent 365 MCP discovery + invokeMcpTool (OBO)
 │   │   │   ├── m365-tools.ts                # 7 static M365 wrappers (MCP-first → Graph fallback)
 │   │   │   ├── mcp-client.ts                # Legacy MCP client for ServiceNow MCP Server
 │   │   │   ├── memory-store.ts              # Tiered memory persistence (Redis → Cosmos → in-memory)
@@ -452,7 +452,7 @@ ITSMOperations/
 │   │       ├── __tests__/governance.test.ts               # Kill / freeze / release switches
 │   │       ├── __tests__/hitl.test.ts
 │   │       ├── __tests__/m365-tools.test.ts               # MCP-first wrappers + Graph fallback (23)
-│   │       ├── __tests__/mcp-tool-setup.test.ts           # Cassidy MCP discovery + invokeMcpTool (11)
+│   │       ├── __tests__/mcp-tool-setup.test.ts           # Agent 365 MCP discovery + invokeMcpTool (11)
 │   │       ├── __tests__/openai-config.test.ts
 │   │       ├── __tests__/outcome-verifier.test.ts         # Post-action success grading
 │   │       ├── __tests__/reasoning-trace.test.ts
@@ -652,7 +652,7 @@ The same diagram describes the autonomous path — only steps 1–3 differ (the 
 
 ---
 
-## Cassidy MCP-first / Graph-fallback pattern
+## MCP-first / Graph-fallback pattern
 
 Every Microsoft 365 side effect (mail, Teams chat/channel, calendar, Planner, people lookup) goes through one static wrapper in `m365-tools.ts`. The wrapper picks a path based on what's available *right now*:
 

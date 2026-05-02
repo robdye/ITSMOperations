@@ -1,11 +1,10 @@
 // ITSM Operations — Experiential Memory (Phase 9.4)
 //
-// "Have I seen this incident pattern before?" — Cassidy parity (cosine on
-// embeddings) adapted for the ITSM domain. ITSM signals are structured
-// (type / severity / asset / tags / payload keys), so we use Jaccard
-// similarity over a normalised token set. This is deterministic, fast,
-// dependency-free, and a much better fit than embeddings for short
-// templated incident messages.
+// "Have I seen this incident pattern before?" — adapted for the ITSM domain.
+// ITSM signals are structured (type / severity / asset / tags / payload keys),
+// so we use Jaccard similarity over a normalised token set. This is
+// deterministic, fast, dependency-free, and a much better fit than
+// embeddings for short templated incident messages.
 //
 // Behaviour:
 //   - On each completed workflow outcome, record the originating signal's

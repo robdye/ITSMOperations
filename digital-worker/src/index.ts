@@ -575,9 +575,9 @@ server.get('/api/calls/active', (_req: Request, res: Response) => {
 // ── Voice: page me ──
 // Triggered by the "Page me" button on Mission Control or by Alex when she
 // needs the human on the bridge. Three delivery channels, in priority order:
-//   1. ACS Call Automation outbound Teams call (Cassidy pattern) — when ACS
-//      is configured AND we have an AAD object id for the manager. Alex
-//      actually rings the user's Teams client and speaks via Voice Live.
+//   1. ACS Call Automation outbound Teams call — when ACS is configured AND
+//      we have an AAD object id for the manager. Alex actually rings the
+//      user's Teams client and speaks via Voice Live.
 //   2. Teams channel post + email — always attempted. Both contain a
 //      Teams click-to-call deep link as a fallback CTA.
 //   3. Browser /voice avatar page — debug/fallback link in the response.
@@ -600,8 +600,8 @@ server.post('/api/voice/page-me', async (req: Request, res: Response) => {
 
   // Manager AAD Object ID — required for ACS outbound Teams call (the
   // microsoftTeamsUserId field on the call invite must be the user's Entra
-  // OID, not their UPN). Set MANAGER_TEAMS_OID to enable the Cassidy-style
-  // outbound call path.
+  // OID, not their UPN). Set MANAGER_TEAMS_OID to enable the outbound
+  // Teams call path.
   const managerOid =
     String(req.body?.teamsUserAadOid || '').trim() ||
     process.env.MANAGER_TEAMS_OID ||
