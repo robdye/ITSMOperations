@@ -1,162 +1,301 @@
-# 🏢 ITSM Operations — ITIL 4 Multi-Agent Digital Worker
+# Alex IT Ops — ITIL 4 Multi-Agent Digital Worker
 
-> **Alex IT Ops** — an autonomous digital employee that manages IT Service Management operations across 18 specialist workers, 29 Azure services, and full ServiceNow integration. Not a chatbot — a digital colleague that triages incidents at 3 AM, predicts SLA breaches before they happen, and prepares your CAB agenda while you sleep.
+> **An autonomous AI digital employee for IT Service Management.** Not a chatbot — a colleague that triages incidents at 3 AM, predicts SLA breaches before they happen, prepares your CAB agenda while you sleep, and learns from every outcome.
 
-![CI](https://img.shields.io/github/actions/workflow/status/ABS-Corp/ITSMOperations/ci.yml?label=CI&logo=github)
+![CI](https://img.shields.io/github/actions/workflow/status/robdye/ITSMOperations/ci.yml?label=CI&logo=github)
 ![Tests](https://img.shields.io/badge/tests-216%20passing-brightgreen)
-![Deploy](https://img.shields.io/github/actions/workflow/status/ABS-Corp/ITSMOperations/deploy.yml?label=Deploy&logo=microsoft-azure)
+![Deploy](https://img.shields.io/github/actions/workflow/status/robdye/ITSMOperations/deploy.yml?label=Deploy&logo=microsoft-azure)
 ![Node](https://img.shields.io/badge/node-20%20%7C%2022-339933?logo=node.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ---
 
-## Production Status (May 2026)
+## What it is
 
-| | |
-|---|---|
-| **Container App** | `itsm-operations-worker` in `rg-portfolio-agent` |
-| **Active Revision** | `itsm-operations-worker--0000099` (Healthy, 100% traffic, 1 replica) |
-| **Image Tag** | `cassidy-mcp-migration-20260501` |
-| **Endpoint** | `https://itsm-operations-worker.jollysand-88b78b02.eastus.azurecontainerapps.io` |
-| **Tests** | 28 files / 216 tests passing in ~5s (vitest) |
-| **TypeScript** | `tsc --noEmit` clean (zero errors) |
-| **Last deploy** | Cassidy-pattern MCP-first migration — TurnContext threaded through agent runtime, M365 Graph wrappers now MCP-first with Graph fallback |
+**Alex IT Ops** is a production-grade *digital worker* — an autonomous AI employee that operates inside an IT Service Management organisation. It works through Microsoft Teams, M365 Copilot, voice channels, and a browser-based mission control. Where a chatbot answers questions, Alex *takes action*: it opens incident bridges, drafts changes, escalates SLA breaches, sends the morning ops briefing, and runs a continuous control loop that observes signals, forecasts trouble, decides whether to act autonomously or seek human approval, and grades its own outcomes.
 
----
+The system follows **ITIL 4** practice boundaries, applies **NIST 800-53** control families, enforces a **Human-in-the-Loop** policy on every write operation by default, and is built on Microsoft's first-class agent platform (Microsoft Agent 365 + Microsoft Agents SDK) so it integrates natively with Microsoft 365.
 
-## Executive Summary
+### Use cases
 
-ITSM Operations is a **production-grade digital worker** — not a chatbot, not a copilot extension, but a fully autonomous AI employee that operates within your IT Service Management organization. It follows ITIL 4 practices, enforces NIST 800-53 security controls, and integrates directly with ServiceNow, Microsoft 365, and Azure.
+- **Tier-1 incident response** — auto-triage, ServiceNow CRUD, P1/P2 bridge spin-up, on-call paging, post-incident knowledge capture
+- **Change enablement** — risk scoring, CAB agenda preparation, collision detection, post-implementation review
+- **SLA stewardship** — breach forecasting, escalation, auto-paging on the on-call rota
+- **Knowledge & CMDB hygiene** — KB gap analysis, EOL/EOS asset scans, CMDB completeness audits, KEDB review
+- **Operations briefings** — daily standup brief, weekly recurring-incident pattern analysis, monthly health report
+- **AI governance** — agent inventory, compliance dashboard, shadow-agent discovery, change control for AI components
 
-| Metric | Count |
-|--------|-------|
-| **Specialist Workers** | 18 (13 ITIL + 5 AI Governance) |
-| **DA Skills** | 22 Copilot Cowork Skills |
-| **DA Plugins** | 8 domain API plugins |
-| **DA Capabilities** | 11 (WebSearch, Memory, GraphConnectors, etc.) |
-| **Knowledge Sources** | 4 (Graph Connector, SharePoint, AI Search, Microsoft Learn) |
-| **Widgets** | 18 (12 Skybridge read-only + 6 interactive) |
-| **Adaptive Cards** | 4 (change-form, cab-voting, incident-escalation, approval) |
-| **Scheduled Routines** | 18 autonomous jobs |
-| **Azure Resources** | 29 services (IaC via Bicep) |
-| **Managed Identities** | 3 Entra (incident-manager, change-manager, security-manager) |
-| **Unit Tests** | 216 (digital-worker, 28 files) + mcp-server suite |
-| **Durable Function Orchestrators** | 3 (major-incident-bridge, change-rollback, cab-voting-cycle) |
-| **Timer Triggers** | 11 (Azure Durable Functions) |
-| **Service Bus Topics** | 5 (incident, change, problem, SLA, notification) |
-| **Localization** | en-US, fr-FR, es-ES, ja-JP |
+### Live deployment
 
-**Core Frameworks**: Microsoft Agents SDK (`@microsoft/agents-hosting` v1.2), Microsoft Agent 365 (`@microsoft/agents-a365-runtime` + `agents-a365-tooling` preview), OpenAI Agents SDK (`@openai/agents` v0.1), Model Context Protocol (`@modelcontextprotocol/sdk` v1.12), ITIL 4, NIST 800-53.
-
-**M365 surface integration pattern (Cassidy-aligned)**: All Microsoft 365 calls (mail, Teams, calendar, Planner, people lookup) go through static MCP-first wrappers in [`m365-tools.ts`](digital-worker/src/m365-tools.ts) backed by the Agent 365 tooling gateway via [`mcp-tool-setup.ts`](digital-worker/src/mcp-tool-setup.ts). When a `TurnContext` is present (real user message), the wrappers mint an OBO token and call the dedicated M365 MCP servers; when absent (cron / signal-router / mission-control), they fall back to direct Microsoft Graph application-permission calls. Every wrapper returns a tagged `source: 'mcp' | 'graph' | 'graph-webhook' | 'unavailable'` so callers can audit which path delivered the side effect.
+A reference instance runs in Azure Container Apps with the latest revision, image tag `cassidy-mcp-migration-20260501`, on the Cassidy MCP-first contract. **216 unit tests** across **28 files** pass against every commit (run in ~5 s). All infrastructure is reproducible via Bicep.
 
 ---
 
-## Architecture
+## Key capabilities at a glance
 
+| Area | What it does |
+|------|-------------|
+| **18 specialist workers** | One agent per ITIL 4 practice — Incident, Change, Problem, Asset/CMDB, SLA, Knowledge, Vendor, Service Desk, Monitoring, Release, Capacity, Continuity, Security — plus 5 AI-Governance workers |
+| **Autonomous control loop** | Signal ingestion → DAG workflow execution → outcome verification → automatic threshold tuning → governance kill-switches |
+| **MCP-first M365 integration** | Mail, Teams, Calendar, Planner, People delivered over Microsoft Agent 365 OBO MCP servers, with direct Microsoft Graph as a graceful fallback |
+| **ServiceNow integration** | Full CRUD on incidents, changes, problems, assets, knowledge and vendors via a dedicated MCP server |
+| **Voice & avatar** | Azure Speech Avatar (Lisa/Ava) over WebRTC, with voice-optimised ITSM tooling |
+| **Mission control** | Real-time SPA showing active workers, pending approvals, foresight forecasts, and governance state |
+| **Scheduled routines** | 18+ cron-driven autonomous jobs — SLA prediction, stale-ticket sweeps, CMDB audits, shift handover, monthly health report |
+| **Foresight & memory** | Cluster mining + 24 h forecast, experiential memory of past incidents, CI ↔ incident cognition graph |
+| **Governance** | Kill switch, workflow freeze/release, autonomy thresholds tuned dynamically from outcome history |
+| **Compliance & safety** | Azure AI Content Safety prompt shields, Purview DLP classification + PII redaction, full audit trail, OAuth OBO, Managed Identity throughout |
+
+---
+
+## Frameworks & standards
+
+Alex IT Ops sits on top of standards-based frameworks rather than bespoke plumbing.
+
+| Layer | Standard / Framework | What it gives us |
+|-------|---------------------|------------------|
+| Practice model | **ITIL 4** | 13 service-management practices each map to one specialist worker, with explicit boundaries and chain-of-command escalation |
+| Security controls | **NIST 800-53** (rev 5) | Audit logging (AU), HITL (AC-2/AC-3), DLP (SC-8/SC-28), least privilege via Managed Identity (IA-2) |
+| Agent runtime | **Microsoft Agents SDK** (`@microsoft/agents-hosting`) | Teams + M365 transport, `TurnContext` activity model, OAuth |
+| Agent platform | **Microsoft Agent 365** (`@microsoft/agents-a365-runtime` + `agents-a365-tooling`) | OBO token exchange, MCP-tool gateway, allow-listed M365 MCP servers |
+| Tool calling | **OpenAI Agents SDK** (`@openai/agents`) | Agent factory, tool decoration, run-context propagation, hooks |
+| Tool transport | **Model Context Protocol** (`@modelcontextprotocol/sdk`) | Vendor-neutral tool discovery and invocation across MCP servers |
+| LLM access | **Azure OpenAI Service** | GPT-4o (reasoning), o4-mini (routing), via Managed Identity |
+| Telemetry | **OpenTelemetry** + GenAI semantic conventions | `gen_ai.*` spans, W3C Trace Context across MCP calls |
+| Observability | **Azure Monitor / Application Insights / Log Analytics** | KQL alerts, distributed tracing, custom events |
+| Safety | **Azure AI Content Safety** | Prompt shields (jailbreak detection), content classification, fail-closed |
+| Data governance | **Microsoft Purview DLP** | Record classification, PII auto-redaction before tool returns |
+| UX surfaces | **Adaptive Cards 1.6** + **Skybridge widgets** + **Fluent UI v9** | Universal Actions for HITL, embedded widgets in M365 Copilot |
+| Infrastructure | **Bicep / Azure Verified Modules** | Reproducible IaC for every Azure resource |
+| CI/CD | **GitHub Actions** | Typecheck → test → Docker build → ACR push → Container Apps deploy |
+
+---
+
+## Architecture — Logical view
+
+How a user request becomes an action, and how the autonomous loop closes around outcomes.
+
+```mermaid
+flowchart TB
+    classDef surface fill:#1e3a8a,stroke:#1e40af,color:#fff
+    classDef worker fill:#7c2d12,stroke:#9a3412,color:#fff
+    classDef platform fill:#065f46,stroke:#047857,color:#fff
+    classDef integration fill:#581c87,stroke:#6b21a8,color:#fff
+    classDef store fill:#374151,stroke:#4b5563,color:#fff
+
+    subgraph S[User and system surfaces]
+        S1[M365 Copilot +<br/>Declarative Agent]
+        S2[Microsoft Teams<br/>chat + Approvals]
+        S3[Voice + Avatar<br/>WebRTC client]
+        S4[Mission Control<br/>browser SPA]
+        S5[ServiceNow webhooks<br/>+ Azure Monitor]
+    end
+    class S1,S2,S3,S4,S5 surface
+
+    subgraph O[Orchestrator]
+        O1[ITOps Command Center<br/>agent.ts]
+        O2[Worker Registry<br/>intent classifier]
+        O3[Agent Harness<br/>threads TurnContext<br/>into runContext]
+        O4[Escalation Chain<br/>worker → CC → human]
+    end
+
+    subgraph W[Specialist workers — ITIL 4 practices]
+        W1[Tier 1 core<br/>Incident · Change · Problem<br/>Asset/CMDB · SLA · Knowledge · Vendor]
+        W2[Tier 2 extended<br/>Service Desk · Monitoring · Release]
+        W3[Tier 3 strategic<br/>Capacity · Continuity · Security]
+        W4[AI governance<br/>Inventory · Compliance · Change Control<br/>Ownership · Shadow discovery]
+    end
+    class W1,W2,W3,W4 worker
+
+    subgraph A[Autonomous platform — Pillars 3–10]
+        A1[Signal router<br/>subscriptions + cooldown]
+        A2[Workflow engine<br/>DAG + linear]
+        A3[Foresight<br/>cluster mining + 24h forecast]
+        A4[Outcome verifier + judge<br/>did the action succeed?]
+        A5[Autonomy gate + tuner<br/>propose / approve / auto<br/>thresholds tuned from outcomes]
+        A6[Governance<br/>kill / freeze / release]
+        A7[Goal seeker<br/>plan → pursue]
+        A8[Cognition graph<br/>+ experiential memory]
+    end
+    class A1,A2,A3,A4,A5,A6,A7,A8 platform
+
+    subgraph I[Tool layer]
+        I1[M365 MCP-first wrappers<br/>m365-tools.ts<br/>OBO via Agent 365<br/>Graph fallback]
+        I2[ServiceNow MCP server<br/>incidents · changes · problems<br/>assets · KB · vendors]
+        I3[Domain tools<br/>finops · monitoring · release<br/>reporting · risk · catalogue]
+        I4[Voice tools<br/>spoken-format ITSM]
+        I5[Skybridge widgets<br/>+ Adaptive Cards 1.6]
+    end
+    class I1,I2,I3,I4,I5 integration
+
+    subgraph St[State and safety]
+        St1[Cosmos DB<br/>state · reasoning traces]
+        St2[Azure Tables<br/>AlexOutcomes · TunerState<br/>Governance · Signals]
+        St3[Redis<br/>session + token cache]
+        St4[Service Bus<br/>5 inter-worker topics]
+        St5[Content Safety<br/>+ Purview DLP]
+        St6[Audit trail<br/>+ HITL approval queue]
+    end
+    class St1,St2,St3,St4,St5,St6 store
+
+    S1 --> O1
+    S2 --> O1
+    S3 --> O1
+    S4 --> O1
+    S5 --> A1
+
+    O1 --> O2 --> O3
+    O3 --> W1 & W2 & W3 & W4
+    O3 -. fallback .-> O4
+
+    W1 & W2 & W3 & W4 --> I1 & I2 & I3 & I4
+    W1 & W2 & W3 & W4 -. embedded .-> I5
+
+    A1 --> A2 --> A4 --> A5 --> A2
+    A3 --> A1
+    A6 -. gates .-> A1 & A2
+    A7 --> A1
+    A8 -. enriches .-> A4
+
+    I1 -. side effects .-> St6
+    I2 & I3 -.-> St1
+    A2 & A4 --> St2
+    O3 -.-> St3
+    W1 & W2 & W3 -.-> St4
+    O3 & I1 & I2 -. mediated by .-> St5
 ```
-┌───────────────────────────────────────────────────────────────────────────────────────┐
-│                            M365 Copilot / Teams / Voice                               │
-│                     (Declarative Agent: 22 skills, 8 plugins, 11 capabilities)        │
-└─────────────────────────────────────┬─────────────────────────────────────────────────┘
-                                      │
-                    ┌─────────────────▼─────────────────────┐
-                    │       ITOps Command Center            │
-                    │   (Orchestrator / Parent Agent)       │
-                    │   agent.ts → agent-harness.ts         │
-                    │   threads TurnContext as runContext   │
-                    │   worker-registry + escalation-chain  │
-                    └─────┬───────────┬───────────┬─────────┘
-                          │           │           │
-         ┌────────────────▼──┐  ┌─────▼─────┐  ┌─▼──────────────────┐
-         │     Tier 1: Core  │  │  Tier 2:   │  │    Tier 3:         │
-         │  ┌──────────────┐ │  │  Extended  │  │    Strategic       │
-         │  │ Incident Mgr │ │  │┌──────────┐│  │ ┌───────────────┐  │
-         │  │ Change Mgr   │ │  ││Service   ││  │ │ Capacity Mgr  │  │
-         │  │ Problem Mgr  │ │  ││Desk Mgr  ││  │ │ Continuity Mgr│  │
-         │  │ Asset/CMDB   │ │  ││Monitoring││  │ │ Security Mgr  │  │
-         │  │ SLA Mgr      │ │  ││Mgr       ││  │ └───────────────┘  │
-         │  │ Knowledge Mgr│ │  ││Release   ││  │                    │
-         │  │ Vendor Mgr   │ │  ││Mgr       ││  │  AI Governance     │
-         │  └──────────────┘ │  │└──────────┘│  │ ┌───────────────┐  │
-         └───────────────────┘  └────────────┘  │ │ Agent Change  │  │
-                                                │ │ Agent Compli. │  │
-                                                │ │ Agent Invent. │  │
-                                                │ │ Agent Ownersh.│  │
-                                                │ │ Shadow Discov.│  │
-                                                │ └───────────────┘  │
-                                                └────────────────────┘
-                          │                           │
-         ┌────────────────▼───────────────────────────▼─────────────────┐
-         │       Autonomous Platform (Pillars 3–10, Phase 9–10)         │
-         │                                                              │
-         │  signal-router    workflow-engine    foresight                │
-         │  (sub.match +     (DAG + linear,     (cluster mining,         │
-         │   cooldown)       parallel branches) trend forecasting)       │
-         │                                                              │
-         │  outcome-verifier  outcome-judge    autonomy-tuner            │
-         │  (post-action      (LLM-grade       (raises/lowers auto       │
-         │   success)         outcomes)        thresholds dynamically)   │
-         │                                                              │
-         │  autonomy-gate    governance        goal-seeker               │
-         │  (trigger-policy  (kill / freeze /  (proactive plan→pursue)   │
-         │   confidence×blast release switch)                            │
-         │   radius dampen)                                              │
-         │                                                              │
-         │  cognition-graph  experiential-     anticipatory-store +      │
-         │  (CIs ↔ services   memory           anticipatory-broadcaster  │
-         │   ↔ incidents)    (incident         (Azure Tables-backed)     │
-         │                    fingerprints)                              │
-         └──────────────────────────┬──────────────────────────┬─────────┘
-                                    │                          │
-         ┌──────────────────────────▼─────────────┐  ┌─────────▼────────────┐
-         │   M365 MCP-First Wrappers (Cassidy)    │  │    MCP Server        │
-         │   m365-tools.ts (7 static wrappers):   │  │    (port 3002)       │
-         │   sendEmail, sendTeamsMessage,         │  │  snow-client →       │
-         │   scheduleCalendarEvent, findUser,     │  │  ServiceNow REST     │
-         │   findMeetingTimes, createPlannerTask, │  │  18 Skybridge widgets│
-         │   updatePlannerTask                    │  │  Purview DLP redact  │
-         │                                        │  │  Azure AI Search     │
-         │   mcp-tool-setup.ts:                   │  │  endoflife.date      │
-         │     • OBO token via Agent 365 runtime  │  │                      │
-         │     • discovery → server map           │  └──────────┬───────────┘
-         │     • per-tool invokeMcpTool() with    │             │
-         │       configurable TTL cache           │             │
-         │   Graph fallback: client_credentials   │             │
-         │   (autonomous + when MCP unavailable)  │             │
-         └────────────────────────┬───────────────┘             │
-                                  │                             │
-                                  ▼                             ▼
-         ┌──────────────────────────────────────────────────────────────┐
-         │                    Azure Services Layer                      │
-         │                                                              │
-         │  Cosmos DB          Redis Cache        Service Bus           │
-         │  (state, traces)    (session cache)    (5 pub/sub topics)    │
-         │  Table Storage      OpenAI (GPT-4o)    Content Safety        │
-         │  (audit + AlexOutcomes/(reasoning: o4-mini)(prompt shields)  │
-         │   AlexTunerState)                                            │
-         │                                                              │
-         │  AI Search          Speech Avatar      App Insights          │
-         │  (vector + hybrid)  (Lisa/Ava voice)   (OTel + KQL alerts)   │
-         │                                                              │
-         │  Key Vault          Container Apps     ACR                   │
-         │  (secrets)          (worker + MCP)     (image registry)      │
-         │                                                              │
-         │  Function App       AI Foundry         Log Analytics         │
-         │  (Durable timers    (hub + project)    (workspace)           │
-         │   + orchestrators)                                           │
-         └──────────────────────────────────────────────────────────────┘
-                                    │
-         ┌──────────────────────────▼──────────────────────────────────┐
-         │                    M365 Integration Layer                   │
-         │                                                             │
-         │  Graph Mail (send/read)     Teams Approvals (Universal Act) │
-         │  Planner (task tracking)    SharePoint (doc library)        │
-         │  Graph Connectors (KB)      Power Automate (4 flows)        │
-         │  Teams Channels (bridges)   Copilot Connectors (SN, ADO)   │
-         └─────────────────────────────────────────────────────────────┘
+
+**Reading the diagram**
+
+- **Surfaces** call into a single orchestrator (`agent.ts`) which classifies intent, picks a worker, and threads the live `TurnContext` into the OpenAI Agents SDK's `runContext` so every tool can mint an OBO token if needed.
+- **Workers** are scoped Agent instances — each has only the tools and instructions for one ITIL practice. They escalate via the worker→Command Center→human chain.
+- **The autonomous platform** runs in parallel: ServiceNow webhooks and monitoring alerts arrive as `Signal`s, are routed to subscribed workflows, and the workflow engine executes a DAG. After the workflow finishes, the outcome verifier grades it, the autonomy tuner adjusts thresholds, and governance can hard-stop the loop at any time.
+- **The tool layer** is uniform: every M365 side effect goes through `m365-tools.ts` (MCP-first, Graph fallback) so the same code path works whether a human, a cron job, or a signal triggered the action. Every call returns a tagged `source` so we can audit which path actually delivered.
+
+---
+
+## Architecture — Physical view (Azure deployment)
+
+The runtime topology — what's deployed, where it lives, and how packets flow.
+
+```mermaid
+flowchart LR
+    classDef m365 fill:#1f2937,stroke:#374151,color:#fff
+    classDef edge fill:#1e3a8a,stroke:#1e40af,color:#fff
+    classDef compute fill:#065f46,stroke:#047857,color:#fff
+    classDef data fill:#7c2d12,stroke:#9a3412,color:#fff
+    classDef ai fill:#581c87,stroke:#6b21a8,color:#fff
+    classDef obs fill:#374151,stroke:#4b5563,color:#fff
+
+    subgraph U[End users]
+        U1[Teams /<br/>M365 Copilot]
+        U2[Voice client<br/>browser]
+        U3[Mission Control<br/>browser]
+    end
+
+    subgraph M[Microsoft Graph and M365]
+        M1[Graph API<br/>Mail · Calendar<br/>Planner · Users]
+        M2[M365 MCP servers<br/>Mail · Teams · Calendar<br/>Planner · OneDrive · SP]
+        M3[Teams Approvals<br/>Universal Actions]
+    end
+    class M1,M2,M3 m365
+
+    subgraph X[Microsoft Agent 365 plane]
+        X1[Tooling gateway<br/>OBO + tool discovery]
+        X2[Agentic auth<br/>OBO token broker]
+    end
+    class X1,X2 edge
+
+    subgraph AZ[Azure subscription — Bicep-managed]
+        direction TB
+
+        subgraph AC[Container Apps environment]
+            AC1[Digital Worker<br/>Express · port 3978<br/>Node 20]
+            AC2[ServiceNow MCP server<br/>Express + SSE · port 3002<br/>Node 22]
+        end
+        class AC1,AC2 compute
+
+        subgraph FN[Function App — Linux Y1]
+            FN1[Durable timers<br/>11 cron triggers]
+            FN2[Durable orchestrators<br/>major-incident-bridge<br/>change-rollback<br/>cab-voting-cycle]
+            FN3[HTTP triggers<br/>SNOW webhook]
+        end
+        class FN1,FN2,FN3 compute
+
+        subgraph DAT[Data plane]
+            D1[Cosmos DB<br/>state · traces · memory]
+            D2[Azure Storage<br/>Tables: outcomes · tuner<br/>governance · signals · audit]
+            D3[Azure Cache for Redis<br/>session · tokens]
+            D4[Azure Service Bus<br/>5 topics]
+            D5[Azure AI Search<br/>hybrid + vector index]
+        end
+        class D1,D2,D3,D4,D5 data
+
+        subgraph AI[AI services]
+            AI1[Azure OpenAI<br/>GPT-4o + o4-mini]
+            AI2[Azure AI Content Safety<br/>prompt shields]
+            AI3[Azure Speech<br/>Avatar · Voice Live]
+            AI4[Azure AI Foundry<br/>hub · project · evals]
+        end
+        class AI1,AI2,AI3,AI4 ai
+
+        subgraph SEC[Identity and secrets]
+            SEC1[Key Vault<br/>secrets at rest]
+            SEC2[3 User-Assigned MIs<br/>Incident · Change · Security]
+            SEC3[ACR<br/>image registry]
+        end
+        class SEC1,SEC2,SEC3 compute
+
+        subgraph OBS[Observability]
+            OBS1[Application Insights<br/>OTel traces + metrics]
+            OBS2[Log Analytics workspace<br/>KQL + 5 alert rules]
+        end
+        class OBS1,OBS2 obs
+    end
+
+    subgraph SN[ServiceNow tenant]
+        SN1[ServiceNow REST API<br/>Table · OAuth OBO]
+    end
+
+    U1 -- HTTPS --> AC1
+    U2 -- WSS --> AC1
+    U3 -- HTTPS --> AC1
+
+    AC1 -- OBO token request --> X2
+    AC1 -- discover and invoke tools --> X1
+    X1 --> M2
+    AC1 -- Graph fallback<br/>app-only client_credentials --> M1
+
+    AC1 -- MCP /SSE --> AC2
+    AC2 -- HTTPS --> SN1
+
+    FN1 & FN2 -- HTTP POST<br/>x-scheduled-secret --> AC1
+    FN3 -- POST /api/signals --> AC1
+    SN1 -. webhook .-> FN3
+
+    AC1 -- Managed Identity --> AI1 & AI2 & AI3 & AI4
+    AC1 --> D1 & D2 & D3 & D4 & D5
+    AC2 --> D5
+
+    AC1 -- secrets<br/>at startup --> SEC1
+    AC1 & AC2 -. pulled by .- SEC2
+    SEC2 -- ACR pull --> SEC3
+
+    AC1 & AC2 & FN1 -- OTel exporter --> OBS1
+    OBS1 --> OBS2
+
+    AC1 -- card actions --> M3
 ```
+
+**Why this shape**
+
+- **Two stateless containers + a Function App**: the digital worker and the ServiceNow MCP server scale horizontally on Azure Container Apps; long-running and time-driven work lives in Durable Functions so the worker can be killed and replaced without losing in-flight state.
+- **Managed Identity throughout**: no static credentials in the runtime. ACR pulls, Key Vault reads, OpenAI calls, Speech, Tables, Cosmos, Search and Service Bus all authenticate via the worker's user-assigned MI. The only secret in the worker's env is the HMAC secret used to authenticate Durable Functions calling back into the worker.
+- **OBO over Microsoft Agent 365**: when a real Teams/M365 user is on the line, the worker exchanges their bearer token for an OBO token via Microsoft Agent 365 and calls dedicated M365 MCP servers. This keeps user-context attribution end-to-end (their mailbox, their calendar) rather than the worker pretending to be the user with app-only permissions.
+- **Graph as a graceful fallback**: cron jobs, signal-router actions, and mission-control buttons run *autonomously* — there is no user `TurnContext`. Those paths fall back to a dedicated Graph application identity (`Mail.Send`, `Calendars.ReadWrite`, `User.Read.All`, admin-consented) so the same code path produces the right side effect with the right attribution.
+- **All persistent state outside compute**: Cosmos DB, Azure Tables, Redis, Service Bus, AI Search. The worker container has no on-disk state; it can be rolled, scaled, or replaced freely.
+- **Bicep-managed**: every box in the diagram is provisioned by [`infra/main.bicep`](infra/main.bicep). Bring-up is one `az deployment group create`.
 
 ---
 
@@ -440,7 +579,7 @@ ITSMOperations/
 
 ---
 
-## Key Capabilities
+## Capability index (developer reference)
 
 | Capability | Description | Key Files |
 |------------|-------------|-----------|
@@ -465,9 +604,133 @@ ITSMOperations/
 
 ---
 
+## Request lifecycle — sequence
+
+A user asks Alex to "schedule a 30-minute incident bridge with Sarah at 2 PM tomorrow". Here's the live path:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as User in Teams
+    participant W as Digital Worker
+    participant H as Agent Harness
+    participant A as Specialist Worker<br/>(Incident Manager)
+    participant T as m365-tools.<br/>scheduleCalendarEvent
+    participant X as Microsoft Agent 365
+    participant M as M365 MCP Server<br/>(CalendarTools)
+    participant G as Microsoft Graph
+
+    U->>W: Activity (TurnContext + bearer token)
+    W->>W: Content Safety prompt-shield check
+    W->>H: classify intent → pick worker
+    H->>A: run(agent, prompt, { context: { turnContext, ... } })
+    A->>A: LLM decides: call schedule_teams_meeting
+    A->>T: execute(args, runContext)
+
+    alt MCP-first path (real user, OBO available)
+        T->>X: GetAgenticUserToken(authorization, scope, turnContext)
+        X-->>T: OBO token
+        T->>M: callTool("createEvent", args)<br/>Authorization: OBO + agent-id + tenant-id
+        M->>G: Graph /me/events as user
+        G-->>M: event { id, joinUrl, webLink }
+        M-->>T: result
+        T-->>A: { source: 'mcp', success: true, joinUrl }
+    else Graph fallback (cron / no TurnContext / MCP unavailable)
+        T->>G: client_credentials → Graph /users/{sender}/events
+        G-->>T: event payload
+        T-->>A: { source: 'graph', success: true, joinUrl }
+    end
+
+    A->>A: format response with joinUrl + calendar links
+    A-->>H: finalOutput
+    H-->>W: HarnessResult
+    W->>W: log reasoning trace + audit
+    W-->>U: Adaptive Card with bridge details
+```
+
+The same diagram describes the autonomous path — only steps 1–3 differ (the trigger is a `Signal` from the signal-router rather than a user activity, and the `else` branch is taken because there's no `TurnContext` to OBO with).
+
+---
+
+## Cassidy MCP-first / Graph-fallback pattern
+
+Every Microsoft 365 side effect (mail, Teams chat/channel, calendar, Planner, people lookup) goes through one static wrapper in `m365-tools.ts`. The wrapper picks a path based on what's available *right now*:
+
+```mermaid
+flowchart LR
+    classDef ok fill:#065f46,stroke:#047857,color:#fff
+    classDef warn fill:#7c2d12,stroke:#9a3412,color:#fff
+    classDef neutral fill:#374151,stroke:#4b5563,color:#fff
+
+    Start([Caller invokes wrapper<br/>e.g. sendEmail]) --> HasTC{TurnContext<br/>present?}
+
+    HasTC -- yes --> Discover[mcp-tool-setup<br/>discover + cache MCP tools<br/>via Agent 365 OBO]
+    Discover --> HasTool{Suitable<br/>MCP tool<br/>discovered?}
+    HasTool -- yes --> CallMCP[invokeMcpTool<br/>OBO + tenant header]
+    CallMCP --> MCPOK{Success?}
+    MCPOK -- yes --> ReturnMCP[Return source: 'mcp']
+    class ReturnMCP ok
+    MCPOK -- no --> FBGraph
+
+    HasTool -- no --> FBGraph
+    HasTC -- no --> FBGraph[Graph fallback<br/>app-only client_credentials]
+
+    FBGraph --> GraphOK{Success?}
+    GraphOK -- yes --> ReturnGraph[Return source: 'graph']
+    class ReturnGraph ok
+    GraphOK -- no --> Unavailable[Return source: 'unavailable'<br/>structured failure]
+    class Unavailable warn
+```
+
+**Why two paths matter**
+
+- The MCP path keeps **user-context attribution end-to-end** — Sarah's calendar shows the meeting was created by Sarah, not by a service principal pretending to be her. This is essential for compliance and audit.
+- The Graph path keeps the autonomous loop alive — cron jobs, signal-router actions, and mission-control buttons have no `TurnContext` and *must* still be able to send mail, schedule a Teams bridge, or post a channel message. Without the fallback, the digital worker would be a chatbot only.
+- The tagged `source` on every result is the audit primitive — you can run a KQL query against the audit table and answer "which mail was sent on a user's behalf vs. by the service identity?" trivially.
+
+---
+
 ## Autonomous Platform (Pillars 3–10)
 
 The digital worker isn't just a chat-driven agent — it runs an autonomous control loop that observes signals, predicts breaches, takes graded action, verifies outcomes, and tunes its own thresholds.
+
+```mermaid
+flowchart LR
+    classDef obs fill:#1e3a8a,stroke:#1e40af,color:#fff
+    classDef act fill:#065f46,stroke:#047857,color:#fff
+    classDef grade fill:#581c87,stroke:#6b21a8,color:#fff
+    classDef gov fill:#7c2d12,stroke:#9a3412,color:#fff
+
+    S1[ServiceNow webhooks<br/>· Azure Monitor alerts<br/>· SLA timers · cron] -->|POST /api/signals| SR[Signal Router<br/>match + cooldown]
+    class S1,SR obs
+
+    SR -->|matched| WE[Workflow Engine<br/>DAG · Kahn topological]
+    SR -->|no match| Drop[Drop or<br/>fire-and-forget log]
+
+    WE --> AG[Autonomy Gate<br/>confidence × 1−0.5·blast]
+    AG -->|propose| HQ[HITL approval queue<br/>Adaptive Card]
+    AG -->|approve| HQ
+    AG -->|auto| Exec[Execute tools<br/>via m365-tools<br/>+ ServiceNow MCP]
+    HQ -->|approved| Exec
+    HQ -->|denied / timeout| Cancel[Cancel +<br/>record outcome]
+    class WE,AG,HQ,Exec act
+
+    Exec --> OV[Outcome Verifier<br/>+ LLM judge]
+    OV --> Tables[(Azure Tables<br/>AlexOutcomes)]
+    OV --> Tune[Autonomy Tuner<br/>raises/lowers thresholds]
+    class OV,Tune,Tables grade
+
+    Tune -. updates .- AG
+
+    F[Foresight<br/>cluster mining<br/>24h forecast] -. forecasts .-> SR
+    OV -. feeds .- F
+    F --> Tables
+
+    GOV[Governance<br/>kill / freeze / release] -. blocks .- SR & WE & Exec
+    class GOV gov
+
+    Goal[Goal Seeker<br/>plan → pursue] -. emits signals .-> SR
+```
 
 | Pillar | Module | Responsibility |
 |--------|--------|---------------|
