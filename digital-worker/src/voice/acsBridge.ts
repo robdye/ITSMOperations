@@ -49,6 +49,7 @@ import { trackSafetyBlock } from '../log-analytics';
 import { logAuditEntry } from '../audit-trail';
 import { addWorkNote, getSnowClientStatus } from '../snow-client';
 import { processVoiceApproval } from './voiceApprovals';
+import { VOICE_TOOLS, executeVoiceTool } from './voice-tools';
 import {
   connectVoiceLive,
   getSelectedTransport,
@@ -371,7 +372,11 @@ const DEFAULT_INSTRUCTIONS =
   "1) A short, warm greeting (one sentence) that explicitly acknowledges YOU called THEM, not the other way round. " +
   "2) Tell them why in 1–2 sentences, citing real ticket numbers / CIs / SLA risk if known. " +
   "3) Ask what they want to do next — approve, defer, or hand off. " +
-  "Style: friendly, concise, action-oriented colleague. Speak naturally — no markdown, no bullet read-outs, no emoji.";
+  "Style: friendly, concise, action-oriented colleague. Speak naturally — no markdown, no bullet read-outs, no emoji. " +
+  "TOOLS: You have real tools available — send_email, post_to_channel, update_incident, create_incident, get_incidents, show_incident_dashboard. " +
+  "When the caller asks you to email them, send a summary, post to Teams, log a ticket, add a work-note, or read the dashboard, you MUST CALL THE MATCHING TOOL — do NOT merely promise to do it. After a tool runs, briefly confirm out loud what shipped (e.g. 'OK, email sent to you with those links'). " +
+  "If the caller says 'email me' or 'send to me', use the configured manager email; the send_email tool handles that fallback automatically — just leave `to` blank or set it to 'me'. " +
+  "Always confirm any DESTRUCTIVE change (state change, mass update) verbally before calling the tool, but routine reads, sends, and work-notes can fire immediately.";
 
 /** Place an outbound voice call to a Microsoft Teams user. */
 export async function initiateOutboundTeamsCall(opts: {
@@ -743,6 +748,11 @@ async function handleAcsMediaSocket(acsWs: WebSocket): Promise<void> {
           // can match approve/deny/hold utterances. Whisper-1 is the
           // safe default on the preview Realtime API.
           input_audio_transcription: { model: 'whisper-1' },
+          // Phase E.7 — equip Alex with real tools during the call so
+          // she can actually email, post to Teams, update SNOW, etc.
+          // Schemas + executor live in voice-tools.ts.
+          tools: VOICE_TOOLS,
+          tool_choice: 'auto',
         },
       };
       realtimeWs?.send(JSON.stringify(sessionUpdate));
@@ -888,6 +898,75 @@ async function handleAcsMediaSocket(acsWs: WebSocket): Promise<void> {
             status: msg.response?.status,
             statusDetails: msg.response?.status_details,
           });
+        } else if (msg.type === 'response.function_call_arguments.done') {
+          // Phase E.7 — Alex called one of her voice tools. Execute it,
+          // send the result back as conversation.item.create
+          // (function_call_output), then trigger response.create so she
+          // speaks the outcome to the caller.
+          const callId = String(msg.call_id || '');
+          const toolName = String(msg.name || '');
+          const argsJson = typeof msg.arguments === 'string' ? msg.arguments : '';
+          log('info', 'voice tool call', {
+            callConnectionId,
+            tool: toolName,
+            callId,
+            args: argsJson.slice(0, 200),
+          });
+          executeVoiceTool(toolName, argsJson, {
+            callConnectionId,
+            managerEmail: process.env.MANAGER_EMAIL || process.env.OWNER_EMAIL || '',
+          })
+            .then((output) => {
+              log('info', 'voice tool result', {
+                callConnectionId,
+                tool: toolName,
+                callId,
+                output: output.slice(0, 200),
+              });
+              if (realtimeWs?.readyState === WebSocket.OPEN) {
+                realtimeWs.send(
+                  JSON.stringify({
+                    type: 'conversation.item.create',
+                    item: {
+                      type: 'function_call_output',
+                      call_id: callId,
+                      output,
+                    },
+                  }),
+                );
+                realtimeWs.send(
+                  JSON.stringify({
+                    type: 'response.create',
+                    response: { modalities: ['audio', 'text'] },
+                  }),
+                );
+              }
+            })
+            .catch((err: Error) => {
+              log('error', 'voice tool execution threw', {
+                callConnectionId,
+                tool: toolName,
+                error: err.message,
+              });
+              if (realtimeWs?.readyState === WebSocket.OPEN) {
+                realtimeWs.send(
+                  JSON.stringify({
+                    type: 'conversation.item.create',
+                    item: {
+                      type: 'function_call_output',
+                      call_id: callId,
+                      output: `error: ${err.message}`,
+                    },
+                  }),
+                );
+                realtimeWs.send(
+                  JSON.stringify({
+                    type: 'response.create',
+                    response: { modalities: ['audio', 'text'] },
+                  }),
+                );
+              }
+            });
         } else if (msg.type === 'conversation.item.input_audio_transcription.completed') {
           // Phase 1.5 — user-side transcription. Try to match the
           // utterance to an approve/deny/hold intent and resolve a
