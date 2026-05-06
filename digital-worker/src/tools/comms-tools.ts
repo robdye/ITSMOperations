@@ -24,7 +24,7 @@ import {
   findUser,
   createPlannerTask,
   updatePlannerTask,
-} from '../m365-tools';
+} from '../m365-services';
 import { initiateOutboundTeamsCall, isAcsConfigured } from '../voice/acsBridge';
 import type { WorkerRunContext } from '../agent-harness';
 

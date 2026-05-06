@@ -1,0 +1,41 @@
+{
+  "id": "enrichment-kev-match",
+  "description": "CISA KEV catalog flags Log4Shell (CVE-2021-44228) on a CMDB asset Alex owns. Phase E enrichment publishes an enrichment.kev.match signal → major-incident-response fires with severity:'critical'. Outcome probe checks for SNOW P1 + CISA citation in the worknote.",
+  "steps": [
+    {
+      "type": "signal.publish",
+      "signal": {
+        "source": "enrichment:cisa-kev",
+        "type": "enrichment.kev.match",
+        "severity": "critical",
+        "asset": "apache-log4j-app-01",
+        "origin": "observed",
+        "confidence": 0.99,
+        "payload": {
+          "cveId": "CVE-2021-44228",
+          "vendor": "Apache",
+          "product": "Log4j",
+          "vulnerabilityName": "Log4Shell",
+          "dateAdded": "2021-12-10",
+          "knownRansomwareCampaignUse": "Known",
+          "shortDescription": "Apache Log4j2 contains a vulnerability where JNDI features used in configuration, log messages, and parameters do not protect against attacker-controlled LDAP and other JNDI related endpoints.",
+          "requiredAction": "Apply updates per vendor instructions.",
+          "citation": "CISA KEV catalog https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
+          "cvss": { "baseScore": 10.0 }
+        }
+      }
+    },
+    { "type": "wait", "ms": 250 },
+    {
+      "type": "assert.outcome",
+      "description": "major-incident-response received the KEV match signal",
+      "signalRouted": { "workflowId": "major-incident-response" },
+      "timeoutMs": 5000
+    }
+  ],
+  "expectedOutcomes": [
+    "signal-router routes enrichment.kev.match → major-incident-response (severity upgraded to critical)",
+    "reviewer-worker is invoked because CVSS 10.0 trips the Phase E critical-CVSS gate",
+    "outcome verifier composite probe inspects the run for a SNOW P1 + CISA citation"
+  ]
+}

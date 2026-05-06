@@ -27,6 +27,10 @@ env:
   MCP_RESOURCE_GROUP: ${{ vars.MCP_RESOURCE_GROUP }}
   DW_CONTAINER_APP: ${{ vars.DW_CONTAINER_APP_NAME }}
   MCP_CONTAINER_APP: ${{ vars.MCP_CONTAINER_APP_NAME }}
+  ENRICHMENT_CONTAINER_APP: ${{ vars.ENRICHMENT_CONTAINER_APP_NAME || 'itsm-mcp-enrichment' }}
+  ENRICHMENT_RESOURCE_GROUP: ${{ vars.ENRICHMENT_RESOURCE_GROUP || vars.MCP_RESOURCE_GROUP }}
+  ENRICHMENT_ACR_NAME: ${{ vars.ENRICHMENT_ACR_NAME || vars.MCP_ACR_NAME }}
+  ENRICHMENT_ACR_LOGIN_SERVER: ${{ vars.ENRICHMENT_ACR_LOGIN_SERVER || vars.MCP_ACR_LOGIN_SERVER }}
   FUNCTIONS_APP: ${{ vars.FUNCTIONS_APP_NAME || format('itsm-ops-{0}-func', github.event.inputs.environment || 'dev') }}
   FUNCTIONS_RESOURCE_GROUP: ${{ vars.FUNCTIONS_RESOURCE_GROUP || vars.AZURE_RESOURCE_GROUP }}
 
@@ -43,6 +47,7 @@ jobs:
     outputs:
       dw-image: ${{ steps.tags.outputs.dw }}
       mcp-image: ${{ steps.tags.outputs.mcp }}
+      enrichment-image: ${{ steps.tags.outputs.enrichment }}
     steps:
       - uses: actions/checkout@v4
 
@@ -57,6 +62,9 @@ jobs:
         run: |
           az acr login --name ${{ env.ACR_NAME }}
           az acr login --name ${{ env.MCP_ACR_NAME }}
+          if [ "${{ env.ENRICHMENT_ACR_NAME }}" != "${{ env.MCP_ACR_NAME }}" ] && [ "${{ env.ENRICHMENT_ACR_NAME }}" != "${{ env.ACR_NAME }}" ]; then
+            az acr login --name ${{ env.ENRICHMENT_ACR_NAME }}
+          fi
 
       - name: Generate image tags
         id: tags
@@ -64,6 +72,7 @@ jobs:
           SHA=$(echo ${{ github.sha }} | cut -c1-7)
           echo "dw=${{ env.ACR_LOGIN_SERVER }}/itsm-worker:${SHA}" >> $GITHUB_OUTPUT
           echo "mcp=${{ env.MCP_ACR_LOGIN_SERVER }}/itsm-mcp-server:${SHA}" >> $GITHUB_OUTPUT
+          echo "enrichment=${{ env.ENRICHMENT_ACR_LOGIN_SERVER }}/itsm-mcp-enrichment:${SHA}" >> $GITHUB_OUTPUT
 
       - name: Build & push digital-worker
         run: |
@@ -74,6 +83,11 @@ jobs:
         run: |
           docker build -t ${{ steps.tags.outputs.mcp }} mcp-server/
           docker push ${{ steps.tags.outputs.mcp }}
+
+      - name: Build & push mcp-server-enrichment
+        run: |
+          docker build -t ${{ steps.tags.outputs.enrichment }} mcp-server-enrichment/
+          docker push ${{ steps.tags.outputs.enrichment }}
 
   # ── Deploy to Container Apps ───────────────────────────────────
   deploy:
@@ -153,6 +167,34 @@ jobs:
             --resource-group ${{ env.MCP_RESOURCE_GROUP }} \
             --image ${{ needs.build-push.outputs.mcp-image }}
 
+      - name: Deploy mcp-server-enrichment (skip if app missing)
+        run: |
+          if az containerapp show \
+               --name ${{ env.ENRICHMENT_CONTAINER_APP }} \
+               --resource-group ${{ env.ENRICHMENT_RESOURCE_GROUP }} \
+               -o none 2>/dev/null; then
+            az containerapp update \
+              --name ${{ env.ENRICHMENT_CONTAINER_APP }} \
+              --resource-group ${{ env.ENRICHMENT_RESOURCE_GROUP }} \
+              --image ${{ needs.build-push.outputs.enrichment-image }}
+          else
+            echo "::warning::Enrichment Container App ${{ env.ENRICHMENT_CONTAINER_APP }} not found in ${{ env.ENRICHMENT_RESOURCE_GROUP }} — skipping. Bootstrap the Container App once via az CLI to enable automatic deploys."
+          fi
+
+      - name: Wire MCP_ENRICHMENT_ENDPOINT into digital-worker
+        run: |
+          if FQDN=$(az containerapp show \
+                      --name ${{ env.ENRICHMENT_CONTAINER_APP }} \
+                      --resource-group ${{ env.ENRICHMENT_RESOURCE_GROUP }} \
+                      --query properties.configuration.ingress.fqdn -o tsv 2>/dev/null) && [ -n "$FQDN" ]; then
+            az containerapp update \
+              --name ${{ env.DW_CONTAINER_APP }} \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --set-env-vars "MCP_ENRICHMENT_ENDPOINT=https://${FQDN}/enrichment/mcp"
+          else
+            echo "::warning::Enrichment FQDN not resolvable — leaving MCP_ENRICHMENT_ENDPOINT untouched on digital-worker."
+          fi
+
       - name: Health check — digital-worker
         run: |
           DW_URL=$(az containerapp show \
@@ -168,6 +210,18 @@ jobs:
             --resource-group ${{ env.MCP_RESOURCE_GROUP }} \
             --query properties.configuration.ingress.fqdn -o tsv)
           curl --fail --retry 5 --retry-delay 10 "https://${MCP_URL}/health" || exit 1
+
+      - name: Health check — mcp-server-enrichment (best-effort)
+        run: |
+          ENR_URL=$(az containerapp show \
+            --name ${{ env.ENRICHMENT_CONTAINER_APP }} \
+            --resource-group ${{ env.ENRICHMENT_RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn -o tsv 2>/dev/null) || ENR_URL=""
+          if [ -n "$ENR_URL" ]; then
+            curl --fail --retry 5 --retry-delay 10 "https://${ENR_URL}/health" || exit 1
+          else
+            echo "::warning::Enrichment Container App not yet bootstrapped — skipping health check."
+          fi
 
   # ── Deploy to Azure Functions ──────────────────────────────────
   deploy-functions:

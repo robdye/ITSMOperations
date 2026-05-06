@@ -283,6 +283,17 @@
           <div class="stat-card"><div class="stat-value" style="color:var(--pink)" id="s-routines">0</div><div class="stat-label">Routines</div></div>
           <div class="stat-card"><div class="stat-value purple" id="s-uptime">0h</div><div class="stat-label">Uptime</div></div>
         </div>
+        <!-- Phase 1.x / 2.x / 3.x — Hardening KPI tiles (single numeric per subsystem) -->
+        <div class="stats-row" style="grid-template-columns:repeat(8,1fr);margin-top:12px;">
+          <div class="stat-card"><div class="stat-value" style="color:var(--cyan)" id="kpi-voice">0</div><div class="stat-label">Voice Calls (1.5)</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:var(--cyan)" id="kpi-workiq">mcp</div><div class="stat-label">WorkIQ Transport (1.6)</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:var(--cyan)" id="kpi-a2a">0</div><div class="stat-label">A2A Inbound (1.7)</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:var(--green)" id="kpi-outcome">0%</div><div class="stat-label">Outcome Success (2.3)</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:var(--pink)" id="kpi-cases">0</div><div class="stat-label">Open Cases (3.1)</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:var(--orange)" id="kpi-reviewer">0%</div><div class="stat-label">Reviewer Block (3.4)</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:var(--orange)" id="kpi-meta">0</div><div class="stat-label">Meta Alerts (3.5)</div></div>
+          <div class="stat-card"><div class="stat-value purple" id="kpi-briefings">0</div><div class="stat-label">Briefings/Shift (3.6)</div></div>
+        </div>
         <div style="display:grid;grid-template-columns:1fr 340px;gap:12px;">
           <!-- Left: Recent Agent Activity -->
           <div class="panel" style="max-height:calc(100vh - 240px);overflow-y:auto;">
@@ -597,7 +608,8 @@ function cronToHuman(cron) {
 
 // ── Data Fetching ──
 async function fetchAll() {
-  const [healthR, workersR, routinesR, approvalsR, auditR, memoryR, reasoningR, signalsR, decisionsR, foresightR, outcomesR, governanceR, goalsR] = await Promise.allSettled([
+  const [healthR, workersR, routinesR, approvalsR, auditR, memoryR, reasoningR, signalsR, decisionsR, foresightR, outcomesR, governanceR, goalsR,
+         voiceKpiR, workiqKpiR, a2aKpiR, outcomesKpiR, casesKpiR, reviewerKpiR, metaKpiR, briefingsKpiR] = await Promise.allSettled([
     fetch(`${BASE}/api/health`).then(r => r.json()),
     fetch(`${BASE}/api/workers`).then(r => r.json()),
     fetch(`${BASE}/api/routines`).then(r => r.json()),
@@ -611,6 +623,15 @@ async function fetchAll() {
     fetch(`${BASE}/api/outcomes?limit=50`).then(r => r.json()),
     fetch(`${BASE}/api/governance`).then(r => r.json()),
     fetch(`${BASE}/api/goals`).then(r => r.json()),
+    // Phase 1.x/2.x/3.x hardening KPIs
+    fetch(`${BASE}/api/voice/kpi`).then(r => r.json()).catch(() => null),
+    fetch(`${BASE}/api/workiq/kpi`).then(r => r.json()).catch(() => null),
+    fetch(`${BASE}/api/a2a/kpi`).then(r => r.json()).catch(() => null),
+    fetch(`${BASE}/api/outcomes/kpi`).then(r => r.json()).catch(() => null),
+    fetch(`${BASE}/api/cases/kpi`).then(r => r.json()).catch(() => null),
+    fetch(`${BASE}/api/reviewer/kpi`).then(r => r.json()).catch(() => null),
+    fetch(`${BASE}/api/meta/kpi`).then(r => r.json()).catch(() => null),
+    fetch(`${BASE}/api/briefings/kpi`).then(r => r.json()).catch(() => null),
   ]);
 
   const health = healthR.status === 'fulfilled' ? healthR.value : null;
@@ -644,6 +665,26 @@ async function fetchAll() {
   try { renderOutcomes(outcomes); } catch (e) { console.error('renderOutcomes failed', e); }
   try { renderGovernance(governance); } catch (e) { console.error('renderGovernance failed', e); }
   try { renderGoals(goals); } catch (e) { console.error('renderGoals failed', e); }
+
+  // Hardening KPI tiles (one numeric per subsystem)
+  try {
+    const voiceKpi = voiceKpiR.status === 'fulfilled' ? voiceKpiR.value : null;
+    const workiqKpi = workiqKpiR.status === 'fulfilled' ? workiqKpiR.value : null;
+    const a2aKpi = a2aKpiR.status === 'fulfilled' ? a2aKpiR.value : null;
+    const outcomesKpi = outcomesKpiR.status === 'fulfilled' ? outcomesKpiR.value : null;
+    const casesKpi = casesKpiR.status === 'fulfilled' ? casesKpiR.value : null;
+    const reviewerKpi = reviewerKpiR.status === 'fulfilled' ? reviewerKpiR.value : null;
+    const metaKpi = metaKpiR.status === 'fulfilled' ? metaKpiR.value : null;
+    const briefingsKpi = briefingsKpiR.status === 'fulfilled' ? briefingsKpiR.value : null;
+    if (voiceKpi) safeText('kpi-voice', String(voiceKpi.callsStarted ?? voiceKpi.runs ?? 0));
+    if (workiqKpi && workiqKpi.transport) safeText('kpi-workiq', String(workiqKpi.transport));
+    if (a2aKpi) safeText('kpi-a2a', String(a2aKpi.accepted ?? a2aKpi.evaluated ?? 0));
+    if (outcomesKpi) safeText('kpi-outcome', `${Math.round((outcomesKpi.successRate || 0) * 100)}%`);
+    if (casesKpi) safeText('kpi-cases', String(casesKpi.open ?? 0));
+    if (reviewerKpi) safeText('kpi-reviewer', `${Math.round((reviewerKpi.blockRate || 0) * 100)}%`);
+    if (metaKpi) safeText('kpi-meta', String(metaKpi.alertsRaised ?? 0));
+    if (briefingsKpi) safeText('kpi-briefings', String(briefingsKpi.briefingsPerShift ?? 0));
+  } catch (e) { console.error('renderHardeningKpis failed', e); }
 
   const healthBadge = byId('health-badge');
   if (healthBadge) {

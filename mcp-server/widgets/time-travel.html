@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Time-Travel EOL Forecast</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+ --bg:#fff;--bg2:#f7f7f8;--bg3:#fafafa;
+ --tx:#242424;--tx2:#616161;--tx3:#9e9e9e;
+ --br:#e1e1e1;--brSub:#f0f0f0;
+ --brand:#0f6cbd;--brandHover:#115ea3;--brandBg:#eff6fc;
+ --ok:#0e700e;--okBg:#f1faf1;
+ --warn:#bc4b09;--warnBg:#fff9f5;
+ --danger:#b10e1c;--dangerBg:#fdf3f4;
+ --critical:#9c27b0;
+ --shadow:0 1px 2px rgba(0,0,0,.05),0 4px 12px rgba(0,0,0,.04);
+ --r:8px;--rLg:12px;
+ --gradOk:linear-gradient(135deg,#f1faf1,#dcefdc);
+ --gradWarn:linear-gradient(135deg,#fff9f5,#ffeed8);
+ --gradDanger:linear-gradient(135deg,#fdf3f4,#fbdee2);
+}
+@media (prefers-color-scheme:dark){:root{
+ --bg:#1f1f1f;--bg2:#262626;--bg3:#2d2d2d;
+ --tx:#e8e8e8;--tx2:#b0b0b0;--tx3:#7a7a7a;
+ --br:#3a3a3a;--brSub:#2f2f2f;
+ --brand:#479ef5;--brandBg:#082338;
+ --ok:#54b054;--warn:#f7a648;--danger:#e87979;--critical:#d586e0;
+ --shadow:0 2px 6px rgba(0,0,0,.4);
+ --gradOk:linear-gradient(135deg,#0e2d10,#1c4520);
+ --gradWarn:linear-gradient(135deg,#3d1d00,#5a2c00);
+ --gradDanger:linear-gradient(135deg,#3b0509,#580a13);
+}}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg2);color:var(--tx);padding:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.brand-bar{height:4px;background:linear-gradient(90deg,#0f6cbd,#479ef5,#0f6cbd);border-radius:4px 4px 0 0}
+.widget{max-width:1180px;margin:0 auto;background:var(--bg);border:1px solid var(--br);border-radius:var(--rLg);overflow:hidden;box-shadow:var(--shadow)}
+.hdr{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--brSub)}
+.hdr-icon{width:36px;height:36px;border-radius:var(--r);background:var(--brandBg);color:var(--brand);display:flex;align-items:center;justify-content:center}
+.hdr-icon svg{width:20px;height:20px}
+.hdr h1{font-size:15px;font-weight:600}
+.hdr-sub{font-size:11px;color:var(--tx2)}
+.wordmark{margin-left:auto;color:var(--tx3);opacity:.7}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;padding:14px 18px;background:var(--bg)}
+.kpi{padding:14px 16px;border-radius:var(--rLg);border:1px solid var(--br);transition:transform .15s,box-shadow .15s}
+.kpi:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.kpi.tone-ok{background:var(--gradOk)}.kpi.tone-warn{background:var(--gradWarn)}.kpi.tone-danger{background:var(--gradDanger);box-shadow:0 0 16px rgba(177,14,28,.25)}
+.kpi-label{font-size:10px;font-weight:600;color:var(--tx2);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:5px}
+.kpi-label svg{width:13px;height:13px}
+.kpi-num{font-size:36px;font-weight:700;line-height:1;letter-spacing:-.8px;margin:6px 0;font-variant-numeric:tabular-nums}
+.kpi.tone-ok .kpi-num{color:var(--ok)}.kpi.tone-warn .kpi-num{color:var(--warn)}.kpi.tone-danger .kpi-num{color:var(--danger)}
+.kpi-spark{display:block;height:20px;width:60px;opacity:.85}
+.kpi-foot{font-size:10px;color:var(--tx2);margin-top:3px}
+.timeline{padding:18px 24px}
+.t-track{position:relative;height:46px;background:linear-gradient(90deg,var(--okBg) 0,var(--okBg) 30%,var(--warnBg) 60%,var(--dangerBg) 100%);border:1px solid var(--br);border-radius:24px;overflow:hidden}
+@media (prefers-color-scheme:dark){.t-track{background:linear-gradient(90deg,#0e2d10 0,#0e2d10 30%,#3d1d00 60%,#3b0509 100%)}}
+.t-track .grid-line{position:absolute;top:0;bottom:0;border-left:1px dashed var(--br);font-size:9px;color:var(--tx3);padding-left:4px;padding-top:2px;pointer-events:none}
+.t-handle{position:absolute;top:-6px;width:14px;height:58px;background:var(--brand);border:2px solid var(--bg);border-radius:7px;cursor:grab;box-shadow:0 2px 8px rgba(15,107,189,.4);transform:translateX(-50%);transition:left .25s ease-out}
+@media (prefers-reduced-motion:reduce){.t-handle{transition:none}}
+.t-handle:active{cursor:grabbing}
+.t-handle::after{content:"";position:absolute;left:50%;top:50%;width:4px;height:14px;background:var(--bg);border-radius:1px;transform:translate(-50%,-50%)}
+.t-month{position:absolute;top:-26px;background:var(--brand);color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;transform:translateX(-50%);white-space:nowrap;pointer-events:none}
+.t-month::after{content:"";position:absolute;bottom:-3px;left:50%;width:6px;height:6px;background:var(--brand);transform:translateX(-50%) rotate(45deg)}
+.controls{display:flex;flex-wrap:wrap;gap:8px;padding:10px 24px 4px;align-items:center}
+.controls input[type=range]{flex:1;min-width:200px}
+.btn-step{padding:6px 14px;border:1px solid var(--br);border-radius:var(--r);background:var(--bg);color:var(--tx);font-size:12px;font-weight:600;cursor:pointer}
+.btn-step:hover{border-color:var(--brand);color:var(--brand);background:var(--brandBg)}
+.btn-step.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+.assets{padding:8px 18px 16px}
+.assets h3{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--tx2);padding:10px 0 6px;display:flex;align-items:center;gap:6px}
+.assets h3 svg{width:14px;height:14px;color:var(--brand)}
+.asset-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px}
+.asset{padding:11px 14px;border:1px solid var(--br);border-radius:var(--r);background:var(--bg3);transition:all .25s ease-out;display:flex;align-items:center;gap:10px}
+.asset:hover{border-color:var(--brand);transform:translateX(2px)}
+.asset.crossed{background:var(--gradDanger);border-color:var(--danger)}
+.asset.warn{background:var(--gradWarn);border-color:var(--warn)}
+.asset.tier1.crossed{box-shadow:0 0 14px rgba(177,14,28,.3)}
+.asset-pill{flex:0 0 auto;padding:2px 7px;border-radius:10px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.asset-pill.t1{background:var(--brand);color:#fff}.asset-pill.t2{background:var(--tx2);color:#fff}.asset-pill.t3{background:var(--brSub);color:var(--tx2)}
+.asset-body{flex:1;min-width:0}
+.asset-name{font-size:13px;font-weight:600;line-height:1.3}
+.asset-os{font-size:11px;color:var(--tx2);margin-top:1px}
+.asset-when{font-size:11px;color:var(--tx2);text-align:right;flex-shrink:0}
+.asset-when strong{display:block;font-size:13px;color:var(--tx)}
+.asset.crossed .asset-when strong{color:var(--danger)}
+.empty{padding:36px 24px;text-align:center;color:var(--tx2)}
+.empty svg{width:48px;height:48px;margin-bottom:10px;color:var(--ok)}
+.empty h4{font-size:14px;font-weight:600;margin-bottom:4px}
+.empty p{font-size:12px;color:var(--tx3)}
+.foot{padding:10px 20px;border-top:1px solid var(--brSub);font-size:10px;color:var(--tx3);background:var(--bg3);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+</style>
+</head>
+<body>
+<div class="brand-bar" aria-hidden="true"></div>
+<div class="widget" role="region" aria-label="Time-Travel EOL Forecast">
+ <div class="hdr">
+  <div class="hdr-icon">{{icon:timetravel}}</div>
+  <div><h1>Time-Travel EOL Forecast</h1><div class="hdr-sub" id="ts">—</div></div>
+  <div class="wordmark">{{wordmark}}</div>
+ </div>
+ <div class="kpi-row" id="kpis"></div>
+ <div class="timeline">
+  <div class="t-track" id="track">
+   <div class="t-month" id="month-label" style="left:0%">Today</div>
+   <div class="t-handle" id="handle" tabindex="0" role="slider" aria-valuemin="0" aria-valuemax="24" aria-valuenow="0" style="left:0%"></div>
+  </div>
+ </div>
+ <div class="controls">
+  <button class="btn-step active" data-m="0">Today</button>
+  <button class="btn-step" data-m="3">+3 mo</button>
+  <button class="btn-step" data-m="6">+6 mo</button>
+  <button class="btn-step" data-m="12">+12 mo</button>
+  <button class="btn-step" data-m="24">+24 mo</button>
+  <input type="range" id="slider" min="0" max="24" step="1" value="0" aria-label="Months from today">
+ </div>
+ <div class="assets">
+  <h3>{{icon:warning}} Assets crossing EOL <span style="color:var(--tx3);font-weight:400" id="asset-count">(0)</span></h3>
+  <div class="asset-list" id="asset-list"></div>
+ </div>
+ <div class="foot">
+  <span>endoflife.date · ServiceNow CMDB · drag the slider or use month buttons</span>
+  <span id="foot-ts">—</span>
+ </div>
+</div>
+<script>
+var d=window.__TOOL_DATA__||(window.openai&&window.openai.toolOutput)||{};
+var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+var tsRaw=d.generatedAt?new Date(d.generatedAt):new Date();
+var tsFmt=tsRaw.toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+document.getElementById('ts').textContent='endoflife.date · '+tsFmt;
+document.getElementById('foot-ts').textContent='Generated '+tsFmt;
+
+function spark(values,color){
+ if(!values||!values.length)values=[1,1,1,1,1,1,1,1];
+ var max=Math.max.apply(null,values),min=Math.min.apply(null,values);
+ var range=max-min||1;var w=60,h=20;
+ var pts=values.map(function(v,i){var x=(i/(values.length-1))*w;var y=h-((v-min)/range)*(h-2)-1;return x.toFixed(1)+','+y.toFixed(1)}).join(' ');
+ return '<svg class="kpi-spark" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><polyline points="'+pts+'" fill="none" stroke="'+color+'" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+function countUp(el){
+ var t=parseFloat(el.getAttribute('data-target')||'0');if(reduce||t===0){el.textContent=String(t);return}
+ var t0=performance.now();function step(now){var p=Math.min(1,(now-t0)/900);el.textContent=String(Math.round(t*(1-Math.pow(1-p,3))));if(p<1)requestAnimationFrame(step)}requestAnimationFrame(step);
+}
+
+var assets=(d.assets||[]).slice();
+// KPI summary
+var k=d.kpis||{};
+var kpiCfg=[
+ {label:'Total tracked',v:k.total||assets.length,tone:'ok',color:'#0e700e',trend:k.totalTrend||[]},
+ {label:'EOL ≤ 6 months',v:k.eol6mo||assets.filter(function(a){return(a.daysToEol||9999)<=180}).length,tone:'warn',color:'#bc4b09',trend:k.eol6moTrend||[]},
+ {label:'EOL ≤ 12 months',v:k.eol12mo||assets.filter(function(a){return(a.daysToEol||9999)<=365}).length,tone:'warn',color:'#bc4b09',trend:k.eol12moTrend||[]},
+ {label:'Already past EOL',v:k.pastEol||assets.filter(function(a){return(a.daysToEol||9999)<0}).length,tone:'danger',color:'#b10e1c',trend:k.pastEolTrend||[]}
+];
+var kpiEl=document.getElementById('kpis');
+kpiCfg.forEach(function(c){
+ var div=document.createElement('div');div.className='kpi tone-'+c.tone;
+ div.innerHTML='<div class="kpi-label">{{icon:timetravel}}<span>'+c.label+'</span></div>'+
+  '<div class="kpi-num" data-target="'+c.v+'">0</div>'+spark(c.trend,c.color)+
+  '<div class="kpi-foot">last 24h trend</div>';
+ kpiEl.appendChild(div);
+});
+document.querySelectorAll('.kpi-num').forEach(countUp);
+
+// Build month grid lines (every 6 mo)
+var track=document.getElementById('track');
+[6,12,18,24].forEach(function(m){
+ var pct=(m/24)*100;var g=document.createElement('div');g.className='grid-line';g.style.left=pct+'%';g.textContent='+'+m+'mo';track.appendChild(g);
+});
+
+// Sort assets by days-to-EOL ascending
+assets.sort(function(a,b){return (a.daysToEol||9999)-(b.daysToEol||9999)});
+var listEl=document.getElementById('asset-list');
+var countEl=document.getElementById('asset-count');
+
+function tierPill(t){var c=t==='tier1'?'t1':t==='tier2'?'t2':'t3';return '<span class="asset-pill '+c+'">'+(t||'tier3').toUpperCase().replace('TIER','T')+'</span>'}
+
+function render(months){
+ var horizonDays=months*30;
+ var visible=assets.filter(function(a){return (a.daysToEol||9999)<=horizonDays});
+ // Always include the next 5 even if past horizon, so the list never empties
+ if(visible.length<5)visible=assets.slice(0,5);
+ listEl.innerHTML='';
+ if(visible.length===0){
+  listEl.innerHTML='<div class="empty" style="grid-column:1/-1">{{icon:approve}}<h4>No EOL pressure.</h4><p>No tracked assets are within the time horizon.</p></div>';
+  countEl.textContent='(0)';
+  return;
+ }
+ countEl.textContent='('+visible.length+')';
+ visible.slice(0,40).forEach(function(a){
+  var crossed=(a.daysToEol||9999)<=horizonDays;
+  var soon=(a.daysToEol||9999)<=horizonDays+90&&!crossed;
+  var div=document.createElement('div');
+  div.className='asset'+(crossed?' crossed':soon?' warn':'')+(a.tier==='tier1'?' tier1':'');
+  var when=a.eolDate||(a.daysToEol!=null?(a.daysToEol<0?Math.abs(a.daysToEol)+' days past':a.daysToEol+' days'):'unknown');
+  div.innerHTML=tierPill(a.tier)+
+   '<div class="asset-body"><div class="asset-name">'+escapeHtml(a.name||'Asset')+'</div>'+
+   '<div class="asset-os">'+escapeHtml(a.os||a.product||'')+(a.version?' '+escapeHtml(a.version):'')+'</div></div>'+
+   '<div class="asset-when"><strong>'+escapeHtml(when)+'</strong>'+(a.eolDate&&a.daysToEol!=null?'<div>'+(a.daysToEol<0?'past':'in '+a.daysToEol+' days')+'</div>':'')+'</div>';
+  if(a.name)div.addEventListener('click',function(){window.openai&&window.openai.sendFollowUp&&window.openai.sendFollowUp({prompt:'Show me the blast radius for '+a.name})});
+  listEl.appendChild(div);
+ });
+ if(visible.length>40){
+  var more=document.createElement('div');more.className='asset';more.style.justifyContent='center';
+  more.innerHTML='<div class="asset-body" style="text-align:center;color:var(--tx2)">+'+(visible.length-40)+' more assets in this horizon — ask for the full list.</div>';
+  listEl.appendChild(more);
+ }
+}
+
+var slider=document.getElementById('slider');
+var handle=document.getElementById('handle');
+var monthLabel=document.getElementById('month-label');
+function syncTo(months){
+ var pct=(months/24)*100;
+ handle.style.left=pct+'%';
+ monthLabel.style.left=pct+'%';
+ monthLabel.textContent=months===0?'Today':'+'+months+' months';
+ handle.setAttribute('aria-valuenow',months);
+ slider.value=months;
+ document.querySelectorAll('.btn-step').forEach(function(b){b.classList.toggle('active',parseInt(b.getAttribute('data-m'),10)===months)});
+ render(months);
+}
+slider.addEventListener('input',function(){syncTo(parseInt(slider.value,10)||0)});
+document.querySelectorAll('.btn-step').forEach(function(b){
+ b.addEventListener('click',function(){syncTo(parseInt(b.getAttribute('data-m'),10))});
+});
+handle.addEventListener('keydown',function(e){
+ var v=parseInt(slider.value,10)||0;
+ if(e.key==='ArrowLeft')syncTo(Math.max(0,v-1));
+ else if(e.key==='ArrowRight')syncTo(Math.min(24,v+1));
+});
+
+syncTo(d.initialMonths!=null?Math.max(0,Math.min(24,d.initialMonths)):0);
+function escapeHtml(s){return String(s||'').replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+</script>
+</body>
+</html>

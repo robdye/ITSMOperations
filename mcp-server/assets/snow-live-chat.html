@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>ServiceNow Live Chat</title>
+<style>
+:root {
+  --fluent-colorNeutralBackground1: #ffffff;
+  --fluent-colorNeutralBackground2: #fafafa;
+  --fluent-colorNeutralBackground3: #f5f5f5;
+  --fluent-colorNeutralForeground1: #242424;
+  --fluent-colorNeutralForeground2: #616161;
+  --fluent-colorNeutralForeground3: #9e9e9e;
+  --fluent-colorNeutralStroke1: #e0e0e0;
+  --fluent-colorBrandBackground: #0f6cbd;
+  --fluent-colorBrandForeground1: #0f6cbd;
+  --fluent-colorPaletteRedBackground3: #c50f1f;
+  --fluent-colorPaletteRedForeground1: #c50f1f;
+  --fluent-colorPaletteGreenBackground3: #107c10;
+  --fluent-colorPaletteGreenForeground1: #107c10;
+  --fluent-colorPaletteYellowBackground3: #f7630c;
+  --fluent-colorPaletteYellowForeground1: #f7630c;
+  --fluent-colorNeutralShadowAmbient: rgba(0,0,0,0.12);
+  --fluent-colorNeutralShadowKey: rgba(0,0,0,0.14);
+  --fluent-borderRadiusMedium: 8px;
+  --fluent-borderRadiusLarge: 12px;
+  --fluent-fontFamilyBase: 'Segoe UI', -apple-system, system-ui, sans-serif;
+  --fluent-fontSizeBase300: 14px;
+  --fluent-fontSizeBase400: 16px;
+  --fluent-fontSizeBase500: 20px;
+  --fluent-fontSizeBase600: 24px;
+  --fluent-fontWeightSemibold: 600;
+  --fluent-spacingHorizontalM: 12px;
+  --fluent-spacingHorizontalL: 16px;
+  --fluent-spacingVerticalM: 12px;
+  --fluent-spacingVerticalL: 16px;
+  --fluent-shadow4: 0 2px 4px var(--fluent-colorNeutralShadowAmbient), 0 1px 2px var(--fluent-colorNeutralShadowKey);
+  --fluent-shadow8: 0 4px 8px var(--fluent-colorNeutralShadowAmbient), 0 2px 4px var(--fluent-colorNeutralShadowKey);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fluent-colorNeutralBackground1: #1f1f1f;
+    --fluent-colorNeutralBackground2: #292929;
+    --fluent-colorNeutralBackground3: #333333;
+    --fluent-colorNeutralForeground1: #ffffff;
+    --fluent-colorNeutralForeground2: #d6d6d6;
+    --fluent-colorNeutralForeground3: #adadad;
+    --fluent-colorNeutralStroke1: #404040;
+    --fluent-colorNeutralShadowAmbient: rgba(0,0,0,0.24);
+    --fluent-colorNeutralShadowKey: rgba(0,0,0,0.28);
+  }
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--fluent-fontFamilyBase);background:var(--fluent-colorNeutralBackground3);color:var(--fluent-colorNeutralForeground1);padding:20px;line-height:1.5;display:flex;justify-content:center}
+.chat-widget{background:var(--fluent-colorNeutralBackground1);border-radius:var(--fluent-borderRadiusLarge);border:1px solid var(--fluent-colorNeutralStroke1);overflow:hidden;width:100%;max-width:480px;display:flex;flex-direction:column;height:600px;box-shadow:var(--fluent-shadow8)}
+.chat-header{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--fluent-colorNeutralStroke1);background:var(--fluent-colorBrandBackground);color:#fff;flex-shrink:0}
+.chat-header-icon{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:16px}
+.chat-header-info{flex:1}
+.chat-header-info h2{font-size:var(--fluent-fontSizeBase300);font-weight:var(--fluent-fontWeightSemibold)}
+.chat-header-info p{font-size:11px;opacity:.85}
+.status-indicator{display:flex;align-items:center;gap:6px;font-size:12px}
+.status-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.status-online{background:#6ccb5f;box-shadow:0 0 0 2px rgba(108,203,95,.3)}.status-away{background:var(--fluent-colorPaletteYellowBackground3)}.status-offline{background:var(--fluent-colorNeutralForeground3)}
+.queue-bar{padding:8px 20px;background:var(--fluent-colorNeutralBackground2);border-bottom:1px solid var(--fluent-colorNeutralStroke1);font-size:12px;color:var(--fluent-colorNeutralForeground2);text-align:center;flex-shrink:0;display:none}
+.chat-messages{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:12px}
+.msg{display:flex;flex-direction:column;max-width:80%}
+.msg.agent{align-self:flex-start}
+.msg.user{align-self:flex-end}
+.msg-bubble{padding:10px 14px;border-radius:var(--fluent-borderRadiusLarge);font-size:13px;line-height:1.4;word-wrap:break-word}
+.msg.agent .msg-bubble{background:var(--fluent-colorNeutralBackground3);color:var(--fluent-colorNeutralForeground1);border-bottom-left-radius:4px}
+.msg.user .msg-bubble{background:var(--fluent-colorBrandBackground);color:#fff;border-bottom-right-radius:4px}
+.msg-time{font-size:10px;color:var(--fluent-colorNeutralForeground3);margin-top:4px;padding:0 4px}
+.msg.user .msg-time{text-align:right}
+.msg-sender{font-size:11px;font-weight:var(--fluent-fontWeightSemibold);color:var(--fluent-colorNeutralForeground2);margin-bottom:2px}
+.typing-indicator{display:flex;align-items:center;gap:4px;padding:4px 0;height:24px}
+.typing-dot{width:8px;height:8px;border-radius:50%;background:var(--fluent-colorNeutralForeground3);animation:typing 1.4s infinite ease-in-out}
+.typing-dot:nth-child(1){animation-delay:0s}.typing-dot:nth-child(2){animation-delay:.2s}.typing-dot:nth-child(3){animation-delay:.4s}
+@keyframes typing{0%,80%,100%{transform:scale(0.6);opacity:.4}40%{transform:scale(1);opacity:1}}
+.chat-input-area{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--fluent-colorNeutralStroke1);background:var(--fluent-colorNeutralBackground1);flex-shrink:0;align-items:flex-end}
+.chat-input{flex:1;padding:10px 14px;border:1px solid var(--fluent-colorNeutralStroke1);border-radius:var(--fluent-borderRadiusLarge);font-size:var(--fluent-fontSizeBase300);font-family:inherit;background:var(--fluent-colorNeutralBackground2);color:var(--fluent-colorNeutralForeground1);resize:none;min-height:40px;max-height:120px;line-height:1.4}
+.chat-input:focus{outline:none;border-color:var(--fluent-colorBrandBackground);box-shadow:0 0 0 2px rgba(15,108,189,.12)}
+.chat-input::placeholder{color:var(--fluent-colorNeutralForeground3)}
+.send-btn{width:40px;height:40px;border:none;border-radius:50%;background:var(--fluent-colorBrandBackground);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;transition:background .15s;flex-shrink:0}
+.send-btn:hover{background:#0a5ba6}
+.send-btn:focus{outline:2px solid var(--fluent-colorBrandBackground);outline-offset:2px}
+.send-btn:disabled{opacity:.4;cursor:not-allowed}
+.ws-info{padding:6px 16px;background:var(--fluent-colorNeutralBackground3);font-size:10px;color:var(--fluent-colorNeutralForeground3);text-align:center;border-top:1px solid var(--fluent-colorNeutralStroke1);flex-shrink:0;font-family:'Consolas','Courier New',monospace}
+</style>
+</head>
+<body>
+<div class="chat-widget" role="region" aria-label="ServiceNow Live Chat">
+  <div class="chat-header">
+    <div class="chat-header-icon">💬</div>
+    <div class="chat-header-info"><h2>Connected to ServiceNow Agent</h2><p id="agent-name">Support Agent</p></div>
+    <div class="status-indicator" id="status-indicator" aria-live="polite"><div class="status-dot status-online" id="status-dot"></div><span id="status-text">Online</span></div>
+  </div>
+  <div class="queue-bar" id="queue-bar" role="status" aria-live="polite"></div>
+  <div class="chat-messages" id="messages" role="log" aria-label="Chat messages" aria-live="polite"></div>
+  <div class="typing-indicator" id="typing" style="display:none;padding:4px 20px" aria-live="polite" aria-label="Agent is typing">
+    <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+  </div>
+  <div class="chat-input-area">
+    <textarea class="chat-input" id="chat-input" placeholder="Type a message..." aria-label="Chat message input" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+    <button class="send-btn" id="send-btn" onclick="sendMessage()" aria-label="Send message">➤</button>
+  </div>
+  <div class="ws-info" id="ws-info"></div>
+</div>
+<script>
+var to=window.__TOOL_DATA__||(window.openai&&window.openai.toolOutput)||{};
+var config=to.config||{};
+var agentStatus=to.agentStatus||{};
+var wsBase=window.__SERVER_BASE_URL__||'';
+
+function esc(s){var d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
+
+// Agent status
+var statusMap={online:'status-online',away:'status-away',offline:'status-offline'};
+var status=(agentStatus.status||config.status||'online').toLowerCase();
+document.getElementById('status-dot').className='status-dot '+(statusMap[status]||'status-online');
+document.getElementById('status-text').textContent=status.charAt(0).toUpperCase()+status.slice(1);
+document.getElementById('agent-name').textContent=agentStatus.agentName||config.agentName||'Support Agent';
+
+// Queue
+var queuePos=agentStatus.queuePosition||config.queuePosition||0;
+if(queuePos>0){
+  var qb=document.getElementById('queue-bar');
+  qb.style.display='block';
+  qb.textContent='You are #'+queuePos+' in queue · Estimated wait: '+(agentStatus.estimatedWait||config.estimatedWait||'~5 min');
+}
+
+// Render initial messages
+var initMessages=agentStatus.messages||config.messages||[];
+var messagesEl=document.getElementById('messages');
+
+function renderMessage(msg){
+  var isAgent=msg.role==='agent'||msg.from==='agent';
+  var div=document.createElement('div');
+  div.className='msg '+(isAgent?'agent':'user');
+  div.setAttribute('tabindex','0');
+  var html='';
+  if(isAgent)html+='<div class="msg-sender">'+esc(agentStatus.agentName||config.agentName||'Agent')+'</div>';
+  html+='<div class="msg-bubble">'+esc(msg.text||msg.content||msg.message||'')+'</div>';
+  html+='<div class="msg-time">'+esc(msg.time||msg.timestamp||new Date().toLocaleTimeString())+'</div>';
+  div.innerHTML=html;
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop=messagesEl.scrollHeight;
+}
+
+for(var i=0;i<initMessages.length;i++){renderMessage(initMessages[i]);}
+if(initMessages.length===0){
+  renderMessage({role:'agent',text:'Hello! How can I help you today?',time:new Date().toLocaleTimeString()});
+}
+
+function sendMessage(){
+  var input=document.getElementById('chat-input');
+  var text=input.value.trim();
+  if(!text)return;
+  renderMessage({role:'user',text:text,time:new Date().toLocaleTimeString()});
+  input.value='';
+  input.style.height='40px';
+  // Show typing indicator briefly
+  var typing=document.getElementById('typing');
+  typing.style.display='flex';
+  setTimeout(function(){typing.style.display='none';},2000);
+}
+
+function handleKey(e){
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}
+}
+
+function autoResize(el){
+  el.style.height='40px';
+  el.style.height=Math.min(el.scrollHeight,120)+'px';
+}
+
+// WebSocket info
+document.getElementById('ws-info').textContent='WebSocket: '+(wsBase?wsBase+'/ws/chat':'Not configured');
+</script>
+</body>
+</html>

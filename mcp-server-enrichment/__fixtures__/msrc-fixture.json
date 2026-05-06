@@ -1,0 +1,51 @@
+{
+  "DocumentTitle": { "Value": "October 2024 Security Updates (Demo Fixture)" },
+  "DocumentTracking": {
+    "Identification": { "ID": { "Value": "2024-Oct" } },
+    "InitialReleaseDate": "2024-10-08T07:00:00Z"
+  },
+  "Vulnerability": [
+    {
+      "CVE": "CVE-2024-43572",
+      "Title": { "Value": "Microsoft Management Console Remote Code Execution" },
+      "Threats": [
+        {
+          "Description": {
+            "Value": "An attacker who exploits this vulnerability can execute arbitrary code in the context of the user via a crafted MSC file. Patch Tuesday — October 2024."
+          },
+          "Type": 0
+        }
+      ],
+      "CVSSScoreSets": [
+        {
+          "BaseScore": 9.8,
+          "Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+        }
+      ],
+      "ProductStatuses": [
+        {
+          "ProductID": ["11923-Windows-Server-2022", "11924-Windows-11"]
+        }
+      ],
+      "Notes": [{ "Title": "Mitigation", "Value": "Apply October 2024 cumulative update." }]
+    },
+    {
+      "CVE": "CVE-2024-43573",
+      "Title": { "Value": "Windows MSHTML Platform Spoofing Vulnerability" },
+      "Threats": [
+        {
+          "Description": {
+            "Value": "Allows an attacker to spoof platform identity by crafted HTML content. Important rating."
+          },
+          "Type": 0
+        }
+      ],
+      "CVSSScoreSets": [
+        {
+          "BaseScore": 6.5,
+          "Vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N"
+        }
+      ]
+    }
+  ]
+}

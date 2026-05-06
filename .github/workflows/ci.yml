@@ -65,6 +65,33 @@ jobs:
       - name: Docker build (validate)
         run: docker build -t itsm-mcp-server:ci .
 
+  # ── MCP Server (Enrichment) ────────────────────────────────────
+  mcp-server-enrichment:
+    name: MCP Enrichment (typecheck + test + docker)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-server-enrichment
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mcp-server-enrichment/package-lock.json
+
+      - run: npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Docker build (validate)
+        run: docker build -t itsm-mcp-enrichment:ci .
+
   # ── Teams App Package ──────────────────────────────────────────
   validate-app-package:
     name: Validate Teams manifest

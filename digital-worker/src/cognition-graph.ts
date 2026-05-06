@@ -22,20 +22,25 @@ import { allWorkers } from './worker-definitions';
 import { signalRouter, type Signal } from './signal-router';
 import { getRecentForecasts } from './foresight';
 import { getRecentOutcomes } from './outcome-verifier';
+import { listTags } from './cognition-tags';
 
 export interface CognitionNode {
   id: string;
   label: string;
-  group: 'worker' | 'signal' | 'forecast' | 'outcome' | 'asset';
+  group: 'worker' | 'signal' | 'forecast' | 'outcome' | 'asset' | 'tag';
   severity?: string;
   status?: string;
   val?: number;
+  /** Phase E — TTL for tags (ISO ts), opaque otherwise. */
+  expiresAt?: string;
+  /** Phase E — tag namespace (only set on `group: 'tag'`). */
+  namespace?: string;
 }
 
 export interface CognitionLink {
   source: string;
   target: string;
-  kind: 'subscribes' | 'predicts' | 'evidences' | 'resolves' | 'cascades' | 'affects';
+  kind: 'subscribes' | 'predicts' | 'evidences' | 'resolves' | 'cascades' | 'affects' | 'tagged';
 }
 
 export interface CognitionGraph {
@@ -48,6 +53,7 @@ export interface CognitionGraph {
     forecasts: number;
     outcomes: number;
     assets: number;
+    tags: number;
   };
 }
 
@@ -156,6 +162,26 @@ export function buildCognitionGraph(): CognitionGraph {
     }
   }
 
+  // 5. Phase E — Cognition tags (e.g. upstream-degraded:<region>) with TTL.
+  // Each live tag becomes a `tag` node; if the tag key matches a known
+  // asset already in the graph, we draw a `tagged` edge so the upstream
+  // condition shows on the affected asset cluster in Mission Control.
+  for (const t of listTags()) {
+    const tid = `tag:${t.namespace}:${t.key}`;
+    nodes.set(tid, {
+      id: tid,
+      label: `${t.namespace}:${t.key}`,
+      group: 'tag',
+      namespace: t.namespace,
+      expiresAt: new Date(t.expiresAt).toISOString(),
+      val: 3,
+    });
+    const aid = `asset:${t.key}`;
+    if (nodes.has(aid)) {
+      links.push({ source: tid, target: aid, kind: 'tagged' });
+    }
+  }
+
   return {
     nodes: Array.from(nodes.values()),
     links,
@@ -166,6 +192,7 @@ export function buildCognitionGraph(): CognitionGraph {
       forecasts: Array.from(nodes.values()).filter((n) => n.group === 'forecast').length,
       outcomes: Array.from(nodes.values()).filter((n) => n.group === 'outcome').length,
       assets: Array.from(nodes.values()).filter((n) => n.group === 'asset').length,
+      tags: Array.from(nodes.values()).filter((n) => n.group === 'tag').length,
     },
   };
 }

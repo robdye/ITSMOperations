@@ -125,6 +125,7 @@ resource digitalWorker 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'AZURE_SPEECH_ENDPOINT', value: speechEndpoint }
             { name: 'AZURE_SPEECH_REGION', value: speechRegion }
             { name: 'MCP_CHANGE_ENDPOINT', value: 'https://itsm-ops-${environmentName}-mcp.${containerAppsEnv.properties.defaultDomain}' }
+            { name: 'MCP_ENRICHMENT_ENDPOINT', value: 'https://itsm-ops-${environmentName}-enrichment.${containerAppsEnv.properties.defaultDomain}' }
             { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
           ]
         }

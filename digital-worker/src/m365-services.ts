@@ -1,4 +1,8 @@
-// ITSM Operations — Static M365 wrappers (MCP-first / Graph-fallback)
+// ITSM Operations — Static M365 service wrappers (MCP-first / Graph-fallback)
+//
+// File renamed from m365-tools.ts to disambiguate from
+// digital-worker/src/tools/m365-tools.ts (which contains @openai/agents
+// `tool()` definitions backed by WorkIQ).
 //
 // Each wrapper has a two-path design:
 //   1. If a TurnContext is available, prefer the live MCP server via OBO.

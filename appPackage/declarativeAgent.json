@@ -16,11 +16,12 @@
         { "id": "itsmops", "file": "itsm-plugin.json" }
     ],
     "conversation_starters": [
-        { "title": "Morning Briefing", "text": "Show me the ITSM operations briefing." },
-        { "title": "Incident Dashboard", "text": "Show me the incident dashboard." },
-        { "title": "Change Dashboard", "text": "Show me the change management dashboard." },
-        { "title": "SLA Compliance", "text": "Show me the SLA compliance dashboard." },
-        { "title": "Problem Dashboard", "text": "Show me open problems and known errors." },
-        { "title": "Asset Lifecycle", "text": "Show me the asset lifecycle and EOL risk dashboard." }
+        { "title": "Brief me on overnight ops", "text": "Give me my full operations briefing for the last 12 hours — incidents, changes, problems, SLAs and the top actions for today." },
+        { "title": "What's at risk in the next 4 hours?", "text": "Show me SLAs at risk of breach and any change collisions in the next 4 hours." },
+        { "title": "Where is the heat right now?", "text": "Show me the estate health heatmap. Which Tier-1 services are degraded?" },
+        { "title": "Time-travel: what breaks in 6 months?", "text": "Show me the EOL risk forecast for the next 6 months. Which Tier-1 assets need migration plans?" },
+        { "title": "Generate this week's CAB pack", "text": "Generate the CAB pack for the next CAB meeting with risk scores, blast radius previews and NIST citations." },
+        { "title": "Tell the resolution story for INC...", "text": "Give me the resolution story for incident INC0011423 in the news-card format." },
+        { "title": "Generate this week's CAB pack as a live Loop", "text": "Generate the CAB pack for the next CAB meeting as a live Loop component I can share into Teams and Outlook." }
     ]
 }

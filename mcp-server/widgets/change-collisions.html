@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Change Collisions</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+ --bg:#fff;--bg2:#f7f7f8;--bg3:#fafafa;
+ --tx:#242424;--tx2:#616161;--tx3:#9e9e9e;
+ --br:#e1e1e1;--brSub:#f0f0f0;
+ --brand:#0f6cbd;--brandBg:#eff6fc;
+ --ok:#0e700e;--okBg:#f1faf1;
+ --warn:#bc4b09;--warnBg:#fff9f5;
+ --danger:#b10e1c;--dangerBg:#fdf3f4;
+ --shadow:0 1px 2px rgba(0,0,0,.05),0 4px 12px rgba(0,0,0,.04);
+ --r:8px;--rLg:12px;
+ --gradOk:linear-gradient(135deg,#f1faf1,#dcefdc);
+ --gradWarn:linear-gradient(135deg,#fff9f5,#ffeed8);
+ --gradDanger:linear-gradient(135deg,#fdf3f4,#fbdee2);
+}
+@media (prefers-color-scheme:dark){:root{
+ --bg:#1f1f1f;--bg2:#262626;--bg3:#2d2d2d;
+ --tx:#e8e8e8;--tx2:#b0b0b0;--tx3:#7a7a7a;
+ --br:#3a3a3a;--brSub:#2f2f2f;
+ --brand:#479ef5;--brandBg:#082338;
+ --ok:#54b054;--okBg:#0e2d10;--warn:#f7a648;--warnBg:#3d1d00;--danger:#e87979;--dangerBg:#3b0509;
+ --shadow:0 2px 6px rgba(0,0,0,.4);
+ --gradOk:linear-gradient(135deg,#0e2d10,#1c4520);
+ --gradWarn:linear-gradient(135deg,#3d1d00,#5a2c00);
+ --gradDanger:linear-gradient(135deg,#3b0509,#580a13);
+}}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg2);color:var(--tx);padding:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.brand-bar{height:4px;background:linear-gradient(90deg,#0f6cbd,#479ef5,#0f6cbd);border-radius:4px 4px 0 0}
+.widget{max-width:1180px;margin:0 auto;background:var(--bg);border:1px solid var(--br);border-radius:var(--rLg);overflow:hidden;box-shadow:var(--shadow)}
+.hdr{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--brSub)}
+.hdr-icon{width:36px;height:36px;border-radius:var(--r);background:var(--brandBg);color:var(--brand);display:flex;align-items:center;justify-content:center}
+.hdr-icon svg{width:20px;height:20px}
+.hdr h1{font-size:15px;font-weight:600}
+.hdr-sub{font-size:11px;color:var(--tx2)}
+.wordmark{margin-left:auto;color:var(--tx3);opacity:.7}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;padding:14px 18px;background:var(--bg)}
+.kpi{padding:14px 16px;border-radius:var(--rLg);border:1px solid var(--br);transition:transform .15s,box-shadow .15s}
+.kpi:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.kpi.tone-ok{background:var(--gradOk)}.kpi.tone-warn{background:var(--gradWarn)}.kpi.tone-danger{background:var(--gradDanger);box-shadow:0 0 16px rgba(177,14,28,.25)}
+.kpi-label{font-size:10px;font-weight:600;color:var(--tx2);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:5px}
+.kpi-label svg{width:13px;height:13px}
+.kpi-num{font-size:36px;font-weight:700;line-height:1;letter-spacing:-.8px;margin:6px 0;font-variant-numeric:tabular-nums}
+.kpi.tone-ok .kpi-num{color:var(--ok)}.kpi.tone-warn .kpi-num{color:var(--warn)}.kpi.tone-danger .kpi-num{color:var(--danger)}
+.kpi-spark{display:block;height:20px;width:60px;opacity:.85}
+.kpi-foot{font-size:10px;color:var(--tx2);margin-top:3px}
+.calendar{padding:6px 16px 16px;overflow-x:auto}
+.cal-grid{display:grid;grid-template-columns:90px repeat(14,minmax(70px,1fr));min-width:1080px;border:1px solid var(--br);border-radius:var(--r);background:var(--bg);overflow:hidden}
+.cal-head{background:var(--bg3);border-bottom:1px solid var(--br);padding:8px 6px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--tx2);text-align:center}
+.cal-head.today{background:var(--brandBg);color:var(--brand)}
+.cal-head .day-num{font-size:14px;font-weight:700;color:var(--tx);margin-top:2px}
+.cal-head.today .day-num{color:var(--brand)}
+.cal-head.weekend{background:var(--bg2)}
+.cal-cell{border-right:1px solid var(--brSub);border-bottom:1px solid var(--brSub);padding:4px 5px;font-size:10px;min-height:36px;position:relative}
+.cal-cell.weekend{background:var(--bg3)}
+.cal-cell.today{box-shadow:inset 0 0 0 2px var(--brand)}
+.cal-row-label{padding:8px 10px;font-size:11px;font-weight:600;color:var(--tx2);background:var(--bg3);border-bottom:1px solid var(--brSub);position:sticky;left:0;z-index:2;display:flex;align-items:center;gap:6px}
+.cal-row-label svg{width:12px;height:12px;color:var(--tx3)}
+.bar{display:block;padding:3px 6px;margin:1px 0;border-radius:4px;font-size:10px;line-height:1.2;font-weight:600;cursor:pointer;background:var(--brandBg);color:var(--brand);border-left:3px solid var(--brand);transition:transform .12s,box-shadow .12s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar:hover{transform:translateX(1px);box-shadow:var(--shadow)}
+.bar.normal{background:var(--okBg);color:var(--ok);border-left-color:var(--ok)}
+.bar.standard{background:var(--brandBg);color:var(--brand);border-left-color:var(--brand)}
+.bar.emergency{background:var(--warnBg);color:var(--warn);border-left-color:var(--warn)}
+.bar.collision{background:var(--dangerBg);color:var(--danger);border-left-color:var(--danger);box-shadow:0 0 8px rgba(177,14,28,.25);animation:nudge 2s ease-in-out infinite}
+@keyframes nudge{0%,100%{transform:translateX(0)}50%{transform:translateX(1px)}}
+@media (prefers-reduced-motion:reduce){.bar.collision{animation:none}}
+.alerts{padding:8px 18px 16px}
+.alerts h3{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--tx2);padding:10px 0 6px;display:flex;align-items:center;gap:6px}
+.alerts h3 svg{width:14px;height:14px;color:var(--danger)}
+.coll{padding:11px 14px;border:1px solid var(--danger);border-radius:var(--r);background:var(--gradDanger);margin-bottom:6px;cursor:pointer;transition:transform .12s,box-shadow .12s}
+.coll:hover{transform:translateX(2px);box-shadow:0 0 12px rgba(177,14,28,.25)}
+.coll-title{font-size:13px;font-weight:600;color:var(--danger);margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.coll-title svg{width:14px;height:14px}
+.coll-detail{font-size:11px;color:var(--tx)}
+.coll-pair{display:inline-block;background:var(--bg);padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;margin:2px 3px 0 0;border:1px solid var(--br)}
+.empty{padding:36px 24px;text-align:center;color:var(--tx2)}
+.empty svg{width:48px;height:48px;margin-bottom:10px;color:var(--ok)}
+.empty h4{font-size:14px;font-weight:600;margin-bottom:4px}
+.empty p{font-size:12px;color:var(--tx3)}
+.foot{padding:10px 20px;border-top:1px solid var(--brSub);font-size:10px;color:var(--tx3);background:var(--bg3);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+</style>
+</head>
+<body>
+<div class="brand-bar" aria-hidden="true"></div>
+<div class="widget" role="region" aria-label="Change Collisions">
+ <div class="hdr">
+  <div class="hdr-icon">{{icon:collision}}</div>
+  <div><h1>Change Collisions — Next 14 Days</h1><div class="hdr-sub" id="ts">—</div></div>
+  <div class="wordmark">{{wordmark}}</div>
+ </div>
+ <div class="kpi-row" id="kpis"></div>
+ <div class="calendar"><div class="cal-grid" id="cal-grid"></div></div>
+ <div class="alerts" id="alerts"></div>
+ <div class="foot">
+  <span>ServiceNow change windows · collisions = same CI in overlapping windows</span>
+  <span id="foot-ts">—</span>
+ </div>
+</div>
+<script>
+var d=window.__TOOL_DATA__||(window.openai&&window.openai.toolOutput)||{};
+var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+var tsRaw=d.generatedAt?new Date(d.generatedAt):new Date();
+var tsFmt=tsRaw.toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+document.getElementById('ts').textContent='ServiceNow · '+tsFmt;
+document.getElementById('foot-ts').textContent='Generated '+tsFmt;
+
+function spark(values,color){
+ if(!values||!values.length)values=[1,1,1,1,1,1,1,1];
+ var max=Math.max.apply(null,values),min=Math.min.apply(null,values);
+ var range=max-min||1;var w=60,h=20;
+ var pts=values.map(function(v,i){var x=(i/(values.length-1))*w;var y=h-((v-min)/range)*(h-2)-1;return x.toFixed(1)+','+y.toFixed(1)}).join(' ');
+ return '<svg class="kpi-spark" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><polyline points="'+pts+'" fill="none" stroke="'+color+'" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+function countUp(el){
+ var t=parseFloat(el.getAttribute('data-target')||'0');if(reduce||t===0){el.textContent=String(t);return}
+ var t0=performance.now();function step(now){var p=Math.min(1,(now-t0)/900);el.textContent=String(Math.round(t*(1-Math.pow(1-p,3))));if(p<1)requestAnimationFrame(step)}requestAnimationFrame(step);
+}
+
+var changes=(d.changes||[]).slice();
+var collisions=d.collisions||[];
+
+// KPI
+var k=d.kpis||{};
+var kpiCfg=[
+ {label:'Changes scheduled',v:k.scheduled||changes.length,tone:'ok',color:'#0e700e',trend:k.scheduledTrend||[]},
+ {label:'Tonight (≤24h)',v:k.tonight||0,tone:'warn',color:'#bc4b09',trend:k.tonightTrend||[]},
+ {label:'Collisions',v:k.collisions!=null?k.collisions:collisions.length,tone:(collisions.length>0?'danger':'ok'),color:collisions.length>0?'#b10e1c':'#0e700e',trend:k.collisionsTrend||[]},
+ {label:'Emergency CRs',v:k.emergency||changes.filter(function(c){return(c.type||'').toLowerCase().indexOf('emerg')>=0}).length,tone:(k.emergency>0?'warn':'ok'),color:'#bc4b09',trend:k.emergencyTrend||[]}
+];
+var kpiEl=document.getElementById('kpis');
+kpiCfg.forEach(function(c){
+ var div=document.createElement('div');div.className='kpi tone-'+c.tone;
+ div.innerHTML='<div class="kpi-label">{{icon:collision}}<span>'+c.label+'</span></div>'+
+  '<div class="kpi-num" data-target="'+c.v+'">0</div>'+spark(c.trend,c.color)+
+  '<div class="kpi-foot">last 24h trend</div>';
+ kpiEl.appendChild(div);
+});
+document.querySelectorAll('.kpi-num').forEach(countUp);
+
+// Build 14-day grid
+var today=new Date();today.setHours(0,0,0,0);
+var days=[];
+for(var i=0;i<14;i++){var dt=new Date(today.getTime()+i*86400000);days.push(dt)}
+var grid=document.getElementById('cal-grid');
+
+// Header row
+var hdrCorner=document.createElement('div');hdrCorner.className='cal-row-label';hdrCorner.innerHTML='{{icon:cab}} <span>CI / Group</span>';grid.appendChild(hdrCorner);
+days.forEach(function(dt,idx){
+ var isW=dt.getDay()===0||dt.getDay()===6;
+ var head=document.createElement('div');head.className='cal-head'+(idx===0?' today':'')+(isW?' weekend':'');
+ head.innerHTML=dt.toLocaleString('en-GB',{weekday:'short'})+'<div class="day-num">'+dt.getDate()+'</div>';
+ grid.appendChild(head);
+});
+
+// Group changes by CI (or assignment_group fallback)
+var byKey={};
+changes.forEach(function(ch){
+ var key=ch.ci||ch.cmdb_ci||ch.assignment_group||'Unassigned';
+ if(!byKey[key])byKey[key]=[];byKey[key].push(ch);
+});
+// Sort: collision-affected first
+var collisionCIs={};(collisions||[]).forEach(function(co){if(co.ci)collisionCIs[co.ci]=true});
+var keys=Object.keys(byKey).sort(function(a,b){var ca=collisionCIs[a]?1:0,cb=collisionCIs[b]?1:0;return cb-ca});
+
+if(keys.length===0){
+ var emptyRow=document.createElement('div');emptyRow.style.gridColumn='1/-1';emptyRow.className='empty';
+ emptyRow.innerHTML='{{icon:approve}}<h4>No changes scheduled.</h4><p>The next 14 days are clear.</p>';
+ grid.appendChild(emptyRow);
+}
+
+keys.slice(0,12).forEach(function(key){
+ var label=document.createElement('div');label.className='cal-row-label';label.innerHTML='{{icon:change}} <span title="'+escapeHtml(key)+'">'+escapeHtml(key.length>14?key.slice(0,13)+'…':key)+'</span>';grid.appendChild(label);
+ days.forEach(function(dt,dayIdx){
+  var isW=dt.getDay()===0||dt.getDay()===6;
+  var cell=document.createElement('div');cell.className='cal-cell'+(dayIdx===0?' today':'')+(isW?' weekend':'');
+  byKey[key].forEach(function(ch){
+   var start=ch.plannedStart?new Date(ch.plannedStart):null;
+   var end=ch.plannedEnd?new Date(ch.plannedEnd):start;
+   if(!start)return;
+   var startMs=start.getTime();var endMs=(end||start).getTime();
+   if(startMs<=dt.getTime()+86400000-1&&endMs>=dt.getTime()){
+    var t=(ch.type||'normal').toLowerCase();
+    var cls=t.indexOf('emerg')>=0?'emergency':t.indexOf('standard')>=0?'standard':'normal';
+    if(ch.collision)cls='collision';
+    var bar=document.createElement('span');bar.className='bar '+cls;
+    bar.title=(ch.number||'CR')+' — '+(ch.short_description||'')+' · '+start.toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+    bar.textContent=(ch.number||'CR')+' · '+(ch.short_description||'').slice(0,18);
+    bar.addEventListener('click',function(){window.openai&&window.openai.sendFollowUp&&window.openai.sendFollowUp({prompt:'Show me change request '+(ch.number||'')})});
+    cell.appendChild(bar);
+   }
+  });
+  grid.appendChild(cell);
+ });
+});
+
+if(keys.length>12){
+ var more=document.createElement('div');more.style.gridColumn='1/-1';more.style.padding='10px';more.style.textAlign='center';more.style.color='var(--tx2)';
+ more.style.fontSize='11px';more.style.borderTop='1px solid var(--brSub)';
+ more.textContent='+'+(keys.length-12)+' more CIs/groups — ask for the full schedule.';
+ grid.appendChild(more);
+}
+
+// Collision alerts
+var alertsEl=document.getElementById('alerts');
+if(collisions.length===0){
+ alertsEl.innerHTML='<h3>{{icon:approve}} No collisions detected</h3><div class="empty">{{icon:approve}}<h4>All clear.</h4><p>Tonight\'s changes are safe to run together.</p></div>';
+}else{
+ alertsEl.innerHTML='<h3>{{icon:warning}} '+collisions.length+' collision(s) detected</h3>';
+ collisions.forEach(function(co){
+  var row=document.createElement('div');row.className='coll';
+  var pairs=(co.changes||[]).map(function(ch){return '<span class="coll-pair">'+escapeHtml(ch)+'</span>'}).join('');
+  row.innerHTML='<div class="coll-title">{{icon:collision}} '+escapeHtml(co.ci||'Multiple CIs')+(co.window?' · '+escapeHtml(co.window):'')+'</div>'+
+   '<div class="coll-detail">'+pairs+'</div>';
+  if(co.ci)row.addEventListener('click',function(){window.openai&&window.openai.sendFollowUp&&window.openai.sendFollowUp({prompt:'Show me the blast radius for '+co.ci})});
+  alertsEl.appendChild(row);
+ });
+}
+
+function escapeHtml(s){return String(s||'').replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+</script>
+</body>
+</html>

@@ -100,6 +100,30 @@ export function getUserPendingActions(userId: string): PendingAction[] {
 }
 
 /**
+ * Get all pending actions for a user identified by their Entra (AAD)
+ * Object ID. The approval queue's userId is normally the Teams-Bot user
+ * id (e.g. `29:1bWf...` or `28:<oid>`); the voice surface only knows the
+ * raw AAD OID (`MANAGER_TEAMS_OID`). This helper matches:
+ *   - exact userId equality (fast path), OR
+ *   - userId substring contains the OID (covers `28:<oid>` formats), OR
+ *   - displayName equality (last-resort match for tests).
+ *
+ * Used by voiceApprovals.ts to resolve a queue from an inbound call.
+ */
+export function findPendingActionsForOid(oid: string, displayName?: string): PendingAction[] {
+  if (!oid && !displayName) return [];
+  const oidLower = (oid || '').toLowerCase();
+  return Array.from(pendingActions.values())
+    .filter((a) => {
+      if (a.status !== 'pending') return false;
+      const uid = (a.userId || '').toLowerCase();
+      if (oidLower && (uid === oidLower || uid.includes(oidLower))) return true;
+      if (displayName && a.displayName === displayName) return true;
+      return false;
+    });
+}
+
+/**
  * Get queue summary.
  */
 export function getQueueSummary(): {

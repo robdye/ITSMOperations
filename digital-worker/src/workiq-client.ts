@@ -3,6 +3,11 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import {
+  WorkIqApiClient,
+  recordWorkIqAttempt,
+  type IWorkIqClient,
+} from './workiq-api-client';
 
 let mcpClient: Client | null = null;
 let connecting = false;
@@ -40,16 +45,23 @@ async function getClient(): Promise<Client> {
 }
 
 async function callWorkIq(question: string): Promise<string> {
-  const client = await getClient();
-  const result = await client.callTool({ name: 'ask_work_iq', arguments: { question } });
-  const content = result.content as Array<{ type: string; text?: string }>;
-  if (content && content.length > 0 && content[0].text) {
-    return content[0].text;
+  try {
+    const client = await getClient();
+    const result = await client.callTool({ name: 'ask_work_iq', arguments: { question } });
+    const content = result.content as Array<{ type: string; text?: string }>;
+    if (content && content.length > 0 && content[0].text) {
+      recordWorkIqAttempt('mcp', true);
+      return content[0].text;
+    }
+    recordWorkIqAttempt('mcp', true);
+    return JSON.stringify(result);
+  } catch (err) {
+    recordWorkIqAttempt('mcp', false, (err as Error).message);
+    throw err;
   }
-  return JSON.stringify(result);
 }
 
-export class WorkIqClient {
+export class WorkIqClient implements IWorkIqClient {
   // ── Email ──
   async searchEmails(query: string): Promise<string> {
     return callWorkIq(`Search my emails for: ${query}`);
@@ -128,4 +140,27 @@ export class WorkIqClient {
   async query(question: string): Promise<string> {
     return callWorkIq(question);
   }
+}
+
+// ── Transport selector ──
+//
+// Phase 1.6 — `WORKIQ_TRANSPORT=mcp|api` (default `mcp`). Returns a
+// process-singleton implementing `IWorkIqClient`. Callers should not
+// `new WorkIqClient()` directly — go through `getWorkIqClient()` so the
+// transport flag is honoured and KPIs land on the right counter.
+let activeClient: IWorkIqClient | null = null;
+
+export function getWorkIqClient(): IWorkIqClient {
+  if (activeClient) return activeClient;
+  const transport = (process.env.WORKIQ_TRANSPORT || 'mcp').toLowerCase();
+  if (transport === 'api') {
+    activeClient = new WorkIqApiClient();
+  } else {
+    activeClient = new WorkIqClient();
+  }
+  return activeClient;
+}
+
+export function getActiveWorkIqTransport(): 'mcp' | 'api' {
+  return (process.env.WORKIQ_TRANSPORT || 'mcp').toLowerCase() === 'api' ? 'api' : 'mcp';
 }

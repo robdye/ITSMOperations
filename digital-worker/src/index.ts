@@ -19,7 +19,7 @@ import crypto from 'crypto';
 import path from 'path';
 import { DefaultAzureCredential } from '@azure/identity';
 import { agentApplication } from './agent';
-import { startHandoverScheduler, stopHandoverScheduler, generateHandover } from './shift-handover';
+import { startHandoverScheduler, stopHandoverScheduler, generateHandover, generateMidshiftRecap, getBriefingKpi } from './shift-handover';
 import { startIncidentMonitor, stopIncidentMonitor, runIncidentPoll } from './incident-monitor';
 import { getAuditSummary, getRecentAuditEntries } from './audit-trail';
 import { getMemoryStoreSummary } from './memory-store';
@@ -32,7 +32,16 @@ import {
   initiateOutboundTeamsCall,
   isAcsConfigured,
   getActiveCallSnapshot,
+  getVoiceBridgeKpi,
 } from './voice/acsBridge';
+import { getVoiceApprovalKpi } from './voice/voiceApprovals';
+import { getActiveWorkIqTransport } from './workiq-client';
+import { getWorkIqKpi } from './workiq-api-client';
+import {
+  evaluateInboundA2A,
+  extractA2AContextFromBody,
+  getA2APolicyKpi,
+} from './a2a-policy';
 import { getTraces, getConversations, getReasoningStats } from './reasoning-trace';
 import { isVoiceEnabled } from './voice/voiceGate';
 import { initCosmosStore } from './cosmos-store';
@@ -54,6 +63,12 @@ import { getTuningStatus, createTuningDataset, extractResolvedIncidents, extract
 import { isFoundryEnabled, getFoundryStatus } from './foundry-agents';
 import { signalRouter, type Signal } from './signal-router';
 import { registerDefaultSubscriptions } from './workflow-subscriptions';
+import { registerOutcomeProbes, getOutcomeProbeKpi } from './outcome-probes';
+import { initCaseManager, getCaseKpi, listOpenCases, getCase as lookupCase } from './case-manager';
+import { startCaseReminderLoop, getReminderKpi } from './case-reminders';
+import { detectCorrelations, getCorrelationKpi } from './case-correlation';
+import { getReviewerKpi } from './reviewer-worker';
+import { startMetaMonitor, getMetaMonitorKpi, getRecentMetaAlerts } from './meta-monitor';
 import { DemoDirector, DemoTargetNotAllowedError } from './demo/demo-director';
 import { sendEmail as sendGraphMail } from './graph-mail';
 import { autonomousActions } from './autonomous-actions';
@@ -242,6 +257,11 @@ server.post('/api/scheduled', async (req: Request, res: Response) => {
       console.log('Shift handover triggered via /api/scheduled');
       await generateHandover();
       res.status(200).json({ status: 'handover_complete', routineId, timestamp: new Date().toISOString() });
+    } else if (routineId === 'midshift-recap') {
+      // Phase 3.6 — second briefing per shift.
+      console.log('Midshift recap triggered via /api/scheduled');
+      await generateMidshiftRecap();
+      res.status(200).json({ status: 'midshift_complete', routineId, timestamp: new Date().toISOString() });
     } else if (routineId === 'incident-poll') {
       console.log('Incident poll triggered via /api/scheduled');
       await runIncidentPoll();
@@ -555,13 +575,20 @@ server.post('/api/demo/scripted-storm', async (_req: Request, res: Response) => 
 // event (CallConnected, CallDisconnected, CreateCallFailed, etc.). Must be
 // publicly reachable — set PUBLIC_HOSTNAME / CONTAINER_APP_HOSTNAME so ACS
 // can build the callback URL on createCall.
-server.post('/api/calls/acs-events', (req: Request, res: Response) => {
+//
+// Phase 1.4 — handler is idempotent (handleAcsEvent dedupes on
+// callConnectionId + eventType + sequenceNumber) and we return 500 on
+// thrown errors so ACS retries; ACS retries are then deduped on the next
+// arrival. 200 is also returned when the body is malformed so ACS doesn't
+// hammer us with retries on payloads we can never process.
+server.post('/api/calls/acs-events', async (req: Request, res: Response) => {
   try {
-    handleAcsEvent(req.body);
+    await handleAcsEvent(req.body);
+    res.status(200).json({ ok: true });
   } catch (err) {
-    console.warn('[acs-bridge] event handler threw', (err as Error).message);
+    console.warn('[acs-bridge] event handler threw — returning 500 for ACS retry', (err as Error).message);
+    res.status(500).json({ ok: false, error: (err as Error).message });
   }
-  res.status(200).json({ ok: true });
 });
 
 // Diagnostics — list active ACS-bridged calls.
@@ -569,6 +596,26 @@ server.get('/api/calls/active', (_req: Request, res: Response) => {
   res.status(200).json({
     acsConfigured: isAcsConfigured(),
     activeCalls: getActiveCallSnapshot(),
+  });
+});
+
+// Phase 1.4/1.5 — single numeric KPI surface for the voice subsystem
+// (per hard rule #1: every new subsystem ships with a KPI). Returns
+// counters for outbound calls, ACS recording attach rate, Content
+// Safety blocks, and voice-approval intent breakdown.
+server.get('/api/voice/kpi', (_req: Request, res: Response) => {
+  res.status(200).json({
+    bridge: getVoiceBridgeKpi(),
+    approvals: getVoiceApprovalKpi(),
+  });
+});
+
+// Phase 1.6 — WorkIQ transport KPI. `WORKIQ_TRANSPORT=mcp|api` flag
+// surfaces here so we can prove parity before swapping defaults.
+server.get('/api/workiq/kpi', (_req: Request, res: Response) => {
+  res.status(200).json({
+    activeTransport: getActiveWorkIqTransport(),
+    perTransport: getWorkIqKpi(),
   });
 });
 
@@ -868,9 +915,9 @@ server.get('/api/jobs/:id', async (req: Request, res: Response) => {
 
 // Apply JWT auth middleware for routes below — skip public routes
 server.use((req, res, next) => {
-  const publicPaths = ['/api/health', '/api/platform-status', '/api/voice/status', '/api/voice/avatar-config', '/api/voice/page-me', '/voice', '/api/scheduled', '/api/signals', '/api/decisions', '/api/demo', '/api/demo/scripted-storm', '/api/foresight', '/api/foresight/run', '/api/outcomes', '/api/governance', '/api/governance/kill', '/api/governance/release', '/api/governance/freeze', '/api/autonomy/thresholds', '/api/goals', '/api/goals/plan', '/api/goals/pursue', '/api/experience', '/api/experience/recent', '/api/experience/find', '/api/jobs', '/api/cognition', '/api/cognition/graph', '/api/workers', '/api/approvals', '/api/approvals/callback', '/api/routines', '/api/audit', '/api/memory', '/api/reasoning', '/mission-control', '/api/a2a/message', '/api/a2a/discover', '/api/flows/callback', '/api/tuning/extract', '/api/tuning/status'];
+  const publicPaths = ['/api/health', '/api/platform-status', '/api/voice/status', '/api/voice/avatar-config', '/api/voice/page-me', '/api/voice/kpi', '/api/workiq/kpi', '/api/a2a/kpi', '/.well-known/agent-card.json', '/voice', '/api/scheduled', '/api/signals', '/api/decisions', '/api/demo', '/api/demo/scripted-storm', '/api/foresight', '/api/foresight/run', '/api/outcomes', '/api/outcomes/kpi', '/api/cases', '/api/cases/kpi', '/api/reviewer/kpi', '/api/meta/kpi', '/api/meta/alerts', '/api/briefings/kpi', '/api/governance', '/api/governance/kill', '/api/governance/release', '/api/governance/freeze', '/api/autonomy/thresholds', '/api/goals', '/api/goals/plan', '/api/goals/pursue', '/api/experience', '/api/experience/recent', '/api/experience/find', '/api/jobs', '/api/cognition', '/api/cognition/graph', '/api/workers', '/api/approvals', '/api/approvals/callback', '/api/routines', '/api/audit', '/api/memory', '/api/reasoning', '/mission-control', '/api/a2a/message', '/api/a2a/discover', '/api/flows/callback', '/api/tuning/extract', '/api/tuning/status'];
   // Phase 9 — prefix matching for parameterised routes (e.g. /api/jobs/:id).
-  const publicPrefixes = ['/api/jobs/'];
+  const publicPrefixes = ['/api/jobs/', '/api/cases/'];
   if (publicPaths.some(p => req.path === p)) {
     return next();
   }
@@ -902,13 +949,122 @@ server.post('/api/chat', async (req: Request, res: Response) => {
   }
 });
 
-// Agent-to-Agent (A2A) messages endpoint — same processing, separate logging
-server.post('/api/agent-messages', (req: AgentRequest, res: Response) => {
-  console.log('A2A message received from:', req.headers['x-agent-id'] || 'unknown-agent');
+// Agent-to-Agent (A2A) messages endpoint — same processing, separate logging.
+//
+// Phase 1.7 — gated by `evaluateInboundA2A()`:
+//   - allow-list  (env: A2A_ALLOWED_AGENTS)
+//   - rate budget (env: A2A_RATE_LIMIT_PER_HOUR, default 60/hr)
+//   - scope map   (env: A2A_AGENT_SCOPES, JSON)
+//   - kill-switch / change-freeze short-circuit
+// Rejections respond 403 with the reason. callerAgentId is stamped on
+// every audit-trail row (allow + reject) for forensic attribution.
+server.post('/api/agent-messages', async (req: AgentRequest, res: Response) => {
+  const ctx = extractA2AContextFromBody(req.headers['x-agent-id'], req.body);
+  console.log('A2A message received from:', ctx.callerAgentId || 'unknown-agent', 'intent:', ctx.intent || '(none)');
+  const decision = await evaluateInboundA2A(ctx);
+  if (!decision.allow) {
+    res.status(403).json({
+      error: 'a2a-policy-rejected',
+      reason: decision.reason,
+      details: decision.details,
+    });
+    return;
+  }
+  // Propagate callerAgentId via TurnContext baggage for downstream
+  // audit attribution.
   const adapter = agentApplication.adapter as CloudAdapter;
   adapter.process(req, res, async (context) => {
+    if (decision.callerAgentId) {
+      // turnState is the standard Bot Framework conduit for per-turn
+      // baggage. Downstream tools (e.g. agent-harness) read this and
+      // stamp it on audit entries.
+      context.turnState.set('callerAgentId', decision.callerAgentId);
+    }
     await agentApplication.run(context);
   });
+});
+
+// Phase 1.7 — agent-card discovery. Public, unauth, served from
+// `src/a2a/agent-card.json`. Mirrors the shape of well-known/openid for
+// other-agent discovery.
+server.get('/.well-known/agent-card.json', (_req: Request, res: Response) => {
+  try {
+    res.sendFile(path.join(__dirname, 'a2a', 'agent-card.json'));
+  } catch (err) {
+    res.status(500).json({ error: 'agent-card unavailable', details: (err as Error).message });
+  }
+});
+
+// Phase 1.7 — A2A inbound policy KPI surface.
+server.get('/api/a2a/kpi', (_req: Request, res: Response) => {
+  res.status(200).json(getA2APolicyKpi());
+});
+
+// Phase 2.3 — Outcome-probe KPI surface (per hard rule #1).
+server.get('/api/outcomes/kpi', (_req: Request, res: Response) => {
+  res.status(200).json(getOutcomeProbeKpi());
+});
+
+// Phase 3.1 — Case manager surfaces.
+server.get('/api/cases/kpi', (_req: Request, res: Response) => {
+  res.status(200).json(getCaseKpi());
+});
+
+// Phase 3.2 — Reminder/nag-loop KPI surface.
+server.get('/api/cases/reminders/kpi', (_req: Request, res: Response) => {
+  res.status(200).json(getReminderKpi());
+});
+
+// Phase 3.3 — Cross-workflow correlation.
+server.get('/api/cases/correlations', async (_req: Request, res: Response) => {
+  try {
+    const correlations = await detectCorrelations();
+    res.status(200).json({ correlations });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+server.get('/api/cases/correlations/kpi', (_req: Request, res: Response) => {
+  res.status(200).json(getCorrelationKpi());
+});
+
+// Phase 3.4 — Reviewer-worker KPI surface.
+server.get('/api/reviewer/kpi', (_req: Request, res: Response) => {
+  res.status(200).json(getReviewerKpi());
+});
+
+// Phase 3.5 — Meta-monitor.
+server.get('/api/meta/kpi', (_req: Request, res: Response) => {
+  res.status(200).json(getMetaMonitorKpi());
+});
+
+server.get('/api/meta/alerts', (_req: Request, res: Response) => {
+  res.status(200).json({ alerts: getRecentMetaAlerts(50) });
+});
+
+// Phase 3.6 — Briefing KPI surface (handovers + midshift recaps).
+server.get('/api/briefings/kpi', (_req: Request, res: Response) => {
+  res.status(200).json(getBriefingKpi());
+});
+
+server.get('/api/cases', async (_req: Request, res: Response) => {
+  try {
+    const open = await listOpenCases();
+    res.status(200).json({ cases: open });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+server.get('/api/cases/:id', async (req: Request, res: Response) => {
+  try {
+    const c = await lookupCase(req.params.id);
+    if (!c) return res.status(404).json({ error: 'not found' });
+    res.status(200).json(c);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
 });
 
 const port = Number(process.env.PORT) || 3978;
@@ -971,6 +1127,28 @@ httpServer.listen(port, host, async () => {
   }
   registerDefaultSubscriptions();
   console.log('  Signal-router default subscriptions registered');
+
+  // Phase 2.3 — Outcome probes for major-incident-response,
+  // change-lifecycle, and knowledge-harvest. Includes 1 reversible
+  // rollback handler.
+  registerOutcomeProbes();
+  console.log('  Outcome probes registered');
+
+  // Phase 3.1 — Case manager (Cosmos-backed long-running workspace).
+  await initCaseManager();
+  console.log('  Case manager initialized');
+
+  // Phase 3.2 — Periodic reminders + nag loop on open cases.
+  if (process.env.DISABLE_CRON !== 'true') {
+    startCaseReminderLoop();
+    console.log('  Case reminder loop started');
+  }
+
+  // Phase 3.5 — Meta-monitor (Alex watching herself).
+  if (process.env.DISABLE_CRON !== 'true') {
+    startMetaMonitor();
+    console.log('  Meta-monitor started');
+  }
 
   // Phase 9.1 — backfill anticipatory state from Azure Table Storage so that
   // restart does not erase forecasts/outcomes/tuner-overrides/governance.

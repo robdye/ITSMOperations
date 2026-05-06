@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Command Bridge</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+ --bg:#fff;--bg2:#f7f7f8;--bg3:#fafafa;--bgHover:#f0f0f0;
+ --tx:#242424;--tx2:#616161;--tx3:#9e9e9e;
+ --br:#e1e1e1;--brSub:#f0f0f0;
+ --brand:#0f6cbd;--brandHover:#115ea3;--brandBg:#eff6fc;
+ --ok:#0e700e;--okBg:#f1faf1;
+ --warn:#bc4b09;--warnBg:#fff9f5;
+ --danger:#b10e1c;--dangerBg:#fdf3f4;
+ --critical:#9c27b0;--criticalBg:#f5e9f7;
+ --info:#0078d4;--infoBg:#f0f6ff;
+ --shadow:0 1px 2px rgba(0,0,0,.05),0 4px 12px rgba(0,0,0,.04);
+ --shadowMd:0 6px 20px rgba(0,0,0,.08);
+ --shadowGlowDanger:0 0 18px rgba(177,14,28,.35);
+ --shadowGlowWarn:0 0 18px rgba(188,75,9,.30);
+ --r:8px;--rLg:12px;
+ --gradOk:linear-gradient(135deg,#f1faf1,#e6f5e6);
+ --gradWarn:linear-gradient(135deg,#fff9f5,#ffeed8);
+ --gradDanger:linear-gradient(135deg,#fdf3f4,#fbdee2);
+ --gradInfo:linear-gradient(135deg,#f0f6ff,#dceaff);
+}
+@media (prefers-color-scheme:dark){
+ :root{
+  --bg:#1f1f1f;--bg2:#262626;--bg3:#2d2d2d;--bgHover:#383838;
+  --tx:#e8e8e8;--tx2:#b0b0b0;--tx3:#7a7a7a;
+  --br:#3a3a3a;--brSub:#2f2f2f;
+  --brand:#479ef5;--brandHover:#62abf5;--brandBg:#082338;
+  --ok:#54b054;--okBg:#0e2d10;
+  --warn:#f7a648;--warnBg:#3d1d00;
+  --danger:#e87979;--dangerBg:#3b0509;
+  --critical:#d586e0;--criticalBg:#2d0e35;
+  --info:#62abf5;--infoBg:#001d3a;
+  --shadow:0 2px 6px rgba(0,0,0,.4);
+  --shadowMd:0 6px 20px rgba(0,0,0,.5);
+  --gradOk:linear-gradient(135deg,#0e2d10,#1c4520);
+  --gradWarn:linear-gradient(135deg,#3d1d00,#5a2c00);
+  --gradDanger:linear-gradient(135deg,#3b0509,#580a13);
+  --gradInfo:linear-gradient(135deg,#001d3a,#003066);
+ }
+}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg2);color:var(--tx);padding:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.brand-bar{height:4px;background:linear-gradient(90deg,#0f6cbd 0,#479ef5 50%,#0f6cbd 100%);border-radius:4px 4px 0 0}
+.widget{max-width:1180px;margin:0 auto;background:var(--bg);border:1px solid var(--br);border-radius:var(--rLg);overflow:hidden;box-shadow:var(--shadow)}
+.hdr{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--brSub)}
+.hdr-icon{width:36px;height:36px;border-radius:var(--r);background:var(--brandBg);color:var(--brand);display:flex;align-items:center;justify-content:center}
+.hdr-icon svg{width:20px;height:20px}
+.hdr h1{font-size:15px;font-weight:600;letter-spacing:-.1px}
+.hdr-sub{font-size:11px;color:var(--tx2);display:flex;align-items:center;gap:6px;margin-top:2px}
+.hdr-sub svg{width:12px;height:12px;opacity:.7}
+.wordmark{margin-left:auto;color:var(--tx3);opacity:.7}
+.status-band{padding:14px 20px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--brSub);transition:background .25s}
+.status-band .icon{flex:0 0 26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.status-band .icon svg{width:16px;height:16px}
+.status-band.ok{background:var(--gradOk);color:var(--ok)}
+.status-band.ok .icon{background:#fff;color:var(--ok)}
+.status-band.warn{background:var(--gradWarn);color:var(--warn)}
+.status-band.warn .icon{background:#fff;color:var(--warn)}
+.status-band.danger{background:var(--gradDanger);color:var(--danger);animation:softGlow 3s ease-in-out infinite}
+.status-band.danger .icon{background:#fff;color:var(--danger)}
+@keyframes softGlow{0%,100%{box-shadow:inset 0 0 0 0 rgba(177,14,28,0)}50%{box-shadow:inset 0 0 24px 0 rgba(177,14,28,.25)}}
+@media (prefers-reduced-motion:reduce){.status-band.danger{animation:none}}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;padding:16px 20px;background:var(--bg)}
+.kpi{position:relative;padding:18px 20px;border-radius:var(--rLg);border:1px solid var(--br);cursor:pointer;transition:transform .15s,box-shadow .15s,border-color .15s;overflow:hidden}
+.kpi:hover{transform:translateY(-2px);box-shadow:var(--shadowMd);border-color:var(--brand)}
+.kpi.tone-ok{background:var(--gradOk)}
+.kpi.tone-warn{background:var(--gradWarn)}
+.kpi.tone-danger{background:var(--gradDanger);box-shadow:var(--shadowGlowDanger)}
+.kpi.tone-info{background:var(--gradInfo)}
+.kpi-label{font-size:11px;font-weight:600;color:var(--tx2);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px}
+.kpi-label svg{width:14px;height:14px}
+.kpi-num{font-size:64px;font-weight:700;line-height:1;letter-spacing:-1.5px;margin:8px 0 6px;font-variant-numeric:tabular-nums}
+.kpi.tone-ok .kpi-num{color:var(--ok)}
+.kpi.tone-warn .kpi-num{color:var(--warn)}
+.kpi.tone-danger .kpi-num{color:var(--danger)}
+.kpi.tone-info .kpi-num{color:var(--brand)}
+.kpi-spark{display:block;height:24px;width:60px;margin-top:4px;opacity:.85}
+.kpi-foot{font-size:11px;color:var(--tx2);margin-top:4px;display:flex;justify-content:space-between;align-items:center}
+.kpi-arrow{display:inline-flex;align-items:center;gap:3px;font-weight:600}
+.rings{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;padding:0 20px 16px}
+.ring-card{padding:12px 14px;border-radius:var(--r);border:1px solid var(--br);background:var(--bg3);display:flex;align-items:center;gap:12px}
+.ring-svg{flex-shrink:0;width:48px;height:48px}
+.ring-track{stroke:var(--brSub);fill:none;stroke-width:6}
+.ring-prog{fill:none;stroke-width:6;stroke-linecap:round;transform:rotate(-90deg);transform-origin:center;transition:stroke-dasharray 1s ease-out}
+.ring-meta .ring-title{font-size:11px;font-weight:600;color:var(--tx2);text-transform:uppercase;letter-spacing:.4px;display:flex;align-items:center;gap:5px}
+.ring-meta .ring-title svg{width:12px;height:12px}
+.ring-meta .ring-num{font-size:18px;font-weight:700;line-height:1;margin-top:3px}
+.ring-meta .ring-sub{font-size:10px;color:var(--tx3);margin-top:2px}
+.actions{padding:0 20px 18px}
+.actions h3{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--tx2);padding:10px 0 6px;display:flex;align-items:center;gap:6px;border-top:1px solid var(--brSub)}
+.actions h3 svg{width:14px;height:14px;color:var(--brand)}
+.action{display:flex;gap:12px;padding:11px 14px;border:1px solid var(--br);border-radius:var(--r);margin-bottom:6px;background:var(--bg);cursor:pointer;transition:transform .12s,border-color .12s,box-shadow .12s;align-items:flex-start}
+.action:hover{transform:translateX(2px);border-color:var(--brand);box-shadow:var(--shadow)}
+.action-rank{flex:0 0 22px;height:22px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+.action-rank.crit{background:var(--danger)}.action-rank.high{background:var(--warn)}
+.action-body{flex:1;min-width:0}
+.action-title{font-size:13px;font-weight:600;line-height:1.3;color:var(--tx)}
+.action-detail{font-size:11px;color:var(--tx2);margin-top:3px}
+.empty{padding:36px 24px;text-align:center;color:var(--tx2)}
+.empty svg{width:48px;height:48px;margin-bottom:10px;color:var(--ok)}
+.empty h4{font-size:14px;font-weight:600;margin-bottom:4px}
+.empty p{font-size:12px;color:var(--tx3)}
+.foot{padding:10px 20px;border-top:1px solid var(--brSub);font-size:10px;color:var(--tx3);display:flex;justify-content:space-between;align-items:center;background:var(--bg3)}
+@media (max-width:520px){.kpi-num{font-size:50px}}
+</style>
+</head>
+<body>
+<div class="brand-bar" aria-hidden="true"></div>
+<div class="widget" role="region" aria-label="Command Bridge">
+ <div class="hdr">
+  <div class="hdr-icon">{{icon:bridge}}</div>
+  <div>
+   <h1>Command Bridge</h1>
+   <div class="hdr-sub">{{icon:sla}}<span id="ts">—</span></div>
+  </div>
+  <div class="wordmark" aria-hidden="true">{{wordmark}}</div>
+ </div>
+ <div class="status-band ok" id="status-band">
+  <div class="icon" id="status-icon">{{icon:approve}}</div>
+  <div id="status-text">All systems nominal.</div>
+ </div>
+ <div class="kpi-row" id="kpis"></div>
+ <div class="rings" id="rings"></div>
+ <div class="actions">
+  <h3>{{icon:bell}} Top 5 actions for today</h3>
+  <div id="actions-list"></div>
+ </div>
+ <div class="foot">
+  <span>ITSM Operations · ServiceNow + EOL</span>
+  <span id="foot-ts">—</span>
+ </div>
+</div>
+<script>
+var d=window.__TOOL_DATA__||(window.openai&&window.openai.toolOutput)||{};
+var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+var ts=d.generatedAt?new Date(d.generatedAt):new Date();
+var tsFmt=ts.toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+document.getElementById('ts').textContent='ServiceNow · '+tsFmt;
+document.getElementById('foot-ts').textContent='Generated '+tsFmt;
+
+// ── Status band ──
+var sev=(d.status&&d.status.severity)||'ok';
+var bandText=(d.status&&d.status.text)||'All systems nominal.';
+var band=document.getElementById('status-band');
+band.classList.remove('ok','warn','danger');band.classList.add(sev);
+document.getElementById('status-text').textContent=bandText;
+var sIcon=document.getElementById('status-icon');
+if(sev==='danger'){sIcon.innerHTML='{{icon:warning}}'}
+else if(sev==='warn'){sIcon.innerHTML='{{icon:warning}}'}
+else{sIcon.innerHTML='{{icon:approve}}'}
+
+// ── Sparkline helper ──
+function sparkline(values,color){
+ if(!values||!values.length)values=[1,1,1,1,1,1,1,1];
+ var max=Math.max.apply(null,values),min=Math.min.apply(null,values);
+ var range=max-min||1;var w=60,h=24;
+ var pts=values.map(function(v,i){var x=(i/(values.length-1))*w;var y=h-((v-min)/range)*(h-2)-1;return x.toFixed(1)+','+y.toFixed(1)}).join(' ');
+ return '<svg class="kpi-spark" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><polyline points="'+pts+'" fill="none" stroke="'+color+'" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+
+// ── KPI tiles ──
+var k=d.kpis||{p1:{value:0,trend:[]},slaRisk:{value:0,trend:[]},approvals:{value:0,trend:[]}};
+var p1=k.p1||{},slaRisk=k.slaRisk||{},appr=k.approvals||{};
+var kpiCfg=[
+ {key:'p1',label:'Open P1',icon:'{{icon:incident}}',value:p1.value||0,delta:p1.delta,trend:p1.trend||[],tone:(p1.value||0)>0?'danger':'ok',color:(p1.value||0)>0?'#b10e1c':'#0e700e'},
+ {key:'sla',label:'SLA at risk',icon:'{{icon:sla}}',value:slaRisk.value||0,delta:slaRisk.delta,trend:slaRisk.trend||[],tone:(slaRisk.value||0)>3?'warn':(slaRisk.value||0)>0?'warn':'ok',color:(slaRisk.value||0)>0?'#bc4b09':'#0e700e'},
+ {key:'appr',label:'Approvals waiting',icon:'{{icon:approve}}',value:appr.value||0,delta:appr.delta,trend:appr.trend||[],tone:(appr.value||0)>5?'warn':'info',color:(appr.value||0)>5?'#bc4b09':'#0f6cbd'}
+];
+var kpiRow=document.getElementById('kpis');
+kpiCfg.forEach(function(c){
+ var deltaHtml='';
+ if(typeof c.delta==='number'){
+  var a=c.delta>0?'{{icon:arrowUp}}':c.delta<0?'{{icon:arrowDown}}':'{{icon:arrowRight}}';
+  deltaHtml='<span class="kpi-arrow" style="color:'+(c.delta>0?(c.key==='p1'||c.key==='sla'?'#b10e1c':'#0e700e'):c.delta<0?(c.key==='p1'||c.key==='sla'?'#0e700e':'#b10e1c'):'var(--tx2)')+'">'+a+(c.delta>0?'+':'')+c.delta+'</span>';
+ }
+ var tile=document.createElement('div');tile.className='kpi tone-'+c.tone;
+ tile.setAttribute('data-action',c.key);
+ tile.innerHTML='<div class="kpi-label">'+c.icon+'<span>'+c.label+'</span></div>'+
+  '<div class="kpi-num" data-target="'+c.value+'">0</div>'+
+  sparkline(c.trend,c.color)+
+  '<div class="kpi-foot"><span>last 24h</span>'+deltaHtml+'</div>';
+ tile.addEventListener('click',function(){
+  if(c.key==='p1')window.openai&&window.openai.sendFollowUp&&window.openai.sendFollowUp({prompt:'Show me the incident dashboard for open P1s'});
+  else if(c.key==='sla')window.openai&&window.openai.sendFollowUp&&window.openai.sendFollowUp({prompt:'Show me SLAs at risk of breach'});
+  else if(c.key==='appr')window.openai&&window.openai.sendFollowUp&&window.openai.sendFollowUp({prompt:'Show me change requests in Authorize state'});
+ });
+ kpiRow.appendChild(tile);
+});
+
+// ── Count-up animation ──
+function countUp(el){
+ var target=parseFloat(el.getAttribute('data-target')||'0');
+ if(reduce||target===0){el.textContent=String(target);return}
+ var start=0,dur=900,t0=performance.now();
+ function step(now){var p=Math.min(1,(now-t0)/dur);var v=Math.round(start+(target-start)*(1-Math.pow(1-p,3)));el.textContent=String(v);if(p<1)requestAnimationFrame(step)}
+ requestAnimationFrame(step);
+}
+document.querySelectorAll('.kpi-num').forEach(countUp);
+
+// ── Estate health rings ──
+var rings=d.rings||{incidents:{healthy:0,total:0},changes:{healthy:0,total:0},problems:{healthy:0,total:0},slas:{healthy:0,total:0}};
+var ringCfg=[
+ {label:'Incidents',icon:'{{icon:incident}}',v:rings.incidents,sub:rings.incidents.subtitle||'closed/total'},
+ {label:'Changes',icon:'{{icon:change}}',v:rings.changes,sub:rings.changes.subtitle||'on schedule'},
+ {label:'Problems',icon:'{{icon:problem}}',v:rings.problems,sub:rings.problems.subtitle||'with workaround'},
+ {label:'SLAs',icon:'{{icon:sla}}',v:rings.slas,sub:rings.slas.subtitle||'compliant'}
+];
+var ringsEl=document.getElementById('rings');
+ringCfg.forEach(function(r){
+ var v=r.v||{};var total=v.total||0,healthy=v.healthy||0;
+ var pct=total>0?(healthy/total):1;
+ var c=2*Math.PI*18;
+ var color=pct>=.9?'#0e700e':pct>=.75?'#bc4b09':'#b10e1c';
+ var dash=reduce?(c*pct).toFixed(1)+' '+c:'0 '+c;
+ var card=document.createElement('div');card.className='ring-card';
+ card.innerHTML='<svg class="ring-svg" viewBox="0 0 48 48"><circle class="ring-track" cx="24" cy="24" r="18"/><circle class="ring-prog" cx="24" cy="24" r="18" stroke="'+color+'" stroke-dasharray="'+dash+'" data-final="'+(c*pct).toFixed(1)+' '+c+'"/></svg>'+
+  '<div class="ring-meta"><div class="ring-title">'+r.icon+'<span>'+r.label+'</span></div>'+
+  '<div class="ring-num">'+Math.round(pct*100)+'%</div>'+
+  '<div class="ring-sub">'+healthy+'/'+total+' '+r.sub+'</div></div>';
+ ringsEl.appendChild(card);
+});
+if(!reduce){requestAnimationFrame(function(){document.querySelectorAll('.ring-prog').forEach(function(el){el.setAttribute('stroke-dasharray',el.getAttribute('data-final'))})})}
+
+// ── Top 5 actions ──
+var actions=(d.actions||[]).slice(0,5);
+var listEl=document.getElementById('actions-list');
+if(actions.length===0){
+ listEl.innerHTML='<div class="empty">{{icon:approve}}<h4>All quiet.</h4><p>Nothing demands your attention right now.</p></div>';
+}else{
+ actions.forEach(function(a,i){
+  var rankClass=a.severity==='critical'?'crit':a.severity==='high'?'high':'';
+  var div=document.createElement('div');div.className='action';
+  div.innerHTML='<div class="action-rank '+rankClass+'">'+(i+1)+'</div>'+
+   '<div class="action-body"><div class="action-title">'+escapeHtml(a.title||'')+'</div>'+
+   (a.detail?'<div class="action-detail">'+escapeHtml(a.detail)+'</div>':'')+'</div>';
+  if(a.followUp){div.style.cursor='pointer';div.addEventListener('click',function(){window.openai&&window.openai.sendFollowUp&&window.openai.sendFollowUp({prompt:a.followUp})})}
+  listEl.appendChild(div);
+ });
+}
+
+function escapeHtml(s){return String(s||'').replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+</script>
+</body>
+</html>

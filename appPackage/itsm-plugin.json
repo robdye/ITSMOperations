@@ -41,7 +41,14 @@
         { "name": "harvest-knowledge", "description": "Harvest knowledge from resolved incidents to identify candidates for new KB articles." },
         { "name": "create-kb-article", "description": "Create a new Knowledge Base article in ServiceNow." },
         { "name": "get-azure-alerts", "description": "Get Azure Monitor alerts for infrastructure health." },
-        { "name": "get-resource-health", "description": "Get Azure resource health status for monitored infrastructure components." }
+        { "name": "get-resource-health", "description": "Get Azure resource health status for monitored infrastructure components." },
+        { "name": "show-command-bridge", "description": "Display the Command Bridge — hero status, P1/SLA/approvals tiles, estate health rings and the top 5 actions for today. Answers 'what should I look at first?'" },
+        { "name": "show-estate-heatmap", "description": "Display the Estate Health Heatmap — CMDB CIs sized by criticality and coloured by health. Answers 'where is the pain right now?'" },
+        { "name": "show-time-travel", "description": "Display the Time-Travel EOL forecast slider (today \u2192 +24 months). Drag to see which assets cross EOL thresholds." },
+        { "name": "show-change-collisions", "description": "Display a 14-day calendar of change windows with collisions on the same CI shown overlapping in red." },
+        { "name": "present-cab-pack-as-loop", "description": "Render the upcoming CAB pack as a live Microsoft Loop component you can share into Teams, Outlook or the Loop app. Co-editable across all three surfaces." },
+        { "name": "present-outcome-story-as-loop", "description": "Render the resolution story for a ServiceNow incident as a live Microsoft Loop component you can share into Teams, Outlook or the Loop app. Co-editable across all three surfaces." },
+        { "name": "present-shift-handover-as-loop", "description": "Render the morning shift-handover briefing as a live Microsoft Loop component you can share into Teams, Outlook or the Loop app. Top actions are co-editable tasks." }
     ],
     "runtimes": [
         {
@@ -83,7 +90,14 @@
                 "harvest-knowledge",
                 "create-kb-article",
                 "get-azure-alerts",
-                "get-resource-health"
+                "get-resource-health",
+                "show-command-bridge",
+                "show-estate-heatmap",
+                "show-time-travel",
+                "show-change-collisions",
+                "present-cab-pack-as-loop",
+                "present-outcome-story-as-loop",
+                "present-shift-handover-as-loop"
             ],
             "spec": {
                 "url": "https://change-mgmt-mcp.jollysand-88b78b02.eastus.azurecontainerapps.io/mcp",
@@ -579,6 +593,133 @@
                                 "additionalProperties": false
                             },
                             "annotations": { "readOnlyHint": true }
+                        },
+                        {
+                            "name": "show-command-bridge",
+                            "description": "Display the Command Bridge — hero status, P1/SLA/approvals tiles, estate health rings and the top 5 actions for today.",
+                            "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+                            "annotations": { "readOnlyHint": true },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/command-bridge.html",
+                                "openai/toolInvocation/invoking": "Building the command bridge\u2026",
+                                "openai/toolInvocation/invoked": "Bridge ready.",
+                                "openai/widgetAccessible": true
+                            }
+                        },
+                        {
+                            "name": "show-estate-heatmap",
+                            "description": "Display the Estate Health Heatmap — CMDB CIs sized by criticality and coloured by health.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "tier": { "type": "string", "description": "Filter by tier: tier1, tier2, tier3" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/estate-heatmap.html",
+                                "openai/toolInvocation/invoking": "Mapping estate health\u2026",
+                                "openai/toolInvocation/invoked": "Heatmap ready.",
+                                "openai/widgetAccessible": true
+                            }
+                        },
+                        {
+                            "name": "show-time-travel",
+                            "description": "Display the Time-Travel EOL forecast slider. Drag to see which assets cross EOL thresholds.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "months": { "type": "number", "description": "Initial forecast horizon in months (0-24)" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/time-travel.html",
+                                "openai/toolInvocation/invoking": "Computing the EOL time-travel forecast\u2026",
+                                "openai/toolInvocation/invoked": "Forecast ready.",
+                                "openai/widgetAccessible": true
+                            }
+                        },
+                        {
+                            "name": "show-change-collisions",
+                            "description": "Display a 14-day calendar of change windows with collisions on the same CI shown overlapping in red.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "days": { "type": "number", "description": "Days ahead to scan (default 14)" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/change-collisions.html",
+                                "openai/toolInvocation/invoking": "Scanning the next 14 days for collisions\u2026",
+                                "openai/toolInvocation/invoked": "Collision view ready.",
+                                "openai/widgetAccessible": true
+                            }
+                        },
+                        {
+                            "name": "present-cab-pack-as-loop",
+                            "description": "Render the upcoming CAB pack as a live Microsoft Loop component you can share into Teams, Outlook or the Loop app. The component is co-editable — receivers see updates in real-time.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "cab_date": { "type": "string", "description": "CAB meeting date (ISO 8601, optional)" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/loop-component.html",
+                                "openai/toolInvocation/invoking": "Building the CAB pack as a Loop component\u2026",
+                                "openai/toolInvocation/invoked": "Loop component ready.",
+                                "openai/widgetAccessible": true,
+                                "microsoft/copilot/loop-component": true,
+                                "microsoft/copilot/loop-component-version": "1.0"
+                            }
+                        },
+                        {
+                            "name": "present-outcome-story-as-loop",
+                            "description": "Render the resolution story for a ServiceNow incident as a live Microsoft Loop component you can share into Teams, Outlook or the Loop app. Co-editable across all three surfaces.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "incident_number": { "type": "string", "description": "Incident number (e.g. INC0010042)" }
+                                },
+                                "required": ["incident_number"],
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/loop-component.html",
+                                "openai/toolInvocation/invoking": "Building the resolution story as a Loop component\u2026",
+                                "openai/toolInvocation/invoked": "Loop component ready.",
+                                "openai/widgetAccessible": true,
+                                "microsoft/copilot/loop-component": true,
+                                "microsoft/copilot/loop-component-version": "1.0"
+                            }
+                        },
+                        {
+                            "name": "present-shift-handover-as-loop",
+                            "description": "Render the morning shift-handover briefing as a live Microsoft Loop component you can share into Teams, Outlook or the Loop app. Top actions are co-editable tasks.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "range_hours": { "type": "number", "description": "Look-back window in hours (default 12, max 72)" }
+                                },
+                                "additionalProperties": false
+                            },
+                            "annotations": { "readOnlyHint": true },
+                            "_meta": {
+                                "openai/outputTemplate": "ui://widget/loop-component.html",
+                                "openai/toolInvocation/invoking": "Building the shift handover as a Loop component\u2026",
+                                "openai/toolInvocation/invoked": "Loop component ready.",
+                                "openai/widgetAccessible": true,
+                                "microsoft/copilot/loop-component": true,
+                                "microsoft/copilot/loop-component-version": "1.0"
+                            }
                         }
                     ]
                 }

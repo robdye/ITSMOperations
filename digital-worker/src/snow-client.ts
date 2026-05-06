@@ -50,6 +50,12 @@ export interface WriteContext {
   reasoningTraceId?: string;
   /** Demo-run id when the write originates from the demo-director. */
   demoRunId?: string;
+  /**
+   * Phase 2.1 — when true, every write short-circuits with a planning
+   * summary instead of touching SNOW. Threaded from the workflow
+   * trigger when `evaluateTrigger().mode === 'dry-run'`.
+   */
+  dryRun?: boolean;
 }
 
 export interface WorkNoteResult {
@@ -144,6 +150,36 @@ async function audit(toolName: string, params: unknown, ok: boolean, ctx: WriteC
   }).catch(() => {});
 }
 
+/**
+ * Phase 2.1 — uniform dry-run short-circuit for every write helper.
+ * Returns a synthetic 'ok' WorkNoteResult plus an audit row tagged with
+ * `triggerType:'delegation'` and a `dry-run:` prefix so the operator
+ * can grep for what *would* have happened.
+ */
+async function dryRunShortCircuit(
+  toolName: string,
+  params: unknown,
+  ctx: WriteContext,
+): Promise<{ ok: true; status: 200; body: { reason: 'dry-run'; toolName: string; params: unknown } }> {
+  await logAuditEntry({
+    workerId: 'snow-client',
+    workerName: 'ServiceNow client',
+    toolName: `dry-run:${toolName}`,
+    riskLevel: 'write',
+    triggeredBy: ctx.correlationId,
+    triggerType: 'delegation',
+    parameters: JSON.stringify(params),
+    resultSummary: 'dry-run (no SNOW write)',
+    requiredConfirmation: false,
+    durationMs: 0,
+  }).catch(() => {});
+  return {
+    ok: true,
+    status: 200,
+    body: { reason: 'dry-run', toolName, params },
+  };
+}
+
 // ── Public surface ──
 
 export async function getIncident(sysId: string): Promise<{ ok: boolean; record?: Record<string, unknown> }> {
@@ -158,6 +194,7 @@ export async function addWorkNote(
   text: string,
   ctx: WriteContext,
 ): Promise<WorkNoteResult> {
+  if (ctx.dryRun) return dryRunShortCircuit('snow.addWorkNote', { table, sysId, length: text.length }, ctx);
   const note = buildWorkNote(text, ctx);
   const res = await snowRequest({
     method: 'PATCH',
@@ -174,6 +211,7 @@ export async function linkAsChild(
   parentSysId: string,
   ctx: WriteContext,
 ): Promise<WorkNoteResult> {
+  if (ctx.dryRun) return dryRunShortCircuit('snow.linkAsChild', { childSysId, parentSysId }, ctx);
   const res = await snowRequest({
     method: 'PATCH',
     path: `/api/now/table/incident/${encodeURIComponent(childSysId)}`,
@@ -189,6 +227,7 @@ export async function updateIncidentState(
   state: 'in_progress' | 'on_hold' | 'resolved' | 'closed',
   ctx: WriteContext,
 ): Promise<WorkNoteResult> {
+  if (ctx.dryRun) return dryRunShortCircuit('snow.updateIncidentState', { sysId, state }, ctx);
   // ServiceNow-state numeric codes for the OOTB incident table.
   const stateMap: Record<string, string> = {
     in_progress: '2',
@@ -211,6 +250,10 @@ export async function createMajorIncident(
   ctx: WriteContext,
   extra: Record<string, unknown> = {},
 ): Promise<{ ok: boolean; sysId?: string; number?: string; status: number }> {
+  if (ctx.dryRun) {
+    await dryRunShortCircuit('snow.createMajorIncident', { shortDescription }, ctx);
+    return { ok: true, status: 200, sysId: 'dry-run-sys-id', number: 'INC-DRYRUN' };
+  }
   const res = await snowRequest({
     method: 'POST',
     path: '/api/now/table/incident',
@@ -240,6 +283,7 @@ export async function attachKBArticle(
   kbSysId: string,
   ctx: WriteContext,
 ): Promise<WorkNoteResult> {
+  if (ctx.dryRun) return dryRunShortCircuit('snow.attachKBArticle', { table, sysId, kbSysId }, ctx);
   const res = await snowRequest({
     method: 'PATCH',
     path: `/api/now/table/${table}/${encodeURIComponent(sysId)}`,

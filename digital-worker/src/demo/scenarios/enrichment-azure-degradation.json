@@ -1,0 +1,37 @@
+{
+  "id": "enrichment-azure-degradation",
+  "description": "Azure Status RSS feed reports a region-wide degradation in East US affecting App Service. Phase E enrichment publishes an enrichment.azure.status.degraded signal → cognition graph is tagged with upstream-degraded:eastus for 30 minutes. NO workflow trigger — workers triaging downstream incidents during the window cite the upstream condition rather than chase ghosts.",
+  "steps": [
+    {
+      "type": "signal.publish",
+      "signal": {
+        "source": "enrichment:azure-status",
+        "type": "enrichment.azure.status.degraded",
+        "severity": "high",
+        "asset": "eastus",
+        "origin": "observed",
+        "confidence": 0.9,
+        "payload": {
+          "region": "eastus",
+          "service": "App Service",
+          "title": "Region East US — App Service degraded",
+          "summary": "We are aware of an issue affecting some App Service customers in East US. Engineers are investigating.",
+          "occurredAt": "2024-11-12T14:30:00Z",
+          "citation": "Azure Status RSS https://azurestatuscdn.azureedge.net/en-us/status/feed/"
+        }
+      }
+    },
+    { "type": "wait", "ms": 250 },
+    {
+      "type": "assert.outcome",
+      "description": "cognition-graph tagged with upstream-degraded:eastus",
+      "cognitionTagged": { "namespace": "upstream-degraded", "key": "eastus" },
+      "timeoutMs": 5000
+    }
+  ],
+  "expectedOutcomes": [
+    "signal-router routes enrichment.azure.status.degraded → cognition-tag-azure-degraded subscription",
+    "cognition graph picks up upstream-degraded:eastus with 30-minute TTL",
+    "audit ring records cognition.tag.upstream-degraded entry attributed to enrichment:azure-status"
+  ]
+}

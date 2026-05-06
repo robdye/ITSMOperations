@@ -1,0 +1,25 @@
+{
+  "US:2024": [
+    { "date": "2024-01-01", "localName": "New Year's Day", "name": "New Year's Day", "countryCode": "US", "fixed": true, "global": true, "types": ["Public"] },
+    { "date": "2024-01-15", "localName": "Martin Luther King Jr. Day", "name": "Martin Luther King Jr. Day", "countryCode": "US", "fixed": false, "global": true, "types": ["Public"] },
+    { "date": "2024-05-27", "localName": "Memorial Day", "name": "Memorial Day", "countryCode": "US", "fixed": false, "global": true, "types": ["Public"] },
+    { "date": "2024-07-04", "localName": "Independence Day", "name": "Independence Day", "countryCode": "US", "fixed": true, "global": true, "types": ["Public"] },
+    { "date": "2024-09-02", "localName": "Labor Day", "name": "Labor Day", "countryCode": "US", "fixed": false, "global": true, "types": ["Public"] },
+    { "date": "2024-11-28", "localName": "Thanksgiving Day", "name": "Thanksgiving Day", "countryCode": "US", "fixed": false, "global": true, "types": ["Public"] },
+    { "date": "2024-12-25", "localName": "Christmas Day", "name": "Christmas Day", "countryCode": "US", "fixed": true, "global": true, "types": ["Public"] }
+  ],
+  "GB:2024": [
+    { "date": "2024-01-01", "localName": "New Year's Day", "name": "New Year's Day", "countryCode": "GB", "fixed": true, "global": true, "types": ["Public"] },
+    { "date": "2024-03-29", "localName": "Good Friday", "name": "Good Friday", "countryCode": "GB", "fixed": false, "global": true, "types": ["Public"] },
+    { "date": "2024-04-01", "localName": "Easter Monday", "name": "Easter Monday", "countryCode": "GB", "fixed": false, "global": true, "types": ["Public"] },
+    { "date": "2024-05-06", "localName": "Early May Bank Holiday", "name": "Early May Bank Holiday", "countryCode": "GB", "fixed": false, "global": true, "types": ["Public"] },
+    { "date": "2024-12-25", "localName": "Christmas Day", "name": "Christmas Day", "countryCode": "GB", "fixed": true, "global": true, "types": ["Public"] },
+    { "date": "2024-12-26", "localName": "Boxing Day", "name": "St. Stephen's Day", "countryCode": "GB", "fixed": true, "global": true, "types": ["Public"] }
+  ],
+  "DE:2024": [
+    { "date": "2024-01-01", "localName": "Neujahr", "name": "New Year's Day", "countryCode": "DE", "fixed": true, "global": true, "types": ["Public"] },
+    { "date": "2024-03-29", "localName": "Karfreitag", "name": "Good Friday", "countryCode": "DE", "fixed": false, "global": true, "types": ["Public"] },
+    { "date": "2024-10-03", "localName": "Tag der Deutschen Einheit", "name": "German Unity Day", "countryCode": "DE", "fixed": true, "global": true, "types": ["Public"] },
+    { "date": "2024-12-25", "localName": "Erster Weihnachtstag", "name": "Christmas Day", "countryCode": "DE", "fixed": true, "global": true, "types": ["Public"] }
+  ]
+}

@@ -4,9 +4,9 @@
 
 import { tool } from '@openai/agents';
 import { z } from 'zod';
-import { WorkIqClient } from '../workiq-client';
+import { getWorkIqClient } from '../workiq-client';
 
-const workiq = new WorkIqClient();
+const workiq = getWorkIqClient();
 
 export const m365Tools = [
   // ── Email Intelligence ──

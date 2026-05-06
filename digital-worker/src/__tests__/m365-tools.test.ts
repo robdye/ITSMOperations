@@ -1,4 +1,4 @@
-// Test suite for src/m365-tools.ts (MCP-first static M365 wrappers).
+// Test suite for src/m365-services.ts (MCP-first static M365 wrappers).
 //
 // Each wrapper has two paths:
 //   1) MCP path — when a TurnContext is supplied AND a matching MCP tool is
@@ -85,7 +85,7 @@ import {
   findUser,
   createPlannerTask,
   updatePlannerTask,
-} from '../m365-tools';
+} from '../m365-services';
 
 // Minimal context stub — wrappers only check existence + presence of activity.
 const fakeContext = {

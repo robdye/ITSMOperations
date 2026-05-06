@@ -1,0 +1,39 @@
+{
+  "id": "enrichment-msrc-patch-tuesday",
+  "description": "Microsoft Security Response Center publishes a Critical (CVSS 9.8) advisory for a Microsoft product Alex owns on Patch Tuesday. Phase E enrichment publishes an enrichment.msrc.critical signal → vulnerability-to-change fires and the change-manager drafts an RFC. Outcome probe checks for an RFC + MSRC citation.",
+  "steps": [
+    {
+      "type": "signal.publish",
+      "signal": {
+        "source": "enrichment:msrc",
+        "type": "enrichment.msrc.critical",
+        "severity": "critical",
+        "asset": "exchange-server-01",
+        "origin": "observed",
+        "confidence": 0.95,
+        "payload": {
+          "cveId": "CVE-2024-43572",
+          "title": "Microsoft Management Console Remote Code Execution Vulnerability",
+          "product": "Microsoft Exchange Server",
+          "publishedAt": "2024-10-08T17:00:00Z",
+          "severity": "Critical",
+          "exploitabilityAssessment": "Exploitation Detected",
+          "citation": "MSRC CVRF document https://api.msrc.microsoft.com/cvrf/v3.0/cvrf/2024-Oct",
+          "cvss": { "baseScore": 9.8 }
+        }
+      }
+    },
+    { "type": "wait", "ms": 250 },
+    {
+      "type": "assert.outcome",
+      "description": "vulnerability-to-change received the MSRC critical signal",
+      "signalRouted": { "workflowId": "vulnerability-to-change" },
+      "timeoutMs": 5000
+    }
+  ],
+  "expectedOutcomes": [
+    "signal-router routes enrichment.msrc.critical → vulnerability-to-change",
+    "change-manager drafts an RFC with the MSRC + CVE citation in the worknote",
+    "outcome verifier MSRC probe inspects the run for an RFC create + MSRC citation"
+  ]
+}

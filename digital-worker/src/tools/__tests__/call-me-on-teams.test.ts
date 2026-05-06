@@ -8,7 +8,7 @@
 //   3. No-ACS / no-OID path — the tool returns the click-to-call deep link
 //      without attempting ACS at all.
 //
-// We mock both ../voice/acsBridge and ../m365-tools so the tests are zero-IO
+// We mock both ../voice/acsBridge and ../m365-services so the tests are zero-IO
 // and deterministic.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -51,7 +51,7 @@ vi.mock('../../voice/acsBridge', () => ({
   isAcsConfigured: isAcsConfiguredMock,
 }));
 
-vi.mock('../../m365-tools', () => ({
+vi.mock('../../m365-services', () => ({
   sendEmail: sendEmailMock,
   sendTeamsMessage: sendTeamsMessageMock,
   scheduleCalendarEvent: scheduleCalendarEventMock,

@@ -19,11 +19,11 @@ export interface AuditEntry {
   /** Tool that was called */
   toolName: string;
   /** Tool risk classification */
-  riskLevel: 'read' | 'write' | 'notify';
+  riskLevel: 'read' | 'write' | 'notify' | 'block';
   /** Who triggered the action */
   triggeredBy: string;
   /** How it was triggered */
-  triggerType: 'user' | 'scheduled' | 'delegation' | 'escalation';
+  triggerType: 'user' | 'scheduled' | 'delegation' | 'escalation' | 'a2a';
   /** Tool parameters (sanitized — no secrets) */
   parameters: string;
   /** Result summary (truncated) */
@@ -206,4 +206,13 @@ export function getAuditSummary(): {
     byTriggerType,
     storageBackend: tableClient ? 'azure-table' : 'in-memory',
   };
+}
+
+/**
+ * Test helper — clears the in-memory audit ring. Not exported in production
+ * paths beyond test imports. Required by Phase E enrichment-outcome-probes
+ * tests so probe assertions are not polluted by prior test fixtures.
+ */
+export function _resetAuditTrail(): void {
+  inMemoryLog.length = 0;
 }

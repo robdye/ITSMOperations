@@ -1,0 +1,71 @@
+{
+  "$schema": "https://schemas.microsoft.com/agent-card/v1",
+  "id": "alex.itsm-operations",
+  "name": "Alex — IT Operations Manager",
+  "description": "Autonomous IT Operations Manager. Owns major-incident response, change lifecycle, vulnerability-to-change, SLA-breach escalation, and knowledge harvest workflows on ServiceNow + M365.",
+  "version": "1.0.0",
+  "publisher": "Microsoft Demo Agents",
+  "endpoint": "/api/agent-messages",
+  "discovery": "/.well-known/agent-card.json",
+  "transport": "bot-framework",
+  "auth": {
+    "type": "azure-ad",
+    "tokenScope": "api://itsm-operations-worker/.default",
+    "callerHeader": "x-agent-id"
+  },
+  "skills": [
+    {
+      "id": "incident.response",
+      "name": "Major Incident Response",
+      "description": "Run the major-incident workflow: enrich, page on-call, draft RCA, post status updates.",
+      "intents": ["incident.major", "incident.escalate"],
+      "scopes": ["servicenow.incident.read", "servicenow.incident.write", "teams.message.write"]
+    },
+    {
+      "id": "change.lifecycle",
+      "name": "Change Lifecycle",
+      "description": "Risk-assess, route to CAB if needed, monitor implementation, close cleanly.",
+      "intents": ["change.create", "change.assess", "change.implement"],
+      "scopes": ["servicenow.change.read", "servicenow.change.write"]
+    },
+    {
+      "id": "vuln.to.change",
+      "name": "Vulnerability to Change",
+      "description": "Convert KEV/MSRC enrichments into pre-populated emergency change requests.",
+      "intents": ["vuln.kev", "vuln.cve"],
+      "scopes": ["servicenow.change.write"]
+    },
+    {
+      "id": "sla.breach",
+      "name": "SLA Breach Escalation",
+      "description": "Escalate breached SLAs to the right manager via Teams + voice when warranted.",
+      "intents": ["sla.breach"],
+      "scopes": ["servicenow.sla.read", "teams.message.write"]
+    },
+    {
+      "id": "knowledge.harvest",
+      "name": "Knowledge Harvest",
+      "description": "Mine resolved incidents into KB articles in SharePoint.",
+      "intents": ["incident.resolved"],
+      "scopes": ["servicenow.incident.read", "sharepoint.kb.write"]
+    }
+  ],
+  "limits": {
+    "rateLimit": "60 calls/hour per caller agent",
+    "maxBlastRadius": 0.7,
+    "approvalRequiredAtBlastRadius": 0.5
+  },
+  "governance": {
+    "killSwitch": true,
+    "changeFreeze": true,
+    "tenantIsolation": true,
+    "auditTrail": true,
+    "contentSafety": true
+  },
+  "kpiEndpoints": {
+    "voice": "/api/voice/kpi",
+    "workiq": "/api/workiq/kpi",
+    "a2a": "/api/a2a/kpi",
+    "missionControl": "/mission-control"
+  }
+}

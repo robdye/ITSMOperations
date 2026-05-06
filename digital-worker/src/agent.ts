@@ -14,7 +14,7 @@ import { AgentNotificationActivity } from '@microsoft/agents-a365-notifications'
 
 import { Client, getClient, getStandaloneClient } from './client';
 import { ItsmMcpClient } from './mcp-client';
-import { WorkIqClient } from './workiq-client';
+import { getWorkIqClient } from './workiq-client';
 import { addMessage, getHistory } from './conversation-memory';
 import { enableVoice, disableVoice, isVoiceEnabled } from './voice/voiceGate';
 import tokenCache, { createAgenticTokenCacheKey } from './token-cache';
@@ -33,7 +33,7 @@ import {
 } from './intent-detection';
 
 const mcp = new ItsmMcpClient();
-const workiq = new WorkIqClient();
+const workiq = getWorkIqClient();
 
 // Store conversation references for proactive messaging
 const conversationReferences = new Map<string, any>();

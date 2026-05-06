@@ -5,12 +5,12 @@ import { tool } from '@openai/agents';
 import type { RunContext } from '@openai/agents';
 import { z } from 'zod';
 import { ItsmMcpClient } from './mcp-client';
-import { WorkIqClient } from './workiq-client';
-import { sendEmail, sendTeamsMessage } from './m365-tools';
+import { getWorkIqClient } from './workiq-client';
+import { sendEmail, sendTeamsMessage } from './m365-services';
 import type { WorkerRunContext } from './agent-harness';
 
 const mcp = new ItsmMcpClient();
-const workiq = new WorkIqClient();
+const workiq = getWorkIqClient();
 
 function stringify(data: unknown): string {
   if (typeof data === 'string') return data;

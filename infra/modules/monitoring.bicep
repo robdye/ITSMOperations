@@ -203,6 +203,46 @@ resource alertTokenSpike 'Microsoft.Insights/scheduledQueryRules@2023-03-15-prev
   }
 }
 
+// Alert 4b: Realtime / Voice Live Token Spike > 2x 24h Baseline (Critical, Severity 1)
+// Realtime traffic is the most expensive thing Alex can do — it is alerted
+// on its own so a Voice Live regression isn't masked by chat-completions
+// traffic in alertTokenSpike.
+resource alertRealtimeTokenSpike 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
+  name: 'ITSM-DigitalWorker-RealtimeTokenSpike-Critical'
+  location: location
+  tags: tags
+  properties: {
+    displayName: 'Realtime / Voice Live Token Spike > 2x 24h Baseline (Critical)'
+    description: 'Fires when the rolling 1h Realtime / Voice Live token spend exceeds 2x the 24h Realtime rolling baseline. Realtime models are the most expensive surface; alerted independently of the global spike alert so a Voice Live regression cannot be masked by chat-completions traffic.'
+    severity: 1
+    enabled: true
+    evaluationFrequency: 'PT15M'
+    windowSize: 'PT1H'
+    scopes: [
+      logAnalytics.id
+    ]
+    criteria: {
+      allOf: [
+        {
+          query: 'let realtimeModels = dynamic([\'gpt-realtime\', \'gpt-realtime-2025-08-28\']); let baseline = toscalar(customMetrics | where name == \'gen_ai.client.token.usage\' | where tostring(customDimensions[\'gen_ai.request.model\']) in (realtimeModels) | where timestamp between (ago(24h) .. ago(1h)) | summarize avg(value)); customMetrics | where name == \'gen_ai.client.token.usage\' | where tostring(customDimensions[\'gen_ai.request.model\']) in (realtimeModels) | where timestamp > ago(1h) | summarize currentAvg = avg(value) | where isnotnull(baseline) and baseline > 0 and currentAvg > baseline * 2'
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+          failingPeriods: {
+            numberOfEvaluationPeriods: 1
+            minFailingPeriodsToAlert: 1
+          }
+        }
+      ]
+    }
+    actions: {
+      actionGroups: [
+        actionGroup.id
+      ]
+    }
+  }
+}
+
 // Alert 5: HITL Approvals Pending > 30 min (Info, Severity 3)
 resource alertHitlPending 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
   name: 'ITSM-DigitalWorker-HitlPendingApprovals-Info'

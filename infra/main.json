@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "42568029002362136"
+      "templateHash": "3581014517211060443"
     }
   },
   "parameters": {
@@ -234,6 +234,21 @@
         "containerApps"
       ]
     },
+    "acrPullEnrichment": {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.ContainerRegistry/registries', format('itsmops{0}acr', parameters('environmentName')))]",
+      "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', format('itsmops{0}acr', parameters('environmentName'))), 'mcp-enrichment', variables('acrPullRoleId'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('acrPullRoleId'))]",
+        "principalId": "[reference('mcpEnrichment').outputs.mcpEnrichmentPrincipalId.value]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "acr",
+        "mcpEnrichment"
+      ]
+    },
     "monitoring": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
@@ -261,7 +276,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "13287117928737472516"
+              "templateHash": "4329308987403371756"
             }
           },
           "parameters": {
@@ -473,6 +488,47 @@
                   "allOf": [
                     {
                       "query": "let baseline = toscalar(customMetrics | where name == 'gen_ai.client.token.usage' | where timestamp between (ago(7d) .. ago(1d)) | summarize avg(value)); customMetrics | where name == 'gen_ai.client.token.usage' | where timestamp > ago(1h) | summarize currentAvg = avg(value) | where currentAvg > baseline * 2",
+                      "timeAggregation": "Count",
+                      "operator": "GreaterThan",
+                      "threshold": 0,
+                      "failingPeriods": {
+                        "numberOfEvaluationPeriods": 1,
+                        "minFailingPeriodsToAlert": 1
+                      }
+                    }
+                  ]
+                },
+                "actions": {
+                  "actionGroups": [
+                    "[resourceId('Microsoft.Insights/actionGroups', format('itsm-ops-{0}-ag', parameters('environmentName')))]"
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Insights/actionGroups', format('itsm-ops-{0}-ag', parameters('environmentName')))]",
+                "[resourceId('Microsoft.OperationalInsights/workspaces', format('itsm-ops-{0}-law', parameters('environmentName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Insights/scheduledQueryRules",
+              "apiVersion": "2023-03-15-preview",
+              "name": "ITSM-DigitalWorker-RealtimeTokenSpike-Critical",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "displayName": "Realtime / Voice Live Token Spike > 2x 24h Baseline (Critical)",
+                "description": "Fires when the rolling 1h Realtime / Voice Live token spend exceeds 2x the 24h Realtime rolling baseline. Realtime models are the most expensive surface; alerted independently of the global spike alert so a Voice Live regression cannot be masked by chat-completions traffic.",
+                "severity": 1,
+                "enabled": true,
+                "evaluationFrequency": "PT15M",
+                "windowSize": "PT1H",
+                "scopes": [
+                  "[resourceId('Microsoft.OperationalInsights/workspaces', format('itsm-ops-{0}-law', parameters('environmentName')))]"
+                ],
+                "criteria": {
+                  "allOf": [
+                    {
+                      "query": "let realtimeModels = dynamic(['gpt-realtime', 'gpt-realtime-2025-08-28']); let baseline = toscalar(customMetrics | where name == 'gen_ai.client.token.usage' | where tostring(customDimensions['gen_ai.request.model']) in (realtimeModels) | where timestamp between (ago(24h) .. ago(1h)) | summarize avg(value)); customMetrics | where name == 'gen_ai.client.token.usage' | where tostring(customDimensions['gen_ai.request.model']) in (realtimeModels) | where timestamp > ago(1h) | summarize currentAvg = avg(value) | where isnotnull(baseline) and baseline > 0 and currentAvg > baseline * 2",
                       "timeAggregation": "Count",
                       "operator": "GreaterThan",
                       "threshold": 0,
@@ -1152,7 +1208,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.41.2.15936",
-              "templateHash": "14883100644758057601"
+              "templateHash": "5581325562774811302"
             }
           },
           "parameters": {
@@ -1384,6 +1440,10 @@
                           "value": "[format('https://itsm-ops-{0}-mcp.{1}', parameters('environmentName'), reference(resourceId('Microsoft.App/managedEnvironments', format('itsm-ops-{0}-cae', parameters('environmentName'))), '2024-03-01').defaultDomain)]"
                         },
                         {
+                          "name": "MCP_ENRICHMENT_ENDPOINT",
+                          "value": "[format('https://itsm-ops-{0}-enrichment.{1}', parameters('environmentName'), reference(resourceId('Microsoft.App/managedEnvironments', format('itsm-ops-{0}-cae', parameters('environmentName'))), '2024-03-01').defaultDomain)]"
+                        },
+                        {
                           "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
                           "value": "[parameters('appInsightsConnectionString')]"
                         }
@@ -1520,6 +1580,294 @@
         "acr",
         "cognitiveServices",
         "dataServices",
+        "keyVault",
+        "monitoring"
+      ]
+    },
+    "mcpEnrichment": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "mcp-enrichment-deployment",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "environmentName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          },
+          "containerAppsEnvId": {
+            "value": "[reference('containerApps').outputs.containerAppsEnvId.value]"
+          },
+          "containerAppsEnvDomain": {
+            "value": "[reference('containerApps').outputs.containerAppsEnvDomain.value]"
+          },
+          "acrLoginServer": {
+            "value": "[reference('acr').loginServer]"
+          },
+          "appInsightsConnectionString": {
+            "value": "[reference('monitoring').outputs.appInsightsConnectionString.value]"
+          },
+          "keyVaultName": {
+            "value": "[format('itsm-ops-{0}-kv', parameters('environmentName'))]"
+          },
+          "contentSafetyEndpoint": {
+            "value": "[reference('cognitiveServices').outputs.contentSafetyEndpoint.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "11997801839943625334"
+            }
+          },
+          "parameters": {
+            "environmentName": {
+              "type": "string",
+              "metadata": {
+                "description": "Environment name used in resource naming"
+              }
+            },
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "metadata": {
+                "description": "Tags applied to every resource"
+              }
+            },
+            "containerAppsEnvId": {
+              "type": "string",
+              "metadata": {
+                "description": "Container Apps environment id"
+              }
+            },
+            "containerAppsEnvDomain": {
+              "type": "string",
+              "metadata": {
+                "description": "Container Apps environment default domain (used to advertise FQDN to digital-worker)"
+              }
+            },
+            "acrLoginServer": {
+              "type": "string",
+              "metadata": {
+                "description": "ACR login server (e.g. myacr.azurecr.io)"
+              }
+            },
+            "appInsightsConnectionString": {
+              "type": "string",
+              "metadata": {
+                "description": "Application Insights connection string"
+              }
+            },
+            "keyVaultName": {
+              "type": "string",
+              "metadata": {
+                "description": "Key Vault name (secrets resolved at runtime via MI)"
+              }
+            },
+            "contentSafetyEndpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "Content Safety endpoint (outbound payload screening)"
+              }
+            },
+            "auditTrailSecretName": {
+              "type": "string",
+              "defaultValue": "AUDIT-TRAIL-CONNECTION-STRING",
+              "metadata": {
+                "description": "Audit trail Storage Table connection string secret name in KV (optional)"
+              }
+            },
+            "nvdApiKeySecretName": {
+              "type": "string",
+              "defaultValue": "NVD-API-KEY",
+              "metadata": {
+                "description": "Optional NIST NVD API key secret name in KV (raises rate limit to 50/30s)"
+              }
+            },
+            "graphOboClientId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Optional Microsoft Graph OBO client id for the m365-service-health source"
+              }
+            },
+            "graphOboClientSecretName": {
+              "type": "string",
+              "defaultValue": "ENRICHMENT-GRAPH-OBO-SECRET",
+              "metadata": {
+                "description": "Graph OBO client secret name in KV (only used when graphOboClientId is set)"
+              }
+            },
+            "minReplicas": {
+              "type": "int",
+              "defaultValue": 1,
+              "metadata": {
+                "description": "Number of min replicas (set to 1 for demo, scale rules drive up to maxReplicas)"
+              }
+            },
+            "maxReplicas": {
+              "type": "int",
+              "defaultValue": 3,
+              "metadata": {
+                "description": "Maximum replicas"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.App/containerApps",
+              "apiVersion": "2024-03-01",
+              "name": "[format('itsm-ops-{0}-enrichment', parameters('environmentName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "managedEnvironmentId": "[parameters('containerAppsEnvId')]",
+                "configuration": {
+                  "activeRevisionsMode": "Single",
+                  "ingress": {
+                    "external": true,
+                    "targetPort": 3010,
+                    "transport": "http",
+                    "allowInsecure": false
+                  },
+                  "registries": [
+                    {
+                      "server": "[parameters('acrLoginServer')]",
+                      "identity": "system"
+                    }
+                  ]
+                },
+                "template": {
+                  "containers": [
+                    {
+                      "name": "mcp-enrichment",
+                      "image": "[format('{0}/itsm-mcp-enrichment:latest', parameters('acrLoginServer'))]",
+                      "resources": {
+                        "cpu": "[json('0.5')]",
+                        "memory": "1Gi"
+                      },
+                      "env": [
+                        {
+                          "name": "PORT",
+                          "value": "3010"
+                        },
+                        {
+                          "name": "NODE_ENV",
+                          "value": "production"
+                        },
+                        {
+                          "name": "KEY_VAULT_NAME",
+                          "value": "[parameters('keyVaultName')]"
+                        },
+                        {
+                          "name": "CONTENT_SAFETY_ENDPOINT",
+                          "value": "[parameters('contentSafetyEndpoint')]"
+                        },
+                        {
+                          "name": "AUDIT_TRAIL_SECRET_NAME",
+                          "value": "[parameters('auditTrailSecretName')]"
+                        },
+                        {
+                          "name": "NVD_API_KEY_SECRET_NAME",
+                          "value": "[parameters('nvdApiKeySecretName')]"
+                        },
+                        {
+                          "name": "ENRICHMENT_CLIENT_ID",
+                          "value": "[parameters('graphOboClientId')]"
+                        },
+                        {
+                          "name": "ENRICHMENT_CLIENT_SECRET_NAME",
+                          "value": "[parameters('graphOboClientSecretName')]"
+                        },
+                        {
+                          "name": "GRAPH_OBO_SCOPE",
+                          "value": "https://graph.microsoft.com/.default"
+                        },
+                        {
+                          "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                          "value": "[parameters('appInsightsConnectionString')]"
+                        }
+                      ],
+                      "probes": [
+                        {
+                          "type": "Liveness",
+                          "httpGet": {
+                            "path": "/health",
+                            "port": 3010
+                          },
+                          "initialDelaySeconds": 10,
+                          "periodSeconds": 30
+                        },
+                        {
+                          "type": "Readiness",
+                          "httpGet": {
+                            "path": "/health",
+                            "port": 3010
+                          },
+                          "initialDelaySeconds": 5,
+                          "periodSeconds": 10
+                        }
+                      ]
+                    }
+                  ],
+                  "scale": {
+                    "minReplicas": "[parameters('minReplicas')]",
+                    "maxReplicas": "[parameters('maxReplicas')]",
+                    "rules": [
+                      {
+                        "name": "http-scaling",
+                        "http": {
+                          "metadata": {
+                            "concurrentRequests": "40"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "mcpEnrichmentFqdn": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/containerApps', format('itsm-ops-{0}-enrichment', parameters('environmentName'))), '2024-03-01').configuration.ingress.fqdn]"
+            },
+            "mcpEnrichmentPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/containerApps', format('itsm-ops-{0}-enrichment', parameters('environmentName'))), '2024-03-01', 'full').identity.principalId]"
+            },
+            "mcpEnrichmentEndpoint": {
+              "type": "string",
+              "value": "[format('https://itsm-ops-{0}-enrichment.{1}', parameters('environmentName'), parameters('containerAppsEnvDomain'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "acr",
+        "cognitiveServices",
+        "containerApps",
         "keyVault",
         "monitoring"
       ]
@@ -2000,6 +2348,10 @@
     "mcpServerUrl": {
       "type": "string",
       "value": "[format('https://{0}', reference('containerApps').outputs.mcpServerFqdn.value)]"
+    },
+    "mcpEnrichmentUrl": {
+      "type": "string",
+      "value": "[reference('mcpEnrichment').outputs.mcpEnrichmentEndpoint.value]"
     },
     "containerAppsEnvironment": {
       "type": "string",

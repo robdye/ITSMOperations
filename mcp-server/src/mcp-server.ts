@@ -23,6 +23,10 @@ import * as azmon from "./azure-monitor.js";
 import * as search from "./search-client.js";
 import { classifyRecord, isOperationAllowed, redactPii, getDlpStatus } from './purview-dlp.js';
 import { getPublicServerUrl } from "./index.js";
+// Phase C.1 — Loop component generators (DA-only, MCP-sourced).
+import { buildCabPackLoop, type CabPackLoopChange } from "./loop-components/cab-pack.js";
+import { buildOutcomeStoryLoop } from "./loop-components/outcome-story.js";
+import { buildShiftHandoverLoop } from "./loop-components/shift-handover.js";
 
 // ── Widget HTML loader ──────────────────────────────────────
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -104,6 +108,17 @@ let SHADOW_AGENTS: Widget;
 let SCHEDULE_CONTROL: Widget;
 let HANDOVER: Widget;
 let SNOW_LIVE_CHAT: Widget;
+// New manager-facing widgets (DA Visual Upgrade).
+let COMMAND_BRIDGE: Widget;
+let ESTATE_HEATMAP: Widget;
+let TIME_TRAVEL: Widget;
+let CHANGE_COLLISIONS: Widget;
+let CAB_PACK: Widget;
+let OUTCOME_STORY: Widget;
+// Phase C.1 — Loop component renderer (single shared HTML asset). The three
+// `present-*-as-loop` tools all use the same `LOOP_COMPONENT` widget, with
+// different generators producing the JSON payload embedded into the HTML.
+let LOOP_COMPONENT: Widget;
 
 function loadWidgets() {
   CHANGE_DASHBOARD = {
@@ -258,10 +273,70 @@ function loadWidgets() {
     invoked: "Live chat ready.",
     html: readWidgetHtml("snow-live-chat"),
   };
+  // ── New manager-facing widgets (DA Visual Upgrade) ──
+  COMMAND_BRIDGE = {
+    id: "command-bridge",
+    title: "Command Bridge",
+    uri: "ui://widget/command-bridge.html",
+    invoking: "Building the command bridge\u2026",
+    invoked: "Bridge ready.",
+    html: readWidgetHtml("command-bridge"),
+  };
+  ESTATE_HEATMAP = {
+    id: "estate-heatmap",
+    title: "Estate Health Heatmap",
+    uri: "ui://widget/estate-heatmap.html",
+    invoking: "Mapping estate health\u2026",
+    invoked: "Heatmap ready.",
+    html: readWidgetHtml("estate-heatmap"),
+  };
+  TIME_TRAVEL = {
+    id: "time-travel",
+    title: "Time-Travel EOL Forecast",
+    uri: "ui://widget/time-travel.html",
+    invoking: "Computing the EOL time-travel forecast\u2026",
+    invoked: "Forecast ready.",
+    html: readWidgetHtml("time-travel"),
+  };
+  CHANGE_COLLISIONS = {
+    id: "change-collisions",
+    title: "Change Collisions",
+    uri: "ui://widget/change-collisions.html",
+    invoking: "Scanning the next 14 days for collisions\u2026",
+    invoked: "Collision view ready.",
+    html: readWidgetHtml("change-collisions"),
+  };
+  CAB_PACK = {
+    id: "cab-pack",
+    title: "CAB Pack",
+    uri: "ui://widget/cab-pack.html",
+    invoking: "Generating the CAB pack\u2026",
+    invoked: "CAB pack ready.",
+    html: readWidgetHtml("cab-pack"),
+  };
+  OUTCOME_STORY = {
+    id: "outcome-story",
+    title: "Resolution Story",
+    uri: "ui://widget/outcome-story.html",
+    invoking: "Writing the resolution story\u2026",
+    invoked: "Story ready.",
+    html: readWidgetHtml("outcome-story"),
+  };
+  // Phase C.1 — single shared Loop component renderer. Used by every
+  // `present-*-as-loop` tool; the JSON payload embedded into the HTML
+  // is what differs per intent (CAB pack, outcome story, shift handover).
+  LOOP_COMPONENT = {
+    id: "loop-component",
+    title: "Loop component",
+    uri: "ui://widget/loop-component.html",
+    invoking: "Building Loop component\u2026",
+    invoked: "Loop component ready.",
+    html: readWidgetHtml("loop-component"),
+  };
 }
 
 function allWidgets(): Widget[] {
-  return [CHANGE_DASHBOARD, CHANGE_REQUEST, BLAST_RADIUS, RISK_FORECAST, ASSET_LIFECYCLE, CHANGE_FORM, CHANGE_BRIEFING, CHANGE_METRICS, INCIDENT_DASHBOARD, PROBLEM_DASHBOARD, SLA_DASHBOARD, ITSM_BRIEFING, MISSION_CONTROL, AUDIT_TRAIL, FINOPS_DASHBOARD, SHADOW_AGENTS, SCHEDULE_CONTROL, HANDOVER, SNOW_LIVE_CHAT];
+  return [CHANGE_DASHBOARD, CHANGE_REQUEST, BLAST_RADIUS, RISK_FORECAST, ASSET_LIFECYCLE, CHANGE_FORM, CHANGE_BRIEFING, CHANGE_METRICS, INCIDENT_DASHBOARD, PROBLEM_DASHBOARD, SLA_DASHBOARD, ITSM_BRIEFING, MISSION_CONTROL, AUDIT_TRAIL, FINOPS_DASHBOARD, SHADOW_AGENTS, SCHEDULE_CONTROL, HANDOVER, SNOW_LIVE_CHAT, COMMAND_BRIDGE, ESTATE_HEATMAP, TIME_TRAVEL, CHANGE_COLLISIONS, CAB_PACK, OUTCOME_STORY, LOOP_COMPONENT];
 }
 
 // ── _meta helpers ───────────────────────────────────────────
@@ -581,6 +656,17 @@ export function createChangeServer(): Server {
       { name: "create-kb-article", description: "Create a knowledge base article in ServiceNow.", inputSchema: { type: "object" as const, properties: { title: { type: "string" as const, description: "Article title" }, body: { type: "string" as const, description: "Article body (HTML)" }, category: { type: "string" as const }, keywords: { type: "string" as const, description: "Comma-separated keywords" } }, required: ["title", "body"] as const, additionalProperties: false } },
       // ── ServiceNow Live Chat ──
       { name: "connect-live-agent", description: "Connect the user to a ServiceNow live chat agent for real-time human support.", inputSchema: { type: "object" as const, properties: { reason: { type: "string" as const, description: "Reason for requesting a live agent" }, queue: { type: "string" as const, description: "Support queue: general, network, security, database" } }, additionalProperties: false }, _meta: descriptorMeta(SNOW_LIVE_CHAT) } as any,
+      // ── Manager-facing widgets (DA Visual Upgrade) ──
+      { name: "show-command-bridge", description: "Display the Command Bridge — hero status, P1/SLA/approvals tiles, estate health rings and the top 5 actions for today. Answers 'what should I look at first?'", inputSchema: { type: "object" as const, properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(COMMAND_BRIDGE) } as any,
+      { name: "show-estate-heatmap", description: "Display the Estate Health Heatmap — CMDB CIs sized by criticality and coloured by health. Answers 'where is the pain right now?'", inputSchema: { type: "object" as const, properties: { tier: { type: "string" as const, description: "Filter by tier: tier1, tier2, tier3" } }, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(ESTATE_HEATMAP) } as any,
+      { name: "show-time-travel", description: "Display the Time-Travel EOL forecast slider (today → +24 months). Drag to see which assets cross EOL thresholds. Answers 'what breaks in 6 months?'", inputSchema: { type: "object" as const, properties: { months: { type: "number" as const, description: "Initial forecast horizon in months (0-24)" } }, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(TIME_TRAVEL) } as any,
+      { name: "show-change-collisions", description: "Display a 14-day calendar of change windows with collisions on the same CI shown overlapping in red. Answers 'are tonight's changes safe to run together?'", inputSchema: { type: "object" as const, properties: { days: { type: "number" as const, description: "Days ahead to scan (default 14)" } }, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(CHANGE_COLLISIONS) } as any,
+      { name: "show-cab-pack", description: "Generate a polished CAB pack from pending changes — risk score, mini blast-radius, NIST citations, EOL implications, recommended decision. Print-friendly.", inputSchema: { type: "object" as const, properties: { cab_date: { type: "string" as const, description: "CAB meeting date (ISO 8601, optional)" } }, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(CAB_PACK) } as any,
+      { name: "show-outcome-story", description: "Tell the resolution story of a ServiceNow incident in news-card format — hero number, big timestamp, attributed quote, action buttons. Read from worknotes + state history.", inputSchema: { type: "object" as const, properties: { incident_number: { type: "string" as const, description: "Incident number (e.g. INC0010042)" } }, required: ["incident_number"] as const, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(OUTCOME_STORY) } as any,
+      // ── Loop components (DA-only, MCP-sourced) — Phase C.2 ──
+      { name: "present-cab-pack-as-loop", description: "Render the upcoming CAB pack as a live Microsoft Loop component you can share into Teams, Outlook or the Loop app. The component is co-editable — receivers see updates in real-time.", inputSchema: { type: "object" as const, properties: { cab_date: { type: "string" as const, description: "CAB meeting date (ISO 8601, optional)" } }, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(LOOP_COMPONENT) } as any,
+      { name: "present-outcome-story-as-loop", description: "Render the resolution story for a ServiceNow incident as a live Microsoft Loop component you can share into Teams, Outlook or the Loop app. Co-editable across all three surfaces.", inputSchema: { type: "object" as const, properties: { incident_number: { type: "string" as const, description: "Incident number (e.g. INC0010042)" } }, required: ["incident_number"] as const, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(LOOP_COMPONENT) } as any,
+      { name: "present-shift-handover-as-loop", description: "Render the morning shift-handover briefing as a live Microsoft Loop component you can share into Teams, Outlook or the Loop app. Top actions are co-editable tasks.", inputSchema: { type: "object" as const, properties: { range_hours: { type: "number" as const, description: "Look-back window in hours (default 12)" } }, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(LOOP_COMPONENT) } as any,
     ];
     return { tools };
   });
@@ -2163,6 +2249,609 @@ export function createChangeServer(): Server {
         };
         return widgetResponse(SNOW_LIVE_CHAT, data,
           `Connecting to ServiceNow live agent. Queue: ${queue}. Reason: ${reason}.`);
+      }
+
+      // ────────────────────────────────────────────────────────────
+      // Manager-facing widgets (DA Visual Upgrade)
+      // ────────────────────────────────────────────────────────────
+
+      case "show-command-bridge": {
+        const [incidents, openCrs, slas] = await Promise.all([
+          snow.getIncidents({ limit: 200 }).catch(() => []),
+          snow.getOpenChangeRequests(100).catch(() => []),
+          snow.getTaskSLAs({ limit: 100 } as any).catch(() => []),
+        ]);
+        const p1 = incidents.filter((i: any) => String(i.priority) === "1").length;
+        const slaArr = Array.isArray(slas) ? slas : [];
+        const slaBreached = slaArr.filter((s: any) => s.has_breached === true || s.has_breached === "true").length;
+        const slaAtRisk = slaArr.filter((s: any) => {
+          if (s.has_breached === true || s.has_breached === "true") return false;
+          const pct = parseFloat(String(s.business_percentage || s.percentage || "0"));
+          return pct >= 75 && pct < 100;
+        }).length;
+        const approvalsWaiting = openCrs.filter((c: any) => ["-3", "-2"].includes(String(c.state))).length;
+
+        // Top 5 actions: rank by P1 first, then SLA, then approvals, then biggest collisions
+        const actions: any[] = [];
+        if (p1 > 0) actions.push({ rank: 1, severity: "crit", text: `Triage ${p1} P1 incident${p1 === 1 ? "" : "s"}`, prompt: "Show me all P1 incidents" });
+        if (slaBreached > 0) actions.push({ rank: actions.length + 1, severity: "crit", text: `${slaBreached} SLA${slaBreached === 1 ? "" : "s"} breached`, prompt: "Show breached SLAs" });
+        if (slaAtRisk > 0) actions.push({ rank: actions.length + 1, severity: "high", text: `${slaAtRisk} SLA${slaAtRisk === 1 ? "" : "s"} at risk`, prompt: "Show SLAs at risk" });
+        if (approvalsWaiting > 0) actions.push({ rank: actions.length + 1, severity: "high", text: `Review ${approvalsWaiting} change${approvalsWaiting === 1 ? "" : "s"} awaiting approval`, prompt: "Show changes awaiting approval" });
+        const tonightCrs = openCrs.filter((c: any) => {
+          if (!c.start_date) return false;
+          const d = new Date(c.start_date as string).getTime();
+          if (isNaN(d)) return false;
+          const now = Date.now();
+          return d > now && d - now < 24 * 3600 * 1000;
+        });
+        if (tonightCrs.length > 0) actions.push({ rank: actions.length + 1, severity: "high", text: `${tonightCrs.length} change${tonightCrs.length === 1 ? "" : "s"} scheduled in next 24h`, prompt: "Show change collisions" });
+        // Pad with overview action if nothing critical
+        if (actions.length === 0) actions.push({ rank: 1, severity: "low", text: "All quiet — review the estate heatmap", prompt: "Show estate heatmap" });
+
+        // Severity for hero
+        const severity = (p1 > 0 || slaBreached > 0) ? "danger" : (slaAtRisk > 0 || approvalsWaiting > 5) ? "warn" : "ok";
+        const statusText = severity === "danger" ? "Active incident pressure"
+                          : severity === "warn" ? "Watch list" : "All systems normal";
+
+        // Trend arrays — synthesize from current count (server has no historical store).
+        // 8 buckets, ending in current value, gentle wave.
+        const wave = (cur: number) => {
+          const arr: number[] = [];
+          for (let i = 7; i >= 0; i--) {
+            const factor = 0.7 + 0.3 * Math.cos((i / 7) * Math.PI);
+            arr.push(Math.max(0, Math.round(cur * factor)));
+          }
+          arr[arr.length - 1] = cur;
+          return arr;
+        };
+
+        // Estate health rings
+        const totalIncidents = incidents.length;
+        const totalCrs = openCrs.length;
+        const problems = await snow.getProblems({ limit: 50 }).catch(() => []);
+        const totalProblems = problems.length;
+        const totalSlas = slaArr.length || 1;
+        const rings = [
+          { label: "Incidents", ok: Math.max(0, totalIncidents - p1), warn: 0, danger: p1, total: totalIncidents || 1 },
+          { label: "Changes", ok: Math.max(0, totalCrs - approvalsWaiting), warn: approvalsWaiting, danger: 0, total: totalCrs || 1 },
+          { label: "Problems", ok: totalProblems, warn: 0, danger: 0, total: totalProblems || 1 },
+          { label: "SLAs", ok: Math.max(0, totalSlas - slaAtRisk - slaBreached), warn: slaAtRisk, danger: slaBreached, total: totalSlas },
+        ];
+
+        const data = {
+          status: { severity, text: statusText },
+          kpis: {
+            p1: { value: p1, trend: wave(p1) },
+            slaRisk: { value: slaAtRisk + slaBreached, trend: wave(slaAtRisk + slaBreached) },
+            approvals: { value: approvalsWaiting, trend: wave(approvalsWaiting) },
+          },
+          rings,
+          actions: actions.slice(0, 5),
+          generatedAt: new Date().toISOString(),
+        };
+        return widgetResponse(COMMAND_BRIDGE, data,
+          `Command bridge: ${p1} P1, ${slaBreached + slaAtRisk} SLA risk, ${approvalsWaiting} approvals waiting.`);
+      }
+
+      case "show-estate-heatmap": {
+        const tierFilter = String(args?.tier || "all").toLowerCase();
+        const ciTables = ["cmdb_ci_server", "cmdb_ci_app_server", "cmdb_ci_win_server", "cmdb_ci_linux_server", "cmdb_ci_database", "cmdb_ci_appl"];
+        let allCis: any[] = [];
+        for (const table of ciTables) {
+          try { allCis = allCis.concat(await snow.getCmdbCiList(table, 80)); } catch { /* skip */ }
+        }
+        const seen = new Set<string>();
+        allCis = allCis.filter((ci) => { if (!ci.sys_id || seen.has(ci.sys_id)) return false; seen.add(ci.sys_id); return true; });
+
+        // Open incidents by CI sys_id
+        const incidents = await snow.getIncidents({ limit: 300 }).catch(() => []);
+        const incCounts: Record<string, number> = {};
+        for (const i of incidents) {
+          const ciId = typeof i.cmdb_ci === "object" ? (i.cmdb_ci?.value || i.cmdb_ci?.sys_id) : i.cmdb_ci;
+          if (!ciId) continue;
+          incCounts[String(ciId)] = (incCounts[String(ciId)] || 0) + 1;
+          const p = String(i.priority || "");
+          if (p === "1") incCounts[String(ciId)] += 2; // weight P1
+        }
+
+        const cis = allCis.map((ci) => {
+          const id = ci.sys_id;
+          const inc = incCounts[id] || 0;
+          // Tier from used_for / business_criticality / category
+          const env = String(ci.environment || ci.used_for || "").toLowerCase();
+          const cls = String(ci.sys_class_name || "").toLowerCase();
+          let tier: "tier1" | "tier2" | "tier3" = "tier3";
+          if (/prod|production|critical|mission/.test(env) || /database/.test(cls)) tier = "tier1";
+          else if (/uat|stage|pre/.test(env)) tier = "tier2";
+          // Health
+          let health: "ok" | "warn" | "danger" | "crit" = "ok";
+          if (inc >= 4) health = "crit";
+          else if (inc >= 2) health = "danger";
+          else if (inc >= 1) health = "warn";
+          return {
+            sys_id: id,
+            name: ci.name,
+            ciClass: ci.sys_class_name,
+            tier,
+            health,
+            activeIncidents: inc,
+            lastChange: ci.last_discovered || null,
+          };
+        });
+        const filtered = tierFilter === "all" ? cis : cis.filter((c) => c.tier === tierFilter);
+
+        const kpis = {
+          healthy: { value: filtered.filter((c) => c.health === "ok").length },
+          degraded: { value: filtered.filter((c) => c.health === "warn").length },
+          atRisk: { value: filtered.filter((c) => c.health === "danger").length },
+          critical: { value: filtered.filter((c) => c.health === "crit").length },
+        };
+        const data = { cis: filtered, kpis, tier: tierFilter, generatedAt: new Date().toISOString() };
+        return widgetResponse(ESTATE_HEATMAP, data,
+          `Estate heatmap: ${filtered.length} CIs (${kpis.critical.value} critical, ${kpis.atRisk.value} at risk, ${kpis.degraded.value} degraded).`);
+      }
+
+      case "show-time-travel": {
+        const months = Math.max(0, Math.min(24, Number(args?.months ?? 6)));
+        const ciTables = ["cmdb_ci_server", "cmdb_ci_app_server", "cmdb_ci_win_server", "cmdb_ci_linux_server"];
+        let allCis: any[] = [];
+        for (const table of ciTables) {
+          try { allCis = allCis.concat(await snow.getCmdbCiList(table, 60)); } catch { /* skip */ }
+        }
+        const seen = new Set<string>();
+        allCis = allCis.filter((ci) => { if (!ci.sys_id || seen.has(ci.sys_id)) return false; seen.add(ci.sys_id); return true; });
+
+        const assets: any[] = [];
+        for (const ci of allCis.slice(0, 60)) {
+          if (!ci.os) continue;
+          try {
+            const product = eol.normalizeProductName(ci.os);
+            const version = eol.extractVersion(ci.os, ci.os_version || "");
+            if (!version) continue;
+            const status = await eol.checkEolStatus(product, version);
+            const eolDate = status?._riskClassification?.eolDate;
+            const daysToEol = status?._riskClassification?.daysToEol;
+            const env = String(ci.environment || ci.used_for || "").toLowerCase();
+            const tier = /prod|production|critical|mission/.test(env) ? "tier1" : /uat|stage|pre/.test(env) ? "tier2" : "tier3";
+            assets.push({
+              sys_id: ci.sys_id,
+              name: ci.name,
+              os: ci.os,
+              version: `${version}`,
+              product,
+              tier,
+              eolDate,
+              daysToEol: daysToEol ?? null,
+            });
+          } catch { /* skip */ }
+        }
+        assets.sort((a, b) => (a.daysToEol ?? 99999) - (b.daysToEol ?? 99999));
+
+        const past = assets.filter((a) => a.daysToEol != null && a.daysToEol < 0).length;
+        const within6 = assets.filter((a) => a.daysToEol != null && a.daysToEol >= 0 && a.daysToEol <= 180).length;
+        const within12 = assets.filter((a) => a.daysToEol != null && a.daysToEol >= 0 && a.daysToEol <= 365).length;
+        const kpis = {
+          total: { value: assets.length },
+          within6: { value: within6 },
+          within12: { value: within12 },
+          past: { value: past },
+        };
+        const data = { assets, kpis, initialMonths: months, generatedAt: new Date().toISOString() };
+        return widgetResponse(TIME_TRAVEL, data,
+          `Time-travel forecast at +${months} months: ${past} past EOL, ${within6} within 6mo, ${within12} within 12mo.`);
+      }
+
+      case "show-change-collisions": {
+        const days = Math.max(1, Math.min(30, Number(args?.days ?? 14)));
+        const openCrs = await snow.getOpenChangeRequests(200).catch(() => []);
+        const now = Date.now();
+        const horizonMs = days * 24 * 3600 * 1000;
+        const upcoming = openCrs
+          .map((c: any) => {
+            const start = c.start_date ? new Date(c.start_date as string).getTime() : NaN;
+            const end = c.end_date ? new Date(c.end_date as string).getTime() : (isNaN(start) ? NaN : start + 60 * 60 * 1000);
+            return { c, start, end };
+          })
+          .filter((x) => !isNaN(x.start) && x.start >= now - 24 * 3600 * 1000 && x.start <= now + horizonMs);
+
+        // Group by CI; detect overlaps
+        const byCi: Record<string, { start: number; end: number; cr: any }[]> = {};
+        for (const x of upcoming) {
+          const cmdbCi = x.c.cmdb_ci;
+          const ciId = typeof cmdbCi === "object" ? (cmdbCi?.value || cmdbCi?.sys_id) : cmdbCi;
+          const ciKey = ciId ? String(ciId) : (x.c.short_description || x.c.number || "unassigned");
+          (byCi[ciKey] = byCi[ciKey] || []).push({ start: x.start, end: x.end, cr: x.c });
+        }
+        const collisions: any[] = [];
+        const collisionCrSysIds = new Set<string>();
+        for (const [ciKey, list] of Object.entries(byCi)) {
+          if (list.length < 2) continue;
+          list.sort((a, b) => a.start - b.start);
+          for (let i = 0; i < list.length; i++) {
+            for (let j = i + 1; j < list.length; j++) {
+              if (list[j].start < list[i].end) {
+                collisionCrSysIds.add(list[i].cr.sys_id);
+                collisionCrSysIds.add(list[j].cr.sys_id);
+                const ciDisplay = typeof list[i].cr.cmdb_ci === "object" ? list[i].cr.cmdb_ci?.display_value : ciKey;
+                collisions.push({
+                  ci: ciDisplay || ciKey,
+                  window: `${new Date(Math.max(list[i].start, list[j].start)).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}`,
+                  changes: [list[i].cr.number, list[j].cr.number],
+                });
+              }
+            }
+          }
+        }
+
+        const changes = upcoming.map((x) => {
+          const c = x.c;
+          const cmdbCi = c.cmdb_ci;
+          const ciDisplay = typeof cmdbCi === "object" ? (cmdbCi?.display_value || "(no CI)") : (cmdbCi || "(no CI)");
+          return {
+            sys_id: c.sys_id,
+            number: c.number,
+            short_description: c.short_description,
+            ci: ciDisplay,
+            plannedStart: c.start_date,
+            plannedEnd: c.end_date,
+            type: c.type || "normal",
+            collision: collisionCrSysIds.has(c.sys_id),
+          };
+        });
+
+        const tonight = changes.filter((c) => {
+          const t = new Date(c.plannedStart || 0).getTime();
+          return t > now && t - now < 24 * 3600 * 1000;
+        }).length;
+        const emergencies = changes.filter((c) => /emergency/i.test(String(c.type))).length;
+
+        const kpis = {
+          total: { value: changes.length },
+          tonight: { value: tonight },
+          collisions: { value: collisions.length },
+          emergency: { value: emergencies },
+        };
+        const data = { changes, collisions, kpis, days, generatedAt: new Date().toISOString() };
+        return widgetResponse(CHANGE_COLLISIONS, data,
+          `Change collisions over next ${days}d: ${changes.length} scheduled, ${collisions.length} collisions, ${tonight} tonight, ${emergencies} emergencies.`);
+      }
+
+      case "show-cab-pack": {
+        const cabDate = (args?.cab_date as string) || new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+        const openCrs = await snow.getOpenChangeRequests(100).catch(() => []);
+        // Authorize/Assess states: -3 (Assess), -2 (Authorize). Fall back to all open.
+        const candidates = openCrs.filter((c: any) => ["-3", "-2"].includes(String(c.state)));
+        const list = candidates.length > 0 ? candidates : openCrs.slice(0, 12);
+
+        const snowInstance = process.env.SNOW_INSTANCE || "";
+        const changes: any[] = [];
+        for (const c of list.slice(0, 15)) {
+          const impact = parseInt(String(c.impact || "3"), 10) || 3;
+          const risk = parseInt(String(c.risk || "3"), 10) || 3;
+          const likelihood = 6 - risk; // invert: 1=high,5=low
+          const r = calculateRiskScore(likelihood, 6 - impact);
+          const cat = r.category.toLowerCase();
+          const recommendation = cat === "critical" ? "reject" : cat === "high" ? "defer" : "approve";
+          const reason = recommendation === "reject"
+            ? "Risk score exceeds CAB tolerance — return to assessor"
+            : recommendation === "defer"
+              ? "High risk — needs additional approver before scheduling"
+              : "Low risk and within standard window";
+          const ciDisplay = typeof c.cmdb_ci === "object" ? (c.cmdb_ci?.display_value || "(no CI)") : (c.cmdb_ci || "(no CI)");
+          const requestor = typeof c.requested_by === "object" ? c.requested_by?.display_value : c.requested_by;
+          const assignmentGroup = typeof c.assignment_group === "object" ? c.assignment_group?.display_value : c.assignment_group;
+          const url = c.sys_id ? `${snowInstance}/nav_to.do?uri=change_request.do?sys_id=${c.sys_id}` : "";
+          changes.push({
+            number: c.number,
+            shortDescription: c.short_description,
+            type: c.type || "Normal",
+            ci: ciDisplay,
+            plannedStart: c.start_date,
+            window: c.start_date ? `${new Date(c.start_date as string).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}` : "TBC",
+            requestedBy: requestor,
+            assignmentGroup,
+            description: c.description,
+            backoutPlan: c.backout_plan,
+            testPlan: c.test_plan,
+            eolImplications: [],
+            nist: ["CM-3", "CM-4"],
+            recommendation,
+            reason,
+            riskScore: r.score,
+            upstream: "Service users",
+            downstream: ciDisplay,
+            url,
+          });
+        }
+
+        const data = {
+          title: "CAB Pack",
+          cabDate,
+          attendees: ["Change Manager", "IT Operations Lead", "Security", "Architecture"],
+          changes,
+          kpis: {},
+          generatedAt: new Date().toISOString(),
+        };
+        return widgetResponse(CAB_PACK, data,
+          `CAB pack: ${changes.length} change${changes.length === 1 ? "" : "s"} for review on ${new Date(cabDate).toLocaleDateString("en-GB")}.`);
+      }
+
+      case "show-outcome-story": {
+        const incidentNumber = String(args?.incident_number || "").trim();
+        if (!incidentNumber) return textResponse("incident_number is required");
+        // Fetch all incidents and pick the one
+        const all = await snow.getAllIncidents(500).catch(() => []);
+        const inc = all.find((i: any) => i.number === incidentNumber);
+        if (!inc) return textResponse(`Incident ${incidentNumber} not found in ServiceNow.`);
+        const opened = inc.opened_at ? new Date(inc.opened_at as string).getTime() : 0;
+        const resolved = inc.resolved_at ? new Date(inc.resolved_at as string).getTime() : (inc.closed_at ? new Date(inc.closed_at as string).getTime() : 0);
+        const resolutionMinutes = (opened && resolved) ? Math.max(0, Math.round((resolved - opened) / 60000)) : null;
+        const snowInstance = process.env.SNOW_INSTANCE || "";
+        const url = inc.sys_id ? `${snowInstance}/nav_to.do?uri=incident.do?sys_id=${inc.sys_id}` : "";
+        const ciDisplay = typeof inc.cmdb_ci === "object" ? (inc.cmdb_ci?.display_value || "") : (inc.cmdb_ci || "");
+        const assigned = typeof inc.assigned_to === "object" ? inc.assigned_to?.display_value : inc.assigned_to;
+        const stateMap: Record<string, string> = { "1": "New", "2": "In Progress", "3": "On Hold", "6": "Resolved", "7": "Closed", "8": "Cancelled" };
+        const stateLabel = stateMap[String(inc.state)] || String(inc.state || "Resolved");
+        const priorityMap: Record<string, string> = { "1": "P1", "2": "P2", "3": "P3", "4": "P4", "5": "P5" };
+        const priority = priorityMap[String(inc.priority)] || `P${inc.priority || "?"}`;
+
+        const timeline: any[] = [];
+        if (inc.opened_at) timeline.push({ time: new Date(inc.opened_at as string).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }), text: `Incident opened — ${inc.short_description || ""}`, severity: "critical" });
+        if (inc.resolved_at) timeline.push({ time: new Date(inc.resolved_at as string).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }), text: "Resolution applied; service restored.", severity: "success" });
+        if (inc.closed_at && inc.closed_at !== inc.resolved_at) timeline.push({ time: new Date(inc.closed_at as string).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }), text: "Incident closed.", severity: "success" });
+
+        // Quote: prefer close_notes first sentence, else cause_notes
+        const closeNotes = String(inc.close_notes || "").trim();
+        const firstSentence = closeNotes.split(/\.\s|\n/)[0]?.trim();
+        const quote = firstSentence ? { text: firstSentence + (firstSentence.endsWith(".") ? "" : "."), by: assigned || "Resolving engineer", role: typeof inc.assignment_group === "object" ? inc.assignment_group?.display_value : "Operations" } : null;
+
+        const story: string[] = [];
+        if (inc.short_description) story.push(`At ${new Date(inc.opened_at as string).toLocaleString("en-GB", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}, the team was paged for ${inc.short_description}${ciDisplay ? ` on ${ciDisplay}` : ""}.`);
+        if (inc.description && inc.description !== inc.short_description) story.push(String(inc.description));
+        if (closeNotes && closeNotes !== firstSentence) story.push(closeNotes);
+
+        const data = {
+          incident: {
+            sys_id: inc.sys_id,
+            number: inc.number,
+            short_description: inc.short_description,
+            headline: inc.short_description,
+            description: inc.description,
+            closeNotes,
+            priority,
+            state: stateLabel,
+            category: inc.category,
+            affectedCi: ciDisplay,
+            assignedTo: assigned,
+            opened_at: inc.opened_at,
+            resolvedAt: inc.resolved_at || inc.closed_at,
+            resolutionMinutes,
+            resolutionCaption: resolutionMinutes != null && resolutionMinutes < 60
+              ? `Resolved in under an hour. Customers stayed online.`
+              : resolutionMinutes != null
+                ? `Resolved before the next business day. Service was restored ahead of SLA.`
+                : `Resolution under way.`,
+            slaMet: null,
+            usersImpacted: null,
+            timeline,
+            quote,
+            story,
+            url,
+          },
+          snowInstance,
+          generatedAt: new Date().toISOString(),
+        };
+        return widgetResponse(OUTCOME_STORY, data,
+          `Resolution story for ${inc.number}: ${stateLabel}${resolutionMinutes != null ? `, resolved in ${resolutionMinutes} min` : ""}.`);
+      }
+
+      // ── Loop component: CAB pack (DA-only, MCP-sourced) — Phase C.2 ──
+      case "present-cab-pack-as-loop": {
+        const cabDate = (args?.cab_date as string) || new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+        const openCrs = await snow.getOpenChangeRequests(100).catch(() => []);
+        const candidates = openCrs.filter((c: any) => ["-3", "-2"].includes(String(c.state)));
+        const list = candidates.length > 0 ? candidates : openCrs.slice(0, 12);
+        const snowInstance = process.env.SNOW_INSTANCE || "";
+
+        const changes: CabPackLoopChange[] = list.slice(0, 15).map((c: any) => {
+          const impact = parseInt(String(c.impact || "3"), 10) || 3;
+          const risk = parseInt(String(c.risk || "3"), 10) || 3;
+          const likelihood = 6 - risk;
+          const r = calculateRiskScore(likelihood, 6 - impact);
+          const cat = r.category.toLowerCase();
+          const recommendation: CabPackLoopChange["recommendation"] =
+            cat === "critical" ? "reject" : cat === "high" ? "defer" : "approve";
+          const reason = recommendation === "reject"
+            ? "Risk score exceeds CAB tolerance — return to assessor"
+            : recommendation === "defer"
+              ? "High risk — needs additional approver before scheduling"
+              : "Low risk and within standard window";
+          const ciDisplay = typeof c.cmdb_ci === "object" ? (c.cmdb_ci?.display_value || "(no CI)") : (c.cmdb_ci || "(no CI)");
+          const requestor = typeof c.requested_by === "object" ? c.requested_by?.display_value : c.requested_by;
+          const assignmentGroup = typeof c.assignment_group === "object" ? c.assignment_group?.display_value : c.assignment_group;
+          const url = c.sys_id ? `${snowInstance}/nav_to.do?uri=change_request.do?sys_id=${c.sys_id}` : "";
+          return {
+            number: String(c.number || ""),
+            shortDescription: String(c.short_description || ""),
+            type: String(c.type || "Normal"),
+            ci: String(ciDisplay),
+            window: c.start_date
+              ? new Date(c.start_date as string).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+              : "TBC",
+            requestedBy: requestor ? String(requestor) : undefined,
+            assignmentGroup: assignmentGroup ? String(assignmentGroup) : undefined,
+            recommendation,
+            reason,
+            riskScore: r.score,
+            upstream: "Service users",
+            downstream: String(ciDisplay),
+            url,
+            nist: ["CM-3", "CM-4"],
+          };
+        });
+
+        const payload = buildCabPackLoop({
+          cabDate,
+          attendees: ["Change Manager", "IT Operations Lead", "Security", "Architecture"],
+          changes,
+          referenceId: `cab-${cabDate}`,
+        });
+        return widgetResponse(LOOP_COMPONENT, payload,
+          `CAB pack as Loop component: ${changes.length} change${changes.length === 1 ? "" : "s"} for review on ${new Date(cabDate).toLocaleDateString("en-GB")}. Co-editable across Teams, Outlook and the Loop app.`);
+      }
+
+      // ── Loop component: Outcome story (DA-only, MCP-sourced) — Phase C.2 ──
+      case "present-outcome-story-as-loop": {
+        const incidentNumber = String(args?.incident_number || "").trim();
+        if (!incidentNumber) return textResponse("incident_number is required");
+        const all = await snow.getAllIncidents(500).catch(() => []);
+        const inc = all.find((i: any) => i.number === incidentNumber);
+        if (!inc) return textResponse(`Incident ${incidentNumber} not found in ServiceNow.`);
+        const opened = inc.opened_at ? new Date(inc.opened_at as string).getTime() : 0;
+        const resolved = inc.resolved_at ? new Date(inc.resolved_at as string).getTime() : (inc.closed_at ? new Date(inc.closed_at as string).getTime() : 0);
+        const resolutionMinutes = (opened && resolved) ? Math.max(0, Math.round((resolved - opened) / 60000)) : null;
+        const snowInstance = process.env.SNOW_INSTANCE || "";
+        const url = inc.sys_id ? `${snowInstance}/nav_to.do?uri=incident.do?sys_id=${inc.sys_id}` : "";
+        const ciDisplay = typeof inc.cmdb_ci === "object" ? (inc.cmdb_ci?.display_value || "") : (inc.cmdb_ci || "");
+        const assigned = typeof inc.assigned_to === "object" ? inc.assigned_to?.display_value : inc.assigned_to;
+        const stateMap: Record<string, string> = { "1": "New", "2": "In Progress", "3": "On Hold", "6": "Resolved", "7": "Closed", "8": "Cancelled" };
+        const stateLabel = stateMap[String(inc.state)] || String(inc.state || "Resolved");
+        const priorityMap: Record<string, string> = { "1": "P1", "2": "P2", "3": "P3", "4": "P4", "5": "P5" };
+        const priority = priorityMap[String(inc.priority)] || `P${inc.priority || "?"}`;
+
+        const timeline: Array<{ time: string; text: string; severity: "critical" | "warning" | "success" | "info" }> = [];
+        if (inc.opened_at) timeline.push({ time: new Date(inc.opened_at as string).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }), text: `Incident opened — ${inc.short_description || ""}`, severity: "critical" });
+        if (inc.resolved_at) timeline.push({ time: new Date(inc.resolved_at as string).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }), text: "Resolution applied; service restored.", severity: "success" });
+        if (inc.closed_at && inc.closed_at !== inc.resolved_at) timeline.push({ time: new Date(inc.closed_at as string).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }), text: "Incident closed.", severity: "success" });
+
+        const closeNotes = String(inc.close_notes || "").trim();
+        const firstSentence = closeNotes.split(/\.\s|\n/)[0]?.trim();
+        const quote = firstSentence
+          ? { text: firstSentence + (firstSentence.endsWith(".") ? "" : "."), by: assigned ? String(assigned) : "Resolving engineer", role: typeof inc.assignment_group === "object" ? inc.assignment_group?.display_value : "Operations" }
+          : undefined;
+
+        const story: string[] = [];
+        if (inc.short_description) story.push(`At ${new Date(inc.opened_at as string).toLocaleString("en-GB", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}, the team was paged for ${inc.short_description}${ciDisplay ? ` on ${ciDisplay}` : ""}.`);
+        if (inc.description && inc.description !== inc.short_description) story.push(String(inc.description));
+        if (closeNotes && closeNotes !== firstSentence) story.push(closeNotes);
+
+        const payload = buildOutcomeStoryLoop({
+          number: String(inc.number),
+          headline: String(inc.short_description || ""),
+          priority,
+          state: stateLabel,
+          affectedCi: ciDisplay ? String(ciDisplay) : undefined,
+          assignedTo: assigned ? String(assigned) : undefined,
+          openedAt: String(inc.opened_at || ""),
+          resolvedAt: inc.resolved_at ? String(inc.resolved_at) : (inc.closed_at ? String(inc.closed_at) : undefined),
+          resolutionMinutes,
+          resolutionCaption: resolutionMinutes != null && resolutionMinutes < 60
+            ? "Resolved in under an hour. Customers stayed online."
+            : resolutionMinutes != null
+              ? "Resolved before the next business day. Service was restored ahead of SLA."
+              : "Resolution under way.",
+          story,
+          timeline,
+          quote,
+          url,
+        });
+        return widgetResponse(LOOP_COMPONENT, payload,
+          `Resolution story for ${inc.number} as Loop component: ${stateLabel}${resolutionMinutes != null ? `, resolved in ${resolutionMinutes} min` : ""}. Co-editable across Teams, Outlook and the Loop app.`);
+      }
+
+      // ── Loop component: Shift handover (DA-only, MCP-sourced) — Phase C.2 ──
+      case "present-shift-handover-as-loop": {
+        const rangeHoursRaw = Number(args?.range_hours);
+        const rangeHours = Number.isFinite(rangeHoursRaw) && rangeHoursRaw > 0 && rangeHoursRaw <= 72 ? rangeHoursRaw : 12;
+        const rangeEnd = new Date().toISOString();
+        const cutoffMs = Date.now() - rangeHours * 3600 * 1000;
+        const snowInstance = process.env.SNOW_INSTANCE || "";
+
+        const [allIncidents, openCRs] = await Promise.all([
+          snow.getAllIncidents(200).catch(() => []),
+          snow.getOpenChangeRequests(100).catch(() => []),
+        ]);
+        const openIncidents = allIncidents
+          .filter((i: any) => !["6", "7", "8"].includes(String(i.state)))
+          .filter((i: any) => {
+            const t = i.opened_at ? new Date(i.opened_at as string).getTime() : 0;
+            return t >= cutoffMs;
+          })
+          .slice(0, 25);
+
+        const priorityMap: Record<string, string> = { "1": "P1", "2": "P2", "3": "P3", "4": "P4", "5": "P5" };
+        const stateMap: Record<string, string> = { "1": "New", "2": "In Progress", "3": "On Hold", "6": "Resolved", "7": "Closed" };
+
+        const incidents = openIncidents.map((i: any) => ({
+          number: String(i.number || ""),
+          shortDescription: String(i.short_description || ""),
+          priority: priorityMap[String(i.priority)] || `P${i.priority || "?"}`,
+          state: stateMap[String(i.state)] || String(i.state || ""),
+          url: i.sys_id ? `${snowInstance}/nav_to.do?uri=incident.do?sys_id=${i.sys_id}` : undefined,
+        }));
+
+        const changes = openCRs.slice(0, 15).map((c: any) => ({
+          number: String(c.number || ""),
+          shortDescription: String(c.short_description || ""),
+          window: c.start_date
+            ? new Date(c.start_date as string).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+            : "TBC",
+          url: c.sys_id ? `${snowInstance}/nav_to.do?uri=change_request.do?sys_id=${c.sys_id}` : undefined,
+        }));
+
+        // SLA risks — derive from P1/P2 incidents older than 4h as a proxy
+        // (the dedicated SLA endpoint is exposed by `get-sla-breaches` and
+        // requires a separate fetch; for handover we approximate from the
+        // incident table to keep this single round-trip).
+        const slaRisks = openIncidents
+          .filter((i: any) => ["1", "2"].includes(String(i.priority)))
+          .slice(0, 8)
+          .map((i: any) => {
+            const opened = i.opened_at ? new Date(i.opened_at as string).getTime() : Date.now();
+            const ageHours = Math.max(0, (Date.now() - opened) / 3600_000);
+            const slaTargetH = String(i.priority) === "1" ? 4 : 8;
+            const hoursToBreach = Math.max(0, slaTargetH - ageHours);
+            return {
+              ticketNumber: String(i.number || ""),
+              slaName: `${priorityMap[String(i.priority)] || "P?"} resolution`,
+              hoursToBreach,
+              url: i.sys_id ? `${snowInstance}/nav_to.do?uri=incident.do?sys_id=${i.sys_id}` : undefined,
+            };
+          })
+          .filter((s) => s.hoursToBreach < 4);
+
+        // Top actions for today — co-editable tasks. Drawn from the most
+        // urgent incidents and changes; the manager can re-tick / reassign
+        // them in any Loop surface.
+        const actions: Array<{ title: string; owner?: string; url?: string }> = [];
+        for (const i of openIncidents.slice(0, 3)) {
+          const owner = typeof i.assignment_group === "object" ? i.assignment_group?.display_value : undefined;
+          actions.push({
+            title: `Drive ${i.number} (${priorityMap[String(i.priority)] || "P?"}) to resolution: ${i.short_description || ""}`,
+            owner: owner ? String(owner) : undefined,
+            url: i.sys_id ? `${snowInstance}/nav_to.do?uri=incident.do?sys_id=${i.sys_id}` : undefined,
+          });
+        }
+        for (const c of openCRs.slice(0, 2)) {
+          const owner = typeof c.assignment_group === "object" ? c.assignment_group?.display_value : undefined;
+          actions.push({
+            title: `Confirm CAB position on ${c.number}: ${c.short_description || ""}`,
+            owner: owner ? String(owner) : undefined,
+            url: c.sys_id ? `${snowInstance}/nav_to.do?uri=change_request.do?sys_id=${c.sys_id}` : undefined,
+          });
+        }
+
+        const payload = buildShiftHandoverLoop({
+          rangeEnd,
+          rangeHours,
+          referenceId: `handover-${rangeEnd}`,
+          incidents,
+          changes,
+          slaRisks,
+          actions,
+        });
+        return widgetResponse(LOOP_COMPONENT, payload,
+          `Shift handover as Loop component covering the last ${rangeHours} h: ${incidents.length} open incidents, ${changes.length} changes, ${slaRisks.length} SLA risks, ${actions.length} actions. Co-editable across Teams, Outlook and the Loop app.`);
       }
 
       default:

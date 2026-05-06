@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Loop component</title>
+<!--
+  Loop component renderer.
+
+  Single shared visual fallback for the three DA-only Loop tools:
+    - present-cab-pack-as-loop
+    - present-outcome-story-as-loop
+    - present-shift-handover-as-loop
+
+  When this HTML is served back through the Apps SDK widget channel inside
+  M365 Copilot, Teams, or Outlook, the Loop runtime reads the JSON payload
+  from `window.__TOOL_DATA__` and surfaces a co-editable Loop component.
+
+  The visual rendering below is the fallback for any host that does NOT yet
+  have the Loop runtime hooked in — it shows the same blocks in a Loop-
+  flavoured, shareable card.
+
+  Hard-rule compliance: DA-only widget. Source data flows from MCP only —
+  no `/api/*` calls from this HTML, no references to the digital-worker
+  runtime persona.
+-->
+<style>
+:root {
+  --loop-bg: #ffffff;
+  --loop-fg: #242424;
+  --loop-fg-muted: #616161;
+  --loop-stroke: #e0e0e0;
+  --loop-stroke-strong: #c8c8c8;
+  --loop-accent: #5b5fc7;
+  --loop-accent-soft: #f0f0fa;
+  --loop-success-bg: #e6f4ea;
+  --loop-success-fg: #0e700e;
+  --loop-warn-bg: #fff4ce;
+  --loop-warn-fg: #835c00;
+  --loop-critical-bg: #fde7e9;
+  --loop-critical-fg: #b10e1c;
+  --loop-info-bg: #eef5ff;
+  --loop-info-fg: #0f6cbd;
+  --loop-radius: 8px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --loop-bg: #1f1f1f;
+    --loop-fg: #ffffff;
+    --loop-fg-muted: #d6d6d6;
+    --loop-stroke: #404040;
+    --loop-stroke-strong: #525252;
+    --loop-accent-soft: #2c2c54;
+    --loop-success-bg: #103a13;
+    --loop-success-fg: #92d094;
+    --loop-warn-bg: #3b2c00;
+    --loop-warn-fg: #f5d77a;
+    --loop-critical-bg: #4a121a;
+    --loop-critical-fg: #f59ca6;
+    --loop-info-bg: #102a4a;
+    --loop-info-fg: #8ec5ff;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 16px;
+  font-family: 'Segoe UI', -apple-system, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--loop-fg);
+  background: var(--loop-bg);
+}
+.loop-shell {
+  border: 1px solid var(--loop-stroke);
+  border-radius: var(--loop-radius);
+  padding: 16px 20px;
+  max-width: 880px;
+  position: relative;
+}
+.loop-chrome {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--loop-fg-muted);
+  margin-bottom: 12px;
+}
+.loop-chrome::before {
+  content: "";
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--loop-accent);
+  flex: 0 0 auto;
+}
+.loop-perm {
+  margin-left: auto;
+  font-size: 11px;
+  background: var(--loop-accent-soft);
+  color: var(--loop-accent);
+  border-radius: 12px;
+  padding: 2px 8px;
+}
+h1.loop-title {
+  margin: 0 0 4px 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+.loop-subtitle {
+  margin: 0 0 16px 0;
+  color: var(--loop-fg-muted);
+  font-size: 13px;
+}
+.loop-blocks > * + * { margin-top: 12px; }
+.loop-h2 { font-size: 16px; font-weight: 600; margin: 16px 0 4px; }
+.loop-h3 { font-size: 14px; font-weight: 600; margin: 12px 0 4px; }
+.loop-p { margin: 0; }
+.loop-callout {
+  border-left: 3px solid var(--loop-accent);
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.loop-callout.success { background: var(--loop-success-bg); color: var(--loop-success-fg); border-left-color: var(--loop-success-fg); }
+.loop-callout.warning { background: var(--loop-warn-bg);    color: var(--loop-warn-fg);    border-left-color: var(--loop-warn-fg); }
+.loop-callout.critical { background: var(--loop-critical-bg); color: var(--loop-critical-fg); border-left-color: var(--loop-critical-fg); }
+.loop-callout.info    { background: var(--loop-info-bg);    color: var(--loop-info-fg);    border-left-color: var(--loop-info-fg); }
+ul.loop-list, ol.loop-list { margin: 0; padding-left: 20px; }
+.loop-task {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--loop-stroke);
+  border-radius: 6px;
+  background: var(--loop-bg);
+}
+.loop-task input[type="checkbox"] {
+  margin-top: 3px;
+  accent-color: var(--loop-accent);
+}
+.loop-task-meta {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--loop-fg-muted);
+}
+.loop-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  border: 1px solid var(--loop-stroke);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.loop-table th, .loop-table td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--loop-stroke);
+}
+.loop-table th {
+  background: var(--loop-accent-soft);
+  color: var(--loop-fg);
+  font-weight: 600;
+}
+.loop-table tr:last-child td { border-bottom: 0; }
+.loop-image { display: block; max-width: 100%; border-radius: 4px; }
+.loop-link { color: var(--loop-accent); text-decoration: none; font-weight: 600; }
+.loop-link:hover { text-decoration: underline; }
+.loop-sep { border: 0; border-top: 1px dashed var(--loop-stroke-strong); margin: 16px 0; }
+.loop-source {
+  font-size: 11px;
+  color: var(--loop-fg-muted);
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--loop-stroke);
+}
+</style>
+</head>
+<body>
+<div class="loop-shell" role="article" aria-label="Loop component">
+  <div class="loop-chrome">
+    <span data-bind="componentType">Loop component</span>
+    <span class="loop-perm" data-bind="permissions">co-edit · share</span>
+  </div>
+  <h1 class="loop-title" data-bind="title"></h1>
+  <p class="loop-subtitle" data-bind="subtitle"></p>
+  <div class="loop-blocks" data-bind="blocks"></div>
+  <div class="loop-source" data-bind="source"></div>
+</div>
+<script>
+  (function () {
+    'use strict';
+    var data = window.__TOOL_DATA__ || null;
+    if (!data) return;
+    var root = document.querySelector('.loop-shell');
+    if (!root) return;
+
+    function $bind(name) { return root.querySelector('[data-bind="' + name + '"]'); }
+    function txt(el, value) { if (el) el.textContent = value || ''; }
+
+    // Header.
+    var componentType = (data.componentType || 'page').replace(/([A-Z])/g, ' $1').toLowerCase();
+    txt($bind('componentType'), 'Loop component · ' + componentType);
+    var perms = [];
+    if (data.permissions && data.permissions.edit) perms.push('co-edit');
+    if (data.permissions && data.permissions.share) perms.push('share');
+    txt($bind('permissions'), perms.join(' · ') || 'read-only');
+
+    // Title and subtitle.
+    txt($bind('title'), data.title || 'Loop component');
+    txt($bind('subtitle'), data.subtitle || '');
+
+    // Source footer.
+    if (data.source) {
+      txt(
+        $bind('source'),
+        'Source: ' + (data.source.system || 'unknown') +
+          ' · ref ' + (data.source.referenceId || '') +
+          ' · generated ' + (data.source.generatedAt || ''),
+      );
+    }
+
+    // Blocks.
+    var blocksEl = $bind('blocks');
+    if (!blocksEl || !Array.isArray(data.blocks)) return;
+    blocksEl.innerHTML = '';
+
+    function el(tag, props, children) {
+      var n = document.createElement(tag);
+      if (props) {
+        for (var k in props) {
+          if (k === 'class') n.className = props[k];
+          else if (k === 'href') n.href = props[k];
+          else if (k === 'src') n.src = props[k];
+          else if (k === 'alt') n.alt = props[k];
+          else n.setAttribute(k, props[k]);
+        }
+      }
+      if (typeof children === 'string') n.textContent = children;
+      else if (Array.isArray(children)) children.forEach(function (c) { if (c) n.appendChild(c); });
+      return n;
+    }
+
+    for (var i = 0; i < data.blocks.length; i++) {
+      var b = data.blocks[i];
+      if (!b || !b.type) continue;
+      switch (b.type) {
+        case 'heading':
+          var hClass = b.level === 1 ? 'loop-title' : (b.level === 2 ? 'loop-h2' : 'loop-h3');
+          var hTag = b.level === 1 ? 'h1' : (b.level === 2 ? 'h2' : 'h3');
+          blocksEl.appendChild(el(hTag, { class: hClass }, b.text || ''));
+          break;
+        case 'paragraph':
+          blocksEl.appendChild(el('p', { class: 'loop-p' }, b.text || ''));
+          break;
+        case 'bulletedList': {
+          var ul = el('ul', { class: 'loop-list' });
+          (b.items || []).forEach(function (item) { ul.appendChild(el('li', null, item)); });
+          blocksEl.appendChild(ul);
+          break;
+        }
+        case 'numberedList': {
+          var ol = el('ol', { class: 'loop-list' });
+          (b.items || []).forEach(function (item) { ol.appendChild(el('li', null, item)); });
+          blocksEl.appendChild(ol);
+          break;
+        }
+        case 'task': {
+          var box = el('input', {});
+          box.type = 'checkbox';
+          if (b.completed) box.checked = true;
+          var lab = el('label', null, b.title || '');
+          var meta = [];
+          if (b.assignee) meta.push('@' + b.assignee);
+          if (b.dueDate) meta.push('due ' + b.dueDate);
+          var metaSpan = el('span', { class: 'loop-task-meta' }, meta.join(' · '));
+          var task = el('div', { class: 'loop-task' }, [box, lab, metaSpan]);
+          blocksEl.appendChild(task);
+          break;
+        }
+        case 'table': {
+          var table = el('table', { class: 'loop-table' });
+          var thead = el('thead');
+          var trHead = el('tr');
+          (b.headers || []).forEach(function (h) { trHead.appendChild(el('th', null, h)); });
+          thead.appendChild(trHead);
+          var tbody = el('tbody');
+          (b.rows || []).forEach(function (row) {
+            var tr = el('tr');
+            (row || []).forEach(function (cell) { tr.appendChild(el('td', null, cell)); });
+            tbody.appendChild(tr);
+          });
+          table.appendChild(thead);
+          table.appendChild(tbody);
+          blocksEl.appendChild(table);
+          break;
+        }
+        case 'callout': {
+          blocksEl.appendChild(el('div', { class: 'loop-callout ' + (b.variant || 'info') }, b.text || ''));
+          break;
+        }
+        case 'image': {
+          blocksEl.appendChild(el('img', { class: 'loop-image', src: b.src, alt: b.alt || '' }));
+          break;
+        }
+        case 'separator':
+          blocksEl.appendChild(el('hr', { class: 'loop-sep' }));
+          break;
+        case 'link': {
+          var a = el('a', { class: 'loop-link', href: b.url, target: '_blank', rel: 'noopener noreferrer' }, b.text || b.url || '');
+          blocksEl.appendChild(a);
+          break;
+        }
+        default:
+          // Unknown block type — render nothing rather than fail.
+          break;
+      }
+    }
+  })();
+</script>
+</body>
+</html>

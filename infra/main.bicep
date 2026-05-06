@@ -171,6 +171,24 @@ module containerApps 'modules/container-apps.bicep' = {
 }
 
 // ──────────────────────────────────────────────────────────────
+// 6b. Phase E — MCP Server (Enrichment) Container App on port 3010
+// ──────────────────────────────────────────────────────────────
+module mcpEnrichment 'modules/mcp-enrichment.bicep' = {
+  name: 'mcp-enrichment-deployment'
+  params: {
+    environmentName: environmentName
+    location: location
+    tags: tags
+    containerAppsEnvId: containerApps.outputs.containerAppsEnvId
+    containerAppsEnvDomain: containerApps.outputs.containerAppsEnvDomain
+    acrLoginServer: acr.properties.loginServer
+    appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
+    keyVaultName: keyVault.name
+    contentSafetyEndpoint: cognitiveServices.outputs.contentSafetyEndpoint
+  }
+}
+
+// ──────────────────────────────────────────────────────────────
 // 7. Function App (Consumption, Linux, Node 20)
 // ──────────────────────────────────────────────────────────────
 resource functionAppPlan 'Microsoft.Web/serverfarms@2023-12-01' = {
@@ -293,6 +311,17 @@ resource acrPullMcp 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   }
 }
 
+// Phase E — AcrPull for the enrichment Container App.
+resource acrPullEnrichment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(acr.id, 'mcp-enrichment', acrPullRoleId)
+  scope: acr
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPullRoleId)
+    principalId: mcpEnrichment.outputs.mcpEnrichmentPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // ──────────────────────────────────────────────────────────────
 // Outputs
 // ──────────────────────────────────────────────────────────────
@@ -300,6 +329,7 @@ resource acrPullMcp 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 // Container Apps
 output digitalWorkerUrl string = 'https://${containerApps.outputs.digitalWorkerFqdn}'
 output mcpServerUrl string = 'https://${containerApps.outputs.mcpServerFqdn}'
+output mcpEnrichmentUrl string = mcpEnrichment.outputs.mcpEnrichmentEndpoint
 output containerAppsEnvironment string = containerApps.outputs.containerAppsEnvName
 
 // Container Registry

@@ -1,0 +1,23 @@
+{
+  "fetchedAt": "2024-10-15T13:42:00.000Z",
+  "incidents": [
+    {
+      "guid": "tracking-id-AZ-DEMO-001",
+      "title": "Investigating - Storage availability degraded - East US 2",
+      "pubDate": "2024-10-15T13:35:00.000Z",
+      "link": "https://status.azure.com/incidents/AZ-DEMO-001",
+      "description": "Customers attempting to access Storage accounts in East US 2 may experience increased latency or timeouts. Engineers are investigating. Demo fixture for the Phase E azure-status scenario.",
+      "regions": ["east us 2", "eastus2"],
+      "status": "investigating"
+    },
+    {
+      "guid": "tracking-id-AZ-DEMO-002",
+      "title": "Mitigating - Azure SQL Database connectivity - West Europe",
+      "pubDate": "2024-10-15T12:10:00.000Z",
+      "link": "https://status.azure.com/incidents/AZ-DEMO-002",
+      "description": "A subset of customers using Azure SQL Database in West Europe may have experienced connection failures. We have identified the cause and are mitigating.",
+      "regions": ["west europe", "westeurope"],
+      "status": "mitigating"
+    }
+  ]
+}

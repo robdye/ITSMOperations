@@ -1,0 +1,138 @@
+version: 2
+# Dependabot config — manual gate for preview SDKs.
+#
+# `@microsoft/agents-a365-*` and `@microsoft/agents-hosting` are PREVIEW.
+# Auto-bumping them has broken the worker before because preview minor
+# bumps regularly include breaking schema changes (e.g. session.update
+# voice schema). They are explicitly ignored from version updates here so
+# that the only way they move is a deliberate human PR. Security updates
+# are still allowed.
+#
+# Phase A (Voice Live preview) and Phase B (Foundry Red Team preview) add
+# additional preview SDKs to the same manual-gate list. Voice Live is
+# accessed via raw WebSocket + DefaultAzureCredential, so the wire-format
+# is the bumpable surface; for completeness, any future
+# `@azure-rest/ai-voice-live*` and `@azure-rest/ai-evaluation*` packages
+# we adopt are gated here too.
+updates:
+  # ── digital-worker ──
+  - package-ecosystem: npm
+    directory: /digital-worker
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - digital-worker
+    ignore:
+      - dependency-name: "@microsoft/agents-a365-*"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: "@microsoft/agents-hosting"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      # Phase A — Voice Live preview surface. The wire protocol changes between
+      # preview minors (e.g. `audio.input.diarization` shape, `voice.id` vs
+      # legacy flat `voice` string). Hold any future preview SDK at the pinned
+      # version until we verify against a live ACS Teams interop call.
+      - dependency-name: "@azure-rest/ai-voice-live*"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      # Phase B — Foundry Red Team / safety eval preview SDK. Probe payload
+      # schema (`probes[]`, `aggregations`) shifts across previews; manual
+      # bump only after `red-team-nightly` reruns clean against test tenant.
+      - dependency-name: "@azure-rest/ai-evaluation*"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: "@azure/ai-projects"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+
+  # ── mcp-server ──
+  - package-ecosystem: npm
+    directory: /mcp-server
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - mcp-server
+    ignore:
+      - dependency-name: "@microsoft/agents-a365-*"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      - dependency-name: "@microsoft/agents-hosting"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
+      # Phase C — Loop component preview surface. Loop component schema
+      # (`type: "Microsoft.Loop.Component@v1"`) is preview; auto-bumping the
+      # graph SDK that ships its renderer has broken DA-side rendering before.
+      - dependency-name: "@microsoft/microsoft-graph-client"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+
+  # ── functions ──
+  - package-ecosystem: npm
+    directory: /functions
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - functions
+
+  # ── mcp-server-enrichment (Phase E) ──
+  # The enrichment server is a thin MCP wrapper over five public APIs.
+  # The MCP SDK and Express are pinned here at the same caret-bound levels
+  # as the main mcp-server. Bumping `@modelcontextprotocol/sdk` minor
+  # versions has historically changed the StreamableHTTPServerTransport
+  # signature; gate it so we don't ship a broken transport handshake to a
+  # demo without re-running the smoke + sources test suites.
+  - package-ecosystem: npm
+    directory: /mcp-server-enrichment
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - mcp-server-enrichment
+      - phase-e
+    ignore:
+      - dependency-name: "@modelcontextprotocol/sdk"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+      - dependency-name: "express"
+        update-types:
+          - version-update:semver-major
+      - dependency-name: "cors"
+        update-types:
+          - version-update:semver-major
+
+  # ── repo root (workflow tooling) ──
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies
+      - github-actions

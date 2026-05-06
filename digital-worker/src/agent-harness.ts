@@ -31,6 +31,18 @@ export interface WorkerRunContext {
   displayName?: string;
   /** Echo of PromptContext.requesterEmail. */
   requesterEmail?: string;
+  /**
+   * Phase 2.1 — when true, every WRITE tool short-circuits (returns a
+   * dry-run summary instead of touching SNOW / M365). Threaded through
+   * from `evaluateTrigger().mode === 'dry-run'` at the workflow trigger
+   * so a workflow can be planned end-to-end without side effects.
+   */
+  dryRun?: boolean;
+  /**
+   * Phase 1.7 — caller agent id when the run was kicked off via the A2A
+   * channel. Stamped on audit-trail entries.
+   */
+  callerAgentId?: string;
 }
 
 // ── Worker Definition ──

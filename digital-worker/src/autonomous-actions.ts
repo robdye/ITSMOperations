@@ -19,7 +19,7 @@ interface CalendarAttendee {
   name?: string;
 }
 
-// Re-export for downstream wrappers (m365-tools.ts) that need the attendee shape.
+// Re-export for downstream wrappers (m365-services.ts) that need the attendee shape.
 export type { CalendarAttendee };
 
 // ── Service ──

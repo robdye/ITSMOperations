@@ -6,6 +6,7 @@
 import { SnowInjector } from './snow-injector';
 import { signalRouter, type Signal } from '../signal-router';
 import { getRecentAuditEntries } from '../audit-trail';
+import { isTagged } from '../cognition-tags';
 
 export type ScenarioStep =
   | { type: 'snow.incident'; fields: Record<string, unknown> }
@@ -17,12 +18,22 @@ export type ScenarioStep =
       sysIdFromOutput?: string;
       fields: Record<string, unknown>;
     }
+  | {
+      /**
+       * Phase E — Publish a synthetic signal directly to the router.
+       * Used by enrichment-driven scenarios where the trigger originates
+       * from the MCP enrichment server rather than ServiceNow.
+       */
+      type: 'signal.publish';
+      signal: Omit<Signal, 'id' | 'occurredAt'> & { id?: string; occurredAt?: string };
+    }
   | { type: 'wait'; ms: number }
   | {
       type: 'assert.outcome';
       description: string;
       auditContains?: { workerId?: string; toolName?: string };
       signalRouted?: { workflowId: string };
+      cognitionTagged?: { namespace: string; key: string };
       timeoutMs?: number;
     };
 
@@ -115,6 +126,27 @@ export class ScenarioRunner {
       case 'wait':
         await new Promise((r) => setTimeout(r, step.ms));
         return `Waited ${step.ms}ms`;
+      case 'signal.publish': {
+        const signal: Signal = {
+          id: step.signal.id ?? `scen-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          occurredAt: step.signal.occurredAt ?? new Date().toISOString(),
+          source: step.signal.source,
+          type: step.signal.type,
+          severity: step.signal.severity,
+          asset: step.signal.asset,
+          payload: step.signal.payload,
+          correlationId: step.signal.correlationId,
+          confidence: step.signal.confidence,
+          predicted: step.signal.predicted,
+          origin: step.signal.origin,
+        };
+        if (this.opts.publishSignal) {
+          await this.opts.publishSignal(signal);
+        } else {
+          await signalRouter.publish(signal);
+        }
+        return `Published signal ${signal.id} (${signal.type})`;
+      }
       case 'assert.outcome':
         return await this.assertOutcome(step);
       default: {
@@ -144,6 +176,11 @@ export class ScenarioRunner {
           .getRecentDecisions(200)
           .some((d) => d.workflowId === step.signalRouted!.workflowId && d.matched);
         if (matched) return `signal-router asserted: ${step.description}`;
+      }
+      if (step.cognitionTagged) {
+        if (isTagged(step.cognitionTagged.namespace, step.cognitionTagged.key)) {
+          return `cognition-graph tagged: ${step.description}`;
+        }
       }
       await new Promise((r) => setTimeout(r, 50));
     }

@@ -1,0 +1,30 @@
+{
+  "fetchedAt": "2024-10-15T13:50:00.000Z",
+  "services": [
+    {
+      "service": "Exchange Online",
+      "status": "serviceOperational",
+      "activeIssues": 0
+    },
+    {
+      "service": "Microsoft Teams",
+      "status": "serviceDegradation",
+      "activeIssues": 1,
+      "headlineIssue": {
+        "id": "TM987654",
+        "title": "Some users may be unable to send Teams chat messages",
+        "impactDescription": "Users may experience delays sending chat messages. Affected percentage of tenant users is small.",
+        "classification": "incident",
+        "status": "investigating",
+        "startDateTime": "2024-10-15T13:00:00.000Z",
+        "lastModifiedDateTime": "2024-10-15T13:45:00.000Z"
+      }
+    },
+    {
+      "service": "SharePoint Online",
+      "status": "serviceOperational",
+      "activeIssues": 0
+    }
+  ],
+  "degradedCount": 1
+}

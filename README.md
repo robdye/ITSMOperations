@@ -510,8 +510,7 @@ ITSMOperations/
 ├── appPackage/                              # Teams App Package
 │   ├── manifest.json                        # Teams manifest
 │   ├── declarativeAgent.json                # DA v1.6: 22 skills, 8 plugins, 11 capabilities
-│   ├── instruction.txt                      # Full DA instructions (en-US)
-│   ├── instruction-short.txt                # Compact instructions for DA
+│   ├── instruction.txt                      # Canonical DA instructions (en-US)
 │   ├── instruction.fr-FR.txt                # French localization
 │   ├── instruction.es-ES.txt                # Spanish localization
 │   ├── instruction.ja-JP.txt                # Japanese localization
@@ -760,6 +759,43 @@ All gated POSTs require the `x-scheduled-secret` header (timing-safe compare aga
 
 ---
 
+## Phase E — Free-API Enrichment via MCP
+
+The `mcp-server-enrichment/` Container App is a **separate, MCP-only** sidecar that gives Alex (the digital worker) safe, bounded access to five free public sources without ever calling them directly from the agent loop:
+
+| Source | Tools | Cache | Triggers |
+|--------|-------|-------|----------|
+| **CISA KEV** | `enrichment.lookupKev`, `enrichment.recentKev` | 1h | `enrichment.kev.match` → `major-incident-response` (severity:critical, origin:observed) |
+| **NIST NVD** | `enrichment.cveDetail`, `enrichment.cveByProduct` | 6h | (consult-only) |
+| **Microsoft MSRC** | `enrichment.msrcMonthly` | 24h | `enrichment.msrc.critical` → `vulnerability-to-change` |
+| **Azure Status + M365 Service Health** | `enrichment.azureStatus`, `enrichment.m365Health` | 60s / 5m | `enrichment.azure.status.degraded` → cognition-graph `upstream-degraded:<region>` (30-min TTL, no workflow) |
+| **Nager.Date Public Holidays** | `enrichment.holidaysByCountry`, `enrichment.isHolidayOn` | 30d | (consult-only — change-manager checks before proposing windows) |
+
+**Hard rules (Phase E):**
+
+1. **MCP-only contract** — no direct HTTP from `digital-worker/src/`. All access goes through [`enrichment-bridge.ts`](digital-worker/src/enrichment-bridge.ts), which uses the MCP `StreamableHTTPClientTransport` against `MCP_ENRICHMENT_ENDPOINT/enrichment/mcp`.
+2. **OBO + tenant header** — every call carries `Authorization: Bearer <obo-token>`, `x-ms-tenant-id`, and `x-caller-agent-id`. The MCP server rejects calls without these.
+3. **Caching at the MCP server** — TTL per source (above). The enrichment envelope reports `cacheHit` so consumers can prove they didn't burn rate-limit budget.
+4. **DA isolation preserved** — the declarative agent (Copilot DA) does NOT see enrichment tools. They are a back-channel for Alex only.
+5. **Trigger-policy modes honoured** — KEV / MSRC signals flow through the same `evaluateTrigger()` path as everything else (suppress / notify-only / propose / dry-run / auto).
+6. **Cases absorb enrichment** — `case-manager.appendEnrichment()` records every consult. The `change-window-planner` ([`change-window-planner.ts`](digital-worker/src/change-window-planner.ts)) writes a `enrichment:nager-holidays` entry on every window proposal.
+7. **Outcome probes registered** — composite KEV probe on `major-incident-response` checks for SNOW P1 + CISA citation; MSRC probe on `vulnerability-to-change` checks for at least one drafted RFC. See [`enrichment-outcome-probes.ts`](digital-worker/src/enrichment-outcome-probes.ts).
+8. **Reviewer escalation on CVSS ≥ 9.0** — when a signal carries a base score above the Critical threshold, the workflow review gate runs even when the worker's nominal blast radius is below 0.5. See `effectiveReviewBlastRadius()` in [`workflow-subscriptions.ts`](digital-worker/src/workflow-subscriptions.ts).
+9. **Audit attribution** — every enrichment tool call writes `tool=enrichment:<source>` to the audit ring with `triggerType=a2a` and the caller's `callerAgentId`.
+10. **Content Safety + Purview pipeline** — outbound payloads are screened by `screenOutbound()` ([`safety.ts`](mcp-server-enrichment/src/safety.ts)) before logs leave the MCP server.
+11. **Demo isolation** — when `tenant.profile === 'demo'`, sources read from `mcp-server-enrichment/__fixtures__/` with provenance tagging `fixtureUsed=true` rather than calling the live API.
+12. **Pinned SDKs** — `@modelcontextprotocol/sdk@^1.12.1` and Express 4.21 are pinned in [.github/dependabot.yml](.github/dependabot.yml) for manual review on bumps.
+
+**Architecture:** see [docs/enrichment.md](docs/enrichment.md).
+
+**Demo scenarios** (under [digital-worker/src/demo/scenarios/](digital-worker/src/demo/scenarios/)):
+
+- `enrichment-kev-match.json` — CISA KEV match → critical major-incident-response
+- `enrichment-msrc-patch-tuesday.json` — MSRC critical → vulnerability-to-change
+- `enrichment-azure-degradation.json` — Azure region degradation → cognition-graph tag
+
+---
+
 ## ITIL 4 Worker Mapping
 
 | Worker | ITIL 4 Practice | Tier | Tools Module | HITL Level |
@@ -871,7 +907,7 @@ The declarative agent (`appPackage/declarativeAgent.json`) is a v1.6 schema conf
 
 | Language | File |
 |----------|------|
-| English (default) | `instruction-short.txt` |
+| English (default) | `instruction.txt` |
 | French | `instruction.fr-FR.txt` |
 | Spanish | `instruction.es-ES.txt` |
 | Japanese | `instruction.ja-JP.txt` |
