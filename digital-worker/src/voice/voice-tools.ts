@@ -157,7 +157,7 @@ export async function executeVoiceTool(
     return `error: tool arguments were not valid JSON: ${argsJson.slice(0, 120)}`;
   }
 
-  const audit = (resultSummary: string, riskLevel: 'auto' | 'propose' | 'notify' = 'auto') =>
+  const audit = (resultSummary: string, riskLevel: 'read' | 'write' | 'notify' = 'write') =>
     logAuditEntry({
       workerId: 'voice-bridge',
       workerName: 'ACS Voice Bridge',
@@ -182,7 +182,7 @@ export async function executeVoiceTool(
         const summary = result.success
           ? `email sent to ${to} via ${result.source}`
           : `email failed: ${result.error || 'unknown'}`;
-        audit(summary, result.success ? 'auto' : 'notify');
+        audit(summary, result.success ? 'write' : 'notify');
         return summary;
       }
 
@@ -195,7 +195,7 @@ export async function executeVoiceTool(
         const summary = result.success
           ? `Teams channel post sent via ${result.source}`
           : `Teams channel post failed: ${result.error || 'unknown'}`;
-        audit(summary, result.success ? 'auto' : 'notify');
+        audit(summary, result.success ? 'write' : 'notify');
         return summary;
       }
 
