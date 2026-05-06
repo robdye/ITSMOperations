@@ -1847,8 +1847,13 @@ if (btnStorm) {
     const orig = btnStorm.textContent;
     btnStorm.textContent = '⏳ injecting…';
     try {
-      const out = await postJson('/api/demo/scripted-storm', {});
-      addFeed(`🎬 demo storm injected — ${out.signalsInjected || 0} signals fired`, 'demo');
+      // live:true -> every signal carries forceMode='auto', so trigger-policy
+      // bypasses confidence thresholds and the workflows run for real (not
+      // dry-run). The endpoint also posts an announcement to ITSM-Alerts.
+      const out = await postJson('/api/demo/scripted-storm', { live: true });
+      const annDelivered = (out.announcement && out.announcement.delivered) || [];
+      const channels = annDelivered.length ? ` · announce → ${annDelivered.join(' + ')}` : '';
+      addFeed(`🎬 demo storm injected (LIVE) — ${out.signalsInjected || 0} signals${channels}`, 'demo');
     } catch (err) {
       addFeed(`🎬 demo storm failed — ${err.message}`, 'demo');
     } finally {
@@ -1867,19 +1872,34 @@ if (btnPageMe) {
     try {
       const reason = prompt('Reason for the page?', 'Alex needs you on the bridge — major incident in progress');
       if (reason === null) { btnPageMe.disabled = false; btnPageMe.textContent = orig; return; }
-      const out = await postJson('/api/voice/page-me', { reason });
-      const channels = (out.delivered || []).join(' + ') || 'voice-link';
+      // notify:false -> call-only mode. Endpoint will ONLY ring the user's
+      // Teams client and surface ACS failures verbatim (HTTP 502) instead
+      // of falling back to email/Teams chat.
+      let out;
+      try {
+        out = await postJson('/api/voice/page-me', { reason, notify: false });
+      } catch (httpErr) {
+        // postJson throws on non-2xx — recover the body for diagnostics so
+        // the operator sees the real ACS error (e.g. tenant federation 403).
+        const r = await fetch('/api/voice/page-me', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason, notify: false }),
+        });
+        out = await r.json().catch(() => ({ status: 'failed', errors: { http: r.status + ' ' + r.statusText } }));
+      }
 
-      // The Page Me endpoint returns one of four states:
-      //   'calling'     \u2014 Alex initiated an ACS Teams call to the user.
-      //   'sent'        \u2014 Page delivered via Teams chat / email.
-      //   'call-only'   \u2014 No ACS, only a Teams click-to-call deep link. Open it in Teams.
-      //   'voice-only'  \u2014 No Teams/email/call delivery available; surface the browser voice page.
-      // We only force the in-browser /voice page when there's literally no other way to reach the
-      // user; otherwise the unconditional pop-up was over-riding live Teams calls (rev 0000098 bug).
       if (out.status === 'calling') {
-        addFeed(`\ud83d\udcde Alex is calling you on Teams now`, 'alex');
+        addFeed(`\ud83d\udcde Alex is calling you on Teams now (id ${(out.acsCallConnectionId || '').slice(0,8)})`, 'alex');
+      } else if (out.status === 'failed') {
+        const acsErr = (out.errors && out.errors.acsCall) || 'unknown ACS error';
+        addFeed(`\ud83d\udcde page failed \u2014 ${acsErr}`, 'alex');
+        if (out.hint) addFeed(`\ud83d\udca1 ${out.hint}`, 'alex');
+        if (out.teamsCallUrl) {
+          addFeed(`\ud83d\udcde fallback: opening Teams click-to-call`, 'alex');
+          window.open(out.teamsCallUrl, '_blank', 'noopener');
+        }
       } else if (out.status === 'sent') {
+        const channels = (out.delivered || []).join(' + ') || 'voice-link';
         addFeed(`\ud83d\udcde Alex paged you via ${channels}`, 'alex');
       } else if (out.status === 'call-only' && out.teamsCallUrl) {
         addFeed(`\ud83d\udcde Opening Teams to call you`, 'alex');

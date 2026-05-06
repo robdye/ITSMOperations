@@ -496,7 +496,16 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
-server.post('/api/demo/scripted-storm', async (_req: Request, res: Response) => {
+server.post('/api/demo/scripted-storm', async (req: Request, res: Response) => {
+  // ── Live vs dry-run mode ───────────────────────────────────────
+  // Default: live (every signal carries forceMode='auto' so trigger-policy
+  // bypasses the conservative production thresholds and runs the workflow
+  // for real). Set body { live: false } to use the legacy
+  // confidence-gated path which lands in 'dry-run' on a stock deployment.
+  const liveRaw = req.body?.live;
+  const live = liveRaw === undefined ? true : Boolean(liveRaw);
+  const forceMode: 'auto' | undefined = live ? 'auto' : undefined;
+
   const now = Date.now();
   const runId = `storm-${now}`;
   const baseTime = new Date(now).toISOString();
@@ -510,6 +519,7 @@ server.post('/api/demo/scripted-storm', async (_req: Request, res: Response) => 
       payload: { runId, message: 'BGP session flapping on edge-router-01' },
       occurredAt: baseTime,
       origin: 'scripted',
+      forceMode,
     },
     {
       id: `${runId}-snow-inc-001`,
@@ -520,6 +530,7 @@ server.post('/api/demo/scripted-storm', async (_req: Request, res: Response) => 
       payload: { runId, number: 'INC9000001', priority: '1', short_description: 'Customers reporting intermittent connectivity loss' },
       occurredAt: baseTime,
       origin: 'scripted',
+      forceMode,
     },
     {
       id: `${runId}-snow-inc-002`,
@@ -530,6 +541,7 @@ server.post('/api/demo/scripted-storm', async (_req: Request, res: Response) => 
       payload: { runId, number: 'INC9000002', priority: '1', short_description: 'VPN gateway returning timeouts for remote workforce' },
       occurredAt: baseTime,
       origin: 'scripted',
+      forceMode,
     },
     {
       id: `${runId}-snow-inc-003`,
@@ -540,6 +552,7 @@ server.post('/api/demo/scripted-storm', async (_req: Request, res: Response) => 
       payload: { runId, number: 'INC9000003', priority: '1', short_description: 'Production checkout latency spiking above 8s' },
       occurredAt: baseTime,
       origin: 'scripted',
+      forceMode,
     },
     {
       id: `${runId}-snow-sla-breach`,
@@ -550,6 +563,7 @@ server.post('/api/demo/scripted-storm', async (_req: Request, res: Response) => 
       payload: { runId, number: 'INC9000001', minutesToBreach: 12 },
       occurredAt: baseTime,
       origin: 'scripted',
+      forceMode,
     },
   ];
 
@@ -562,11 +576,71 @@ server.post('/api/demo/scripted-storm', async (_req: Request, res: Response) => 
     });
   }
 
+  // ── Visible announcement (live mode only) ───────────────────────
+  // The MIR workflow in auto mode adds a SNOW work-note when it completes
+  // but does NOT directly post to Teams or send email — those are the LLM
+  // agent's discretion. To give the demo button immediate, visible output
+  // we post a "demo storm started" announcement to the alerts channel and
+  // (optionally) email the manager. Fire-and-forget so the HTTP response
+  // stays snappy.
+  const teamsId = process.env.ITSM_TEAM_ID || '';
+  const channelId = process.env.ITSM_ALERTS_CHANNEL_ID || process.env.ITSM_CHANNEL_ID || '';
+  const ownerEmail = process.env.MANAGER_EMAIL || process.env.OWNER_EMAIL || '';
+  const announceDelivered: string[] = [];
+  const announceErrors: Record<string, string> = {};
+  if (live) {
+    const summary = stormSignals
+      .map((s) => `• ${s.type} (${s.severity}) → ${s.asset}`)
+      .join('<br/>');
+    const html = `<div style="font-family:Segoe UI,sans-serif">
+  <div style="font-size:16px;font-weight:600;color:#dc2626">🎬 Scripted P1 storm — LIVE</div>
+  <div style="margin:8px 0;font-size:13px;color:#475569">runId: <code>${runId}</code> · ${stormSignals.length} signals injected · forceMode=auto</div>
+  <div style="margin:8px 0;padding:10px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:13px">${summary}</div>
+  <div style="font-size:12px;color:#64748b">Workflows are running for real (not dry-run). Watch this channel + ServiceNow work-notes for outcomes.</div>
+</div>`;
+    if (teamsId && channelId) {
+      try {
+        const r = await autonomousActions.postToTeamsChannel(teamsId, channelId, html);
+        if (r.success) announceDelivered.push('teams');
+        else announceErrors.teams = r.error || 'unknown';
+      } catch (err) {
+        announceErrors.teams = (err as Error).message;
+      }
+    } else {
+      announceErrors.teams = 'ITSM_TEAM_ID / ITSM_ALERTS_CHANNEL_ID not configured';
+    }
+    if (ownerEmail) {
+      try {
+        const r = await sendGraphMail({
+          to: [ownerEmail],
+          subject: `🎬 Scripted P1 storm injected — ${stormSignals.length} live signals`,
+          body: html,
+          isHtml: true,
+          importance: 'high',
+        });
+        if (r.sent) announceDelivered.push('email');
+        else announceErrors.email = r.error || 'send failed';
+      } catch (err) {
+        announceErrors.email = (err as Error).message;
+      }
+    }
+  }
+
   res.status(202).json({
     status: 'accepted',
     runId,
     signalsInjected: stormSignals.length,
-    note: 'Signals dispatched asynchronously — watch /mission-control or /api/decisions for routing outcomes.',
+    live,
+    forceMode: forceMode || null,
+    announcement: live
+      ? {
+          delivered: announceDelivered,
+          errors: Object.keys(announceErrors).length ? announceErrors : undefined,
+        }
+      : undefined,
+    note: live
+      ? 'Live mode: every signal carries forceMode=auto. Workflows execute against ServiceNow + comms tools. Watch ITSM-Alerts channel and /api/decisions.'
+      : 'Dry-run mode: signals route via confidence-gated trigger-policy. Pass {live:true} to run for real.',
   });
 });
 
@@ -621,13 +695,18 @@ server.get('/api/workiq/kpi', (_req: Request, res: Response) => {
 
 // ── Voice: page me ──
 // Triggered by the "Page me" button on Mission Control or by Alex when she
-// needs the human on the bridge. Three delivery channels, in priority order:
-//   1. ACS Call Automation outbound Teams call — when ACS is configured AND
-//      we have an AAD object id for the manager. Alex actually rings the
-//      user's Teams client and speaks via Voice Live.
-//   2. Teams channel post + email — always attempted. Both contain a
-//      Teams click-to-call deep link as a fallback CTA.
-//   3. Browser /voice avatar page — debug/fallback link in the response.
+// needs the human on the bridge.
+//
+// **Default = call-only**: when ACS Call Automation is configured AND we have
+// the manager's Entra OID, this endpoint ONLY rings the user's Teams client
+// — no email, no Teams chat post. If the call fails (e.g. tenant federation
+// not authorised — DiagCode 403#10124), the response surfaces the ACS error
+// verbatim with HTTP 502 so the caller can see and fix it instead of getting
+// a misleading "we sent you an email" success.
+//
+// Set body { notify: true } (or env PAGE_ME_NOTIFY_DEFAULT=1) to opt back
+// into the legacy three-channel behaviour: ACS call + Teams chat post +
+// email — useful when ACS is not yet wired or for redundant escalation.
 server.post('/api/voice/page-me', async (req: Request, res: Response) => {
   const reason = String(req.body?.reason || 'Alex needs you on the bridge.');
   const ownerEmail = process.env.MANAGER_EMAIL || process.env.OWNER_EMAIL || process.env.GRAPH_SENDER || '';
@@ -636,6 +715,15 @@ server.post('/api/voice/page-me', async (req: Request, res: Response) => {
   const baseHost = req.get('x-forwarded-host') || req.get('host') || '';
   const proto = (req.get('x-forwarded-proto') || 'https').split(',')[0].trim();
   const voiceUrl = baseHost ? `${proto}://${baseHost}/voice` : '/voice';
+
+  // ── Notify-channels mode ──
+  // - notify=true  : try call + Teams chat + email (legacy redundant path)
+  // - notify=false : ONLY ring the Teams client; surface ACS errors to caller.
+  // Default is driven by PAGE_ME_NOTIFY_DEFAULT (env). When unset, default = false
+  // (call-only) since the Mission-Control button intent is "make my Teams ring".
+  const notifyEnv = process.env.PAGE_ME_NOTIFY_DEFAULT;
+  const notifyDefault = notifyEnv ? ['1', 'true', 'yes', 'on'].includes(notifyEnv.toLowerCase()) : false;
+  const notify = req.body?.notify === undefined ? notifyDefault : Boolean(req.body.notify);
 
   // Teams click-to-call deep link target. Defaults to the GRAPH_MAIL_SENDER
   // (alexitops UPN) which is the Alex IT Ops Teams identity. Override via
@@ -674,13 +762,52 @@ server.post('/api/voice/page-me', async (req: Request, res: Response) => {
       console.log(`[page-me] ACS outbound call placed → ${managerOid} (${r.callConnectionId})`);
     } catch (err) {
       errors.acsCall = (err as Error).message;
-      console.warn('[page-me] ACS outbound call failed, falling back to chat/email', errors.acsCall);
+      console.warn('[page-me] ACS outbound call failed', errors.acsCall);
     }
   } else if (!isAcsConfigured()) {
     errors.acsCall = 'ACS not configured (set ACS_CONNECTION_STRING + PUBLIC_HOSTNAME)';
   } else if (!managerOid) {
     errors.acsCall = 'MANAGER_TEAMS_OID not set (need user Entra OID for ACS Teams interop)';
   }
+
+  // ── Call-only short-circuit ──
+  // If notify=false (default), do NOT fall back to Teams chat / email.
+  // Either the call goes through, or the caller sees the actual ACS error
+  // so they can fix it (e.g. Teams admin needs to authorise the ACS
+  // resource for tenant federation — DiagCode 403#10124).
+  if (!notify) {
+    if (acsCallConnectionId) {
+      res.status(200).json({
+        status: 'calling',
+        reason,
+        acsCallConnectionId,
+        acsConfigured: isAcsConfigured(),
+        managerOid: managerOid || undefined,
+        delivered,
+        notify: false,
+      });
+      return;
+    }
+    // Call did not place. Surface the ACS error verbatim with 502 so
+    // operators see and fix the underlying tenant / config issue.
+    const acsCallbackNote = errors.acsCall?.includes('403') || errors.acsCall?.includes('10124')
+      ? ' — likely Teams interop tenant authorisation. Run: Set-CsTeamsAcsFederationConfiguration -EnableAcsUsers $true -AllowedAcsResources @{Add="<acs-immutable-resource-id>"} as a Teams admin.'
+      : '';
+    res.status(502).json({
+      status: 'failed',
+      reason,
+      acsConfigured: isAcsConfigured(),
+      managerOid: managerOid || undefined,
+      teamsCallUrl: teamsCallUrl || undefined,
+      voiceUrl,
+      delivered,
+      errors,
+      hint: `ACS call did not place${acsCallbackNote} Pass {notify:true} (or set PAGE_ME_NOTIFY_DEFAULT=1) to fall back to Teams chat / email.`,
+    });
+    return;
+  }
+
+  // ── Notify mode (notify=true): also fan out to Teams chat + email ──
 
   // 2a. Teams channel post (HTML) — always attempted as audit trail / mobile
   // notification. CTA is the Teams click-to-call deep link.
@@ -763,6 +890,7 @@ server.post('/api/voice/page-me', async (req: Request, res: Response) => {
     voiceUrl,
     delivered,
     errors: Object.keys(errors).length ? errors : undefined,
+    notify: true,
   });
 });
 

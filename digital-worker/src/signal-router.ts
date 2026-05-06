@@ -38,6 +38,17 @@ export interface Signal {
    * separation. Mission-control hides 'scripted' in the prod profile.
    */
   origin: SignalOrigin;
+  /**
+   * Optional override that bypasses trigger-policy confidence math. When
+   * set, the policy returns this mode directly (subject only to hard gates
+   * + the per-tenant action budget for `auto`). Demo / scripted-storm
+   * signals use this to force live workflows past the conservative
+   * production thresholds.
+   *
+   * Kept as a string union (instead of importing TriggerMode) to avoid a
+   * cyclic dependency between signal-router and trigger-policy.
+   */
+  forceMode?: 'auto' | 'propose' | 'dry-run' | 'notify-only';
 }
 
 export interface SignalSubscription {

@@ -163,4 +163,60 @@ describe('evaluateTrigger', () => {
     expect(decision.effectiveConfidence).toBeCloseTo(0.6);
     expect(['dry-run', 'propose']).toContain(decision.mode);
   });
+
+  // ── forceMode bypass (demo / scripted-storm path) ─────────────────
+  describe('forceMode', () => {
+    it('forceMode=auto bypasses confidence math even when effective is below auto threshold', () => {
+      // Real-world: incident-manager blastRadius 0.5, observed signal → effective 0.75 (< 0.85)
+      const decision = evaluateTrigger({
+        workflowId: 'major-incident-response',
+        signal: buildSignal({ forceMode: 'auto' }),
+        worker: buildWorker({ blastRadius: 0.5, allowAutonomous: true }),
+      });
+      expect(decision.mode).toBe('auto');
+      expect(decision.reason).toMatch(/forceMode=auto/);
+      expect(decision.approvalPolicy.requireApproval).toBe(false);
+    });
+
+    it('forceMode=propose bypasses confidence math', () => {
+      const decision = evaluateTrigger({
+        workflowId: 'wf',
+        signal: buildSignal({ confidence: 1.0, forceMode: 'propose' }),
+        worker: buildWorker({ blastRadius: 0.0, allowAutonomous: true }),
+      });
+      expect(decision.mode).toBe('propose');
+      expect(decision.approvalPolicy.requireApproval).toBe(true);
+    });
+
+    it('forceMode=dry-run bypasses confidence math', () => {
+      const decision = evaluateTrigger({
+        workflowId: 'wf',
+        signal: buildSignal({ confidence: 1.0, forceMode: 'dry-run' }),
+        worker: buildWorker({ blastRadius: 0.0, allowAutonomous: true }),
+      });
+      expect(decision.mode).toBe('dry-run');
+    });
+
+    it('forceMode=auto still respects hourly action budget', () => {
+      const tenant = 'force-budget-test';
+      for (let i = 0; i < DEFAULT_POLICY_CONFIG.hourlyAutoBudget; i++) {
+        const d = evaluateTrigger({
+          workflowId: 'wf',
+          signal: buildSignal({ id: `force-${i}`, forceMode: 'auto' }),
+          worker: buildWorker({ blastRadius: 0.5 }),
+          tenantId: tenant,
+        });
+        expect(d.mode).toBe('auto');
+      }
+      // Budget exhausted: forceMode=auto falls through to normal evaluation.
+      // With blastRadius 0.5 and observed signal, effective = 0.75 → dry-run.
+      const overflow = evaluateTrigger({
+        workflowId: 'wf',
+        signal: buildSignal({ id: 'force-overflow', forceMode: 'auto' }),
+        worker: buildWorker({ blastRadius: 0.5 }),
+        tenantId: tenant,
+      });
+      expect(overflow.mode).not.toBe('auto');
+    });
+  });
 });

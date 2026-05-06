@@ -56,12 +56,34 @@ export interface TriggerPolicyInputs {
 }
 
 // ── Defaults ──
+//
+// Operators can override any of the four knobs at deploy time via env vars
+// without rebuilding. Useful for demos that need to push live workflows past
+// the conservative production thresholds.
+//
+//   TRIGGER_AUTO_THRESHOLD       — auto when effectiveConfidence ≥ this   (default 0.85)
+//   TRIGGER_PROPOSE_THRESHOLD    — propose / dry-run when ≥ this           (default 0.6)
+//   TRIGGER_NOTIFY_THRESHOLD     — notify-only when ≥ this; below = drop  (default 0.3)
+//   TRIGGER_HOURLY_AUTO_BUDGET   — max autonomous actions/hour/tenant      (default 30)
+
+function envFloat(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const n = Number.parseFloat(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+function envInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) ? n : fallback;
+}
 
 export const DEFAULT_POLICY_CONFIG: TriggerPolicyConfig = {
-  autoThreshold: 0.85,
-  proposeThreshold: 0.6,
-  notifyThreshold: 0.3,
-  hourlyAutoBudget: 30,
+  autoThreshold: envFloat('TRIGGER_AUTO_THRESHOLD', 0.85),
+  proposeThreshold: envFloat('TRIGGER_PROPOSE_THRESHOLD', 0.6),
+  notifyThreshold: envFloat('TRIGGER_NOTIFY_THRESHOLD', 0.3),
+  hourlyAutoBudget: envInt('TRIGGER_HOURLY_AUTO_BUDGET', 30),
 };
 
 // ── Action budget bookkeeping (in-memory; per-tenant) ──
@@ -127,6 +149,40 @@ export function evaluateTrigger(inputs: TriggerPolicyInputs): TriggerDecision {
     requireApproval: blastRadius >= 0.5,
     approverGroup: inputs.worker?.id ? `${inputs.worker.id}-approvers` : undefined,
   };
+
+  // ── forceMode bypass ─────────────────────────────────────────────
+  // Demo / scripted signals can carry `forceMode` to short-circuit the
+  // confidence math entirely. This is the lever the Mission-Control storm
+  // button uses to push every signal straight to `auto` so workflows run
+  // live instead of in dry-run. Hard gates (change-freeze + worker
+  // allowAutonomous=false) still take precedence below.
+  if (inputs.signal.forceMode) {
+    const m = inputs.signal.forceMode;
+    if (m === 'auto') {
+      // Still respect the per-tenant budget so a runaway demo can't
+      // exhaust the production action allowance.
+      const used = autoActionsInLastHour(tenantId, now);
+      if (used < config.hourlyAutoBudget) {
+        recordAutoAction(tenantId, now);
+        return {
+          workflowId: inputs.workflowId,
+          mode: 'auto',
+          effectiveConfidence,
+          reason: `forceMode=auto (signal ${inputs.signal.id}) — bypassing confidence math.`,
+          approvalPolicy: { ...approvalPolicy, requireApproval: false },
+        };
+      }
+      // Budget exhausted: fall through to normal evaluation.
+    } else if (m === 'propose' || m === 'dry-run' || m === 'notify-only') {
+      return {
+        workflowId: inputs.workflowId,
+        mode: m,
+        effectiveConfidence,
+        reason: `forceMode=${m} (signal ${inputs.signal.id}) — bypassing confidence math.`,
+        approvalPolicy: { ...approvalPolicy, requireApproval: m === 'propose' },
+      };
+    }
+  }
 
   // Hard gates first ────────────────────────────────────────────────
   if (isFreeze()) {
