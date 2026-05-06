@@ -267,10 +267,20 @@ export const VOICE_TOOLS: RealtimeFunctionTool[] = [
   {
     type: 'function',
     name: 'show_blast_radius',
-    description: 'Analyse the blast radius of a CI — affected dependents and business services.',
+    description:
+      'Analyse the blast radius — affected dependents and business services. ' +
+      'Accepts EITHER a CI name (preferred, e.g. "SAP ERP Production") OR a change/incident number ' +
+      '(e.g. "CHG0004562" or "INC0010364"); when given a record number the tool resolves the ' +
+      "underlying cmdb_ci automatically. Don't pass a record number to other CI tools \u2014 only this one.",
     parameters: {
       type: 'object',
-      properties: { ci_name: { type: 'string', description: 'Configuration item name.' } },
+      properties: {
+        ci_name: {
+          type: 'string',
+          description:
+            'CI name from the CMDB, OR a CHG/INC record number (the tool resolves it to the linked CI).',
+        },
+      },
       required: ['ci_name'],
     },
   },
@@ -835,19 +845,70 @@ export async function executeVoiceTool(
         const num = String(args.number || '');
         if (!num) return 'error: number required';
         try {
-          const r = await mcp.getChangeRequest(num);
-          return JSON.stringify(r).slice(0, 1500);
+          const r = (await mcp.getChangeRequest(num)) as Record<string, unknown> | undefined;
+          if (!r || typeof r !== 'object') return `change ${num} not found`;
+          // Hoist the most useful fields so Alex can read them out and chain
+          // (e.g. into show_blast_radius) without parsing the whole envelope.
+          const ciDV = (r as any).cmdb_ci?.display_value || (r as any).cmdb_ci || '';
+          const summary = {
+            number: (r as any).number || num,
+            short_description: (r as any).short_description || (r as any).description || '',
+            state: (r as any).state?.display_value || (r as any).state || '',
+            risk: (r as any).risk?.display_value || (r as any).risk || '',
+            ci_name: typeof ciDV === 'string' ? ciDV : '',
+            assignment_group:
+              (r as any).assignment_group?.display_value || (r as any).assignment_group || '',
+            planned_start_date: (r as any).start_date || (r as any).planned_start_date || '',
+            planned_end_date: (r as any).end_date || (r as any).planned_end_date || '',
+          };
+          return JSON.stringify(summary).slice(0, 1500);
         } catch (err) {
           return `error: ${(err as Error).message}`;
         }
       }
 
       case 'show_blast_radius': {
-        const ci = String(args.ci_name || '');
-        if (!ci) return 'error: ci_name required';
+        const raw = String(args.ci_name || '').trim();
+        if (!raw) return 'error: ci_name required';
+
+        // Defense in depth: callers (especially the realtime model) sometimes
+        // pass a record number where a CI name is expected. Detect that and
+        // resolve to the underlying CI before calling the blast-radius tool.
+        let ci = raw;
+        let resolutionNote = '';
+        const recordPattern = /^(CHG|INC|PRB|RITM|TASK)\d+$/i;
+        if (recordPattern.test(raw)) {
+          try {
+            if (/^CHG/i.test(raw)) {
+              const cr = (await mcp.getChangeRequest(raw)) as any;
+              const dv = cr?.cmdb_ci?.display_value || cr?.cmdb_ci || '';
+              if (typeof dv === 'string' && dv.length > 0) {
+                ci = dv;
+                resolutionNote = `resolved ${raw} -> CI "${ci}"; `;
+              } else {
+                return `error: ${raw} has no cmdb_ci linked — cannot compute blast radius. Ask the caller for the affected system name.`;
+              }
+            } else if (/^INC/i.test(raw)) {
+              const incs = (await mcp.getIncidents({ number: raw })) as any[];
+              const first = Array.isArray(incs) ? incs[0] : null;
+              const dv = first?.cmdb_ci?.display_value || first?.cmdb_ci || '';
+              if (typeof dv === 'string' && dv.length > 0) {
+                ci = dv;
+                resolutionNote = `resolved ${raw} -> CI "${ci}"; `;
+              } else {
+                return `error: ${raw} has no cmdb_ci linked — cannot compute blast radius. Ask the caller for the affected system name.`;
+              }
+            } else {
+              return `error: ${raw} is a record number, not a CI. Pass the affected system name (e.g. "SAP ERP Production") instead.`;
+            }
+          } catch (err) {
+            return `error: failed to resolve ${raw} to a CI: ${(err as Error).message}`;
+          }
+        }
+
         try {
           const r = await mcp.getBlastRadius(ci);
-          return JSON.stringify(r).slice(0, 1500);
+          return resolutionNote + JSON.stringify(r).slice(0, 1400);
         } catch (err) {
           return `error: ${(err as Error).message}`;
         }
