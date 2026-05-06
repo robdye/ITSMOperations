@@ -239,21 +239,42 @@ export async function generateDeck(spec: DeckSpec): Promise<DeckResult> {
 export function buildCurrentStateDeckSpec(briefing: any, options: { author?: string; company?: string } = {}): DeckSpec {
   const period = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
+  // Real shape from `show-itsm-briefing` (mcp-server.ts):
+  //   { pulse: { p1Incidents, totalIncidents, allIncidents, openProblems, knownErrors,
+  //              slaBreaches, slaAtRisk, openChanges, collisions, changeSuccessRate,
+  //              closedChanges },
+  //     majorIncidents: [...], slaBreaches: [...], collisions: [...],
+  //     recommendations: [{ text, urgent }], snowInstance, generatedAt }
+  //
+  // We also accept the older flat shape (incidents.p1, etc.) so callers that
+  // synthesize their own briefing keep working.
+  const pulse = briefing?.pulse || {};
   const incidents = briefing?.incidents || briefing?.incidentSummary || {};
-  const open = incidents.open ?? incidents.total ?? briefing?.openIncidents ?? 0;
-  const p1 = incidents.p1 ?? incidents.priority1 ?? 0;
+
+  const open = pulse.totalIncidents ?? incidents.open ?? incidents.total ?? briefing?.openIncidents ?? 0;
+  const p1p2 = pulse.p1Incidents ?? 0;            // server bundles P1+P2 here
+  const p1 = incidents.p1 ?? incidents.priority1 ?? p1p2;
   const p2 = incidents.p2 ?? incidents.priority2 ?? 0;
   const p3 = incidents.p3 ?? incidents.priority3 ?? 0;
   const p4 = incidents.p4 ?? incidents.priority4 ?? 0;
   const p5 = incidents.p5 ?? incidents.priority5 ?? 0;
 
-  const sla = briefing?.slaCompliance ?? briefing?.sla?.compliance ?? null;
+  const slaBreaches = pulse.slaBreaches ?? (Array.isArray(briefing?.slaBreaches) ? briefing.slaBreaches.length : 0);
+  const slaAtRisk = pulse.slaAtRisk ?? 0;
+  const sla = briefing?.slaCompliance ?? briefing?.sla?.compliance
+    ?? (open > 0 ? Math.max(0, Math.round((1 - slaBreaches / Math.max(open, 1)) * 100)) : null);
+
   const changes = briefing?.changes || briefing?.changeSummary || {};
-  const upcomingChanges = changes.upcoming ?? changes.scheduled ?? changes.total ?? 0;
+  const upcomingChanges = pulse.openChanges ?? changes.upcoming ?? changes.scheduled ?? changes.total ?? 0;
+  const changeSuccessRate = pulse.changeSuccessRate ?? null;
+  const collisions = pulse.collisions ?? (Array.isArray(briefing?.collisions) ? briefing.collisions.length : 0);
+
   const problems = briefing?.problems || briefing?.problemSummary || {};
-  const openProblems = problems.open ?? problems.total ?? 0;
+  const openProblems = pulse.openProblems ?? problems.open ?? problems.total ?? 0;
+  const knownErrors = pulse.knownErrors ?? 0;
 
   const topIncidentsRaw =
+    briefing?.majorIncidents ||
     briefing?.topIncidents ||
     briefing?.activeIncidents ||
     incidents.top ||
@@ -264,12 +285,21 @@ export function buildCurrentStateDeckSpec(briefing: any, options: { author?: str
     .map((inc: any) => [
       String(inc.number || inc.id || '—'),
       String(inc.priority || inc.severity || '—'),
-      String(inc.shortDescription || inc.title || inc.summary || '—').slice(0, 80),
-      String(inc.assignmentGroup || inc.owner || inc.assignedTo || '—'),
+      String(inc.short_description || inc.shortDescription || inc.title || inc.summary || '—').slice(0, 80),
+      String(
+        inc.assignment_group?.display_value || inc.assignment_group ||
+        inc.assignmentGroup || inc.owner ||
+        inc.assigned_to?.display_value || inc.assigned_to || inc.assignedTo || '—'
+      ).slice(0, 40),
     ]);
 
-  const recommendations: string[] = Array.isArray(briefing?.recommendations)
-    ? briefing.recommendations.slice(0, 6)
+  const recRaw = Array.isArray(briefing?.recommendations) ? briefing.recommendations : [];
+  const recommendations: string[] = recRaw.length > 0
+    ? recRaw.slice(0, 6).map((r: any) =>
+        typeof r === 'string'
+          ? r.replace(/<[^>]+>/g, '')                       // strip any HTML
+          : String(r?.text ?? r?.message ?? r ?? '').replace(/<[^>]+>/g, '')
+      ).filter((s: string) => s.length > 0)
     : [
         'Maintain current incident triage cadence — P1/P2 within SLA.',
         'Review CAB pack for upcoming changes; flag any high-risk items.',
@@ -277,36 +307,52 @@ export function buildCurrentStateDeckSpec(briefing: any, options: { author?: str
         'Confirm coverage for the next on-call rotation.',
       ];
 
+  // Pick a label that reflects what the server actually gives us. The platform
+  // groups P1+P2 into a single counter (`pulse.p1Incidents`) so we surface that
+  // explicitly rather than misleading the reader with a fake P1-only number.
+  const usingPulse = !!briefing?.pulse;
+  const majorLabel = usingPulse ? 'P1 + P2' : 'P1';
+
   const slides: SlideSpec[] = [
     {
       title: 'Executive Summary',
       metrics: [
         { label: 'Open Incidents', value: open },
-        { label: 'P1', value: p1 },
-        { label: 'P2', value: p2 },
+        { label: majorLabel, value: p1p2 || p1 },
+        { label: 'SLA Breaches', value: slaBreaches },
         { label: 'Open Problems', value: openProblems },
-        { label: 'Upcoming Changes', value: upcomingChanges },
+        { label: 'Open Changes', value: upcomingChanges },
       ],
       bullets: [
-        sla !== null ? `SLA compliance: ${sla}%` : 'SLA compliance: not reported',
+        sla !== null ? `SLA compliance: ~${sla}%` : 'SLA compliance: not reported',
         `${open} incidents currently open across the estate`,
-        `${upcomingChanges} change(s) in the upcoming window`,
-        `${openProblems} active problem record(s) under investigation`,
+        `${upcomingChanges} change(s) in the upcoming window` + (changeSuccessRate !== null ? ` — ${changeSuccessRate}% recent success rate` : ''),
+        `${openProblems} active problem record(s) under investigation` + (knownErrors ? ` (${knownErrors} known error${knownErrors === 1 ? '' : 's'})` : ''),
+        collisions > 0 ? `${collisions} change collision(s) detected on shared CIs` : 'No change collisions detected',
       ],
       notes: 'Cover the current operational posture in 60 seconds. Highlight any P1/P2 trending upward.',
     },
     {
       title: 'Incident Posture',
-      metrics: [
-        { label: 'P1', value: p1 },
-        { label: 'P2', value: p2 },
-        { label: 'P3', value: p3 },
-        { label: 'P4', value: p4 },
-        { label: 'P5', value: p5 },
-      ],
+      metrics: usingPulse
+        ? [
+            { label: 'P1 + P2', value: p1p2 },
+            { label: 'Total Open', value: open },
+            { label: 'SLA Breaches', value: slaBreaches },
+            { label: 'SLA At Risk', value: slaAtRisk },
+            { label: 'Known Errors', value: knownErrors },
+          ]
+        : [
+            { label: 'P1', value: p1 },
+            { label: 'P2', value: p2 },
+            { label: 'P3', value: p3 },
+            { label: 'P4', value: p4 },
+            { label: 'P5', value: p5 },
+          ],
       bullets: [
         `Total open: ${open}`,
-        sla !== null ? `Resolution SLA: ${sla}% within target` : 'Resolution SLA: see live dashboard',
+        slaBreaches > 0 ? `${slaBreaches} SLA breach(es) currently impacting service` : 'No active SLA breaches',
+        slaAtRisk > 0 ? `${slaAtRisk} SLA(s) at risk (>75% elapsed)` : 'No SLAs flagged at risk',
         'Major incidents are managed via the war-room workflow with automated comms.',
       ],
     },
@@ -325,11 +371,18 @@ export function buildCurrentStateDeckSpec(briefing: any, options: { author?: str
 
   slides.push({
     title: 'Change & Problem Outlook',
+    metrics: [
+      { label: 'Open Changes', value: upcomingChanges },
+      { label: 'Collisions', value: collisions },
+      { label: 'Open Problems', value: openProblems },
+      { label: 'Known Errors', value: knownErrors },
+      ...(changeSuccessRate !== null ? [{ label: 'Change Success', value: `${changeSuccessRate}%` }] : []),
+    ],
     bullets: [
       `${upcomingChanges} change(s) scheduled in the upcoming window`,
+      collisions > 0 ? `${collisions} collision(s) where multiple CRs target the same CI — sequence or merge.` : 'No change collisions detected.',
       `${openProblems} active problem(s) — root-cause analysis in progress`,
       'CAB review continues on its weekly cadence; high-risk changes are flagged for executive attention.',
-      'Problem records drive permanent fixes back into known-error and runbook libraries.',
     ],
   });
 

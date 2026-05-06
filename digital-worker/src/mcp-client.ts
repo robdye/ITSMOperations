@@ -61,9 +61,22 @@ export class ItsmMcpClient {
     const json = await callRes.json() as any;
     if (json.error) throw new Error(`MCP error: ${json.error.message}`);
 
+    // Widget tools return the rendered HTML in content[0].text and the real
+    // structured payload in result.structuredContent. Prefer structuredContent
+    // so callers get JSON, not an HTML page they can't parse.
+    if (json.result?.structuredContent) return json.result.structuredContent;
+
     const content = json.result?.content;
-    if (content && content.length > 0 && content[0].text) {
-      try { return JSON.parse(content[0].text); } catch { return content[0].text; }
+    if (content && content.length > 0) {
+      // For multi-content responses, the *last* text item is usually a plain
+      // summary string (widgetResponse appends it after the HTML), which is
+      // far more useful than the HTML blob.
+      const lastText = [...content].reverse().find((c: any) => c?.text && !c?.mimeType);
+      const firstText = content[0]?.text;
+      const candidate = lastText?.text ?? firstText;
+      if (candidate) {
+        try { return JSON.parse(candidate); } catch { return candidate; }
+      }
     }
     return json.result;
   }
