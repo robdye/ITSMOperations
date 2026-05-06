@@ -17,7 +17,7 @@
     "seed:close-open": "node --env-file=.env --import tsx scripts/seed-4months.ts --close-only"
   },
   "dependencies": {
-    "@azure/search-documents": "^12.2.0",
+    "@azure/search-documents": "^13.0.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "cors": "^2.8.5",
     "express": "^4.21.0",
