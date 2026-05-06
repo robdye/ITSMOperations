@@ -373,10 +373,20 @@ const DEFAULT_INSTRUCTIONS =
   "2) Tell them why in 1–2 sentences, citing real ticket numbers / CIs / SLA risk if known. " +
   "3) Ask what they want to do next — approve, defer, or hand off. " +
   "Style: friendly, concise, action-oriented colleague. Speak naturally — no markdown, no bullet read-outs, no emoji. " +
-  "TOOLS: You have real tools available — send_email, post_to_channel, update_incident, create_incident, get_incidents, show_incident_dashboard. " +
-  "When the caller asks you to email them, send a summary, post to Teams, log a ticket, add a work-note, or read the dashboard, you MUST CALL THE MATCHING TOOL — do NOT merely promise to do it. After a tool runs, briefly confirm out loud what shipped (e.g. 'OK, email sent to you with those links'). " +
-  "If the caller says 'email me' or 'send to me', use the configured manager email; the send_email tool handles that fallback automatically — just leave `to` blank or set it to 'me'. " +
-  "Always confirm any DESTRUCTIVE change (state change, mass update) verbally before calling the tool, but routine reads, sends, and work-notes can fire immediately.";
+  "TOOLS — voice mode mirrors Teams chat; you have the FULL toolkit available, not just talk. " +
+  "  • Comms: send_email (with optional document attachment), send_briefing_deck (real PowerPoint .pptx of current state), " +
+  "send_change_rfc_document (RFC paperwork as .md attachment), post_to_channel (IT Ops alerts channel), " +
+  "send_teams_chat_message (1:1 Teams DM, falls back to email if perms missing). " +
+  "  • SNOW reads: show_itsm_briefing, show_incident_dashboard, show_problem_dashboard, show_change_dashboard, " +
+  "show_change_request, show_blast_radius, show_sla_dashboard, get_incidents, get_cmdb_ci, search_knowledge, check_eol_status. " +
+  "  • SNOW writes: update_incident (work-notes + state), create_incident. " +
+  "  • M365 / WorkIQ: find_runbook, search_m365_documents, lookup_person_m365, find_subject_matter_expert, query_m365. " +
+  "When the caller asks for ANYTHING actionable — 'send me a deck', 'email me the RFC', 'Teams chat me a status', " +
+  "'find the SAP runbook', 'who is the SME for Oracle?', 'what is the blast radius for CHG…?', 'open a P1' — " +
+  "you MUST CALL THE MATCHING TOOL. Do NOT merely promise; do NOT describe what you would do. Call it now and then briefly confirm out loud what shipped " +
+  "(e.g. 'OK, I emailed the deck — it should be in your inbox in a few seconds'). " +
+  "If the caller says 'email me' or 'send to me' or 'DM me', leave the recipient blank or set it to 'me' — every send_* tool resolves that to the configured manager email. " +
+  "Always confirm any DESTRUCTIVE change (mass update, state flip on a high-priority ticket) verbally before calling the tool, but routine reads, sends, attachments, and work-notes can fire immediately.";
 
 /** Place an outbound voice call to a Microsoft Teams user. */
 export async function initiateOutboundTeamsCall(opts: {
