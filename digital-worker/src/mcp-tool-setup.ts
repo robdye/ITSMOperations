@@ -172,7 +172,6 @@ async function getOboToolHeaders(
       authorization as Parameters<typeof AgenticAuthenticationService.GetAgenticUserToken>[0],
       getAuthHandlerName(),
       context,
-      [MCP_PLATFORM_SCOPE],
     );
     if (!token) {
       console.warn('[MCP] OBO token exchange returned empty token');

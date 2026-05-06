@@ -138,16 +138,12 @@ async function resolveOutboundContext(
       const authorization = authMod.agentApplication?.authorization;
       if (authorization) {
         const handlerName = process.env.agentic_connectionName ?? 'AgenticAuthConnection';
-        const scope =
-          process.env.MCP_ENRICHMENT_SCOPE ||
-          'api://05879165-0320-489e-b644-f72b33f3edf0/.default';
         const token = await AgenticAuthenticationService.GetAgenticUserToken(
           authorization as Parameters<
             typeof AgenticAuthenticationService.GetAgenticUserToken
           >[0],
           handlerName,
           context,
-          [scope],
         );
         if (token) {
           return { token, tenantId, profile, callerAgentId };
