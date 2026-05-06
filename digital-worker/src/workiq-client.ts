@@ -44,6 +44,27 @@ async function getClient(): Promise<Client> {
   }
 }
 
+/**
+ * The upstream @microsoft/workiq MCP package appends an EULA acceptance
+ * banner to every response, e.g.:
+ *   "---\n**Important:** Continued usage of this tool constitutes acceptance
+ *    of the End User License Agreement (EULA) found at https://github.com/...
+ *    You must accept the EULA before continuing."
+ * That noise leaks into Alex's voice transcripts and makes her tell users
+ * they need to accept a EULA. Strip it out before returning.
+ */
+function stripWorkIqBanner(text: string): string {
+  if (!text) return text;
+  // Remove the trailing horizontal-rule + EULA paragraph block, however
+  // far back the rule sits.
+  return text
+    .replace(/\n*-{3,}\s*\n+\*\*Important:\*\*[\s\S]*$/i, '')
+    .replace(/\n*\*\*Important:\*\*[^\n]*EULA[\s\S]*$/i, '')
+    .replace(/\n*Continued usage of this tool constitutes[\s\S]*$/i, '')
+    .replace(/\n*You must accept the EULA[\s\S]*$/i, '')
+    .trim();
+}
+
 async function callWorkIq(question: string): Promise<string> {
   try {
     const client = await getClient();
@@ -51,10 +72,10 @@ async function callWorkIq(question: string): Promise<string> {
     const content = result.content as Array<{ type: string; text?: string }>;
     if (content && content.length > 0 && content[0].text) {
       recordWorkIqAttempt('mcp', true);
-      return content[0].text;
+      return stripWorkIqBanner(content[0].text);
     }
     recordWorkIqAttempt('mcp', true);
-    return JSON.stringify(result);
+    return stripWorkIqBanner(JSON.stringify(result));
   } catch (err) {
     recordWorkIqAttempt('mcp', false, (err as Error).message);
     throw err;

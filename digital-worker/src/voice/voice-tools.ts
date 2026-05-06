@@ -453,6 +453,24 @@ async function resolveAadUserId(addrOrOid: string, token: string): Promise<strin
 }
 
 /**
+ * Defence-in-depth: strip the WorkIQ EULA banner ("Continued usage of this
+ * tool constitutes acceptance of the End User License Agreement…") from
+ * any tool output before handing it back to the Realtime model. Without
+ * this, Alex reads the banner out loud and tells the caller they need to
+ * accept a EULA. workiq-client also strips it at the source — this is a
+ * second layer in case the API transport returns a different shape.
+ */
+function stripEulaBanner(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(/\n*-{3,}\s*\n+\*\*Important:\*\*[\s\S]*$/i, '')
+    .replace(/\n*\*\*Important:\*\*[^\n]*EULA[\s\S]*$/i, '')
+    .replace(/\n*Continued usage of this tool constitutes[\s\S]*$/i, '')
+    .replace(/\n*You must accept the EULA[\s\S]*$/i, '')
+    .trim();
+}
+
+/**
  * Execute a Realtime function-call.
  * `argsJson` is the raw `arguments` string from `response.function_call_arguments.done`.
  * Always returns a short string to be sent back as `function_call_output`.
@@ -882,7 +900,7 @@ export async function executeVoiceTool(
         const system = String(args.system || '');
         if (!system) return 'error: system required';
         try {
-          return (await workiq.findRunbook(system)).slice(0, 1500);
+          return stripEulaBanner(await workiq.findRunbook(system)).slice(0, 1500);
         } catch (err) {
           return `error: ${(err as Error).message}`;
         }
@@ -892,7 +910,7 @@ export async function executeVoiceTool(
         const q = String(args.query || '');
         if (!q) return 'error: query required';
         try {
-          return (await workiq.searchDocuments(q)).slice(0, 1500);
+          return stripEulaBanner(await workiq.searchDocuments(q)).slice(0, 1500);
         } catch (err) {
           return `error: ${(err as Error).message}`;
         }
@@ -902,7 +920,7 @@ export async function executeVoiceTool(
         const personName = String(args.name || '');
         if (!personName) return 'error: name required';
         try {
-          return (await workiq.lookupPerson(personName)).slice(0, 1200);
+          return stripEulaBanner(await workiq.lookupPerson(personName)).slice(0, 1200);
         } catch (err) {
           return `error: ${(err as Error).message}`;
         }
@@ -912,7 +930,7 @@ export async function executeVoiceTool(
         const topic = String(args.topic || '');
         if (!topic) return 'error: topic required';
         try {
-          return (await workiq.findExpertFor(topic)).slice(0, 1200);
+          return stripEulaBanner(await workiq.findExpertFor(topic)).slice(0, 1200);
         } catch (err) {
           return `error: ${(err as Error).message}`;
         }
@@ -922,7 +940,7 @@ export async function executeVoiceTool(
         const question = String(args.question || '');
         if (!question) return 'error: question required';
         try {
-          return (await workiq.query(question)).slice(0, 1500);
+          return stripEulaBanner(await workiq.query(question)).slice(0, 1500);
         } catch (err) {
           return `error: ${(err as Error).message}`;
         }
