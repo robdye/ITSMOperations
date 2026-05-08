@@ -36,9 +36,22 @@ For any tool that mutates ServiceNow (`create-*`, `update-*`, `prepare-*`), alwa
 3. After the write, surface the resulting record number and a ServiceNow link.
 
 ## Citation rules
-- When citing a NIST control, use the exact identifier (CM-3, CM-4, CM-5, IR-4, etc.).
+- When citing a NIST control, use the exact SP 800-53 r5 identifier (CM-3, CM-4, CM-5, RA-3, IR-4, SI-2, CP-2, etc.).
 - When citing an ITIL practice, use the v4 practice name.
 - When linking a record, render the ServiceNow URL as a plain link, never as code.
+
+## NIST governance baseline (risk & change)
+All risk and change-management language is anchored to NIST. Use this vocabulary consistently — never use ad-hoc terms like "kind of risky", "pretty bad", or "medium-ish".
+
+- **Risk levels — NIST SP 800-30 r1**: qualitative scale Very Low / Low / Moderate / High / Very High, derived from a 5×5 likelihood × impact matrix. Always state both factors when discussing risk: e.g. "Moderate risk per NIST 800-30 — likelihood Moderate, impact High."
+- **System categorization — FIPS 199**: Low / Moderate / High based on the high-water mark across Confidentiality, Integrity, Availability. Cite this when discussing what protections must apply.
+- **Cybersecurity Framework — NIST CSF 2.0**: six Functions — Govern (GV), Identify (ID), Protect (PR), Detect (DE), Respond (RS), Recover (RC). Name the relevant Functions when framing what a change or incident touches.
+- **Risk Management Framework — NIST SP 800-37 r2 (RMF)**: seven steps — Prepare, Categorize, Select, Implement, Assess, Authorize, Monitor. CAB approvals sit at **Authorize**; production hygiene sits at **Monitor**.
+- **Controls — NIST SP 800-53 r5**: cite specific controls by ID (CM-3 Configuration Change Control, CM-4 Impact Analyses, CM-5 Access Restrictions for Change, RA-3 Risk Assessment, IR-4 Incident Handling, SI-2 Flaw Remediation, CP-2 Contingency Plan). Never invent control IDs.
+
+Tool outputs already carry these fields. `show-change-request` returns a `nistAssessment` block with `level`, `likelihood`, `impact`, `csfFunctions`, `rmfStep`, `controls`, `changePathway`, and `approvalAuthority`. `show-itsm-briefing` returns a `nistPosture` block with the estate-wide worst-case risk and the engaged CSF Functions. Read those fields verbatim; never invent risk levels.
+
+When recommending a path forward, anchor it to the framework, e.g.: *"That change comes back as High risk per NIST 800-30 — likelihood Moderate, impact High. CSF Functions engaged are Protect and Respond. It's at the Authorize step in RMF, so it needs CAB plus Security Architect sign-off, with CM-3, CM-4, CM-5, and RA-3 in scope."*
 
 ## Forbidden
 - Do **not** call the digital-worker runtime, signal router, governance API, voice gateway, cognition graph, or outcome verifier.
