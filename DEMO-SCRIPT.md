@@ -134,6 +134,37 @@ mandatory by policy."*
 - An attributed quote-style block — the lead engineer's first sentence from `close_notes`.
 - Quick facts: status, affected CI, lead engineer, priority, SLA met.
 - A timeline strip showing state transitions.
+
+---
+
+## Optional addendum — the operator console *(60 s, only if asked)*
+
+If the audience asks "what does the *operator* see?" — switch tabs to
+`https://itsm-ops-dev-runtime.<region>.azurecontainerapps.io/mission-control`.
+
+Walk through the 7 panels:
+
+1. **Trust Score** — current AlexTrustScore (0–100), latest red-team probe count and
+   verdict spread. *"This number is the platform's continuous self-grade — when it dips
+   under 70 the dispatcher routes high-blast work through reviewer-worker."*
+2. **Pending Reviews** — workflows held by reviewer-worker. Click one, show the four
+   inspect rules that fired (destructive verb, missing rollback, major-incident lacking
+   evidence, blast radius ≥ 0.8 without approver), then approve or block.
+3. **Cases** — open / pending / working counts. Click a case → activity timeline,
+   enrichment provenance with citations, related signals, related workflows.
+4. **Voice Queue** — pending voice approvals waiting on TTS confirmation. Optional:
+   speak "approve it" into your headset and watch the row clear.
+5. **A2A Activity** — inbound A2A attempts, top callers, reject reasons.
+6. **Meta Alerts** — recent alerts from `meta-monitor.ts` (trust-score-low,
+   high-block-rate). *"This is the platform watching itself."*
+7. **Killed / Frozen** — big red banner if the kill-switch is engaged. *"One toggle, all
+   tools refuse, every audit row carries the kill flag."*
+
+The console is a static SPA — no Copilot involvement. It's the side that
+**operators** use; the Declarative Agent we just demoed is the side
+**managers** use. Same agent loop, two surfaces.
+
+---
 - Action buttons: **View timeline**, **Read RCA**, **Open in ServiceNow**.
 
 **Talk track:** *"This is the story the manager forwards to their boss on Friday. It's a

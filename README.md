@@ -3,7 +3,7 @@
 > **An autonomous AI digital employee for IT Service Management.** Not a chatbot — a colleague that triages incidents at 3 AM, predicts SLA breaches before they happen, prepares your CAB agenda while you sleep, and learns from every outcome.
 
 ![CI](https://img.shields.io/github/actions/workflow/status/robdye/ITSMOperations/ci.yml?label=CI&logo=github)
-![Tests](https://img.shields.io/badge/tests-216%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-594%20passing-brightgreen)
 ![Deploy](https://img.shields.io/github/actions/workflow/status/robdye/ITSMOperations/deploy.yml?label=Deploy&logo=microsoft-azure)
 ![Node](https://img.shields.io/badge/node-20%20%7C%2022-339933?logo=node.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript)
@@ -28,7 +28,7 @@ The system follows **ITIL 4** practice boundaries, applies **NIST 800-53** contr
 
 ### Live deployment
 
-A reference instance runs in Azure Container Apps with the latest commit-pinned image tag, on the MCP-first / Graph-fallback contract. **216 unit tests** across **28 files** pass against every commit (run in ~5 s). All infrastructure is reproducible via Bicep.
+A reference instance runs in Azure Container Apps with the latest commit-pinned image tag, on the MCP-first / Graph-fallback contract. **594 unit tests** across **51 files** pass against every commit (run in ~13 s) — `digital-worker` 399, `mcp-server` 176, `mcp-server-enrichment` 19. All infrastructure is reproducible via Bicep. See [docs/coverage.md](docs/coverage.md) for per-module coverage.
 
 ---
 
@@ -976,6 +976,25 @@ All 29 Azure resources are deployed via Bicep (`infra/main.bicep`):
 - **Fail-closed policy**: if Content Safety is misconfigured, all inputs are blocked
 - Prompt injection detection via Foundry red-team scanning in CI
 
+### Red-team Agent + AlexTrustScore
+- `red-team-agent.ts` runs an in-process adversarial probe loop, seeded
+  from the golden prompt-injection dataset under
+  `digital-worker/eval/redteam/`
+- Each probe drives a synthetic `TurnContext` against the production
+  agent loop and scores the response against the dataset's expected
+  refusal / allow verdict
+- Results are aggregated into **AlexTrustScore** — a 0-100 composite
+  (`(safe_refusals + correct_handles) / total_probes * 100`) — and
+  written to the `AlexTrustScore` Azure Storage Table provisioned by
+  `infra/modules/foundry-redteam.bicep`
+- Trust scores below 70 trigger a `meta-monitor.recordMetaAlert(...)`
+  with `kind: 'trust_score_low'`, surfaced on the operator console and
+  optionally piped to Teams via the Adaptive Cards channel
+- The dispatcher (`signal-router.ts`) consults the latest trust score
+  via `/api/trust-score` and routes high-blast-radius work through a
+  reviewer-worker check when trust falls below the configurable
+  threshold
+
 ### OAuth OBO for ServiceNow
 - `snow-auth.ts` handles OAuth On-Behalf-Of flow for ServiceNow API access
 - Supports both basic auth (dev) and OAuth (production)
@@ -1043,6 +1062,23 @@ All 29 Azure resources are deployed via Bicep (`infra/main.bicep`):
 ### Mission Control Dashboard
 - `mission-control.html` — single-page dashboard served at `/mission-control`
 - Real-time view of: active workers, pending approvals, recent tool calls, service status
+
+### Operator Console panels
+
+Mission Control surfaces a dedicated operator console for reviewer and
+governance work. Each panel reads a JSON KPI feed from the
+`digital-worker` service and refreshes via SSE on the
+`/api/events` channel:
+
+| Panel | Source | What it shows |
+| --- | --- | --- |
+| **Trust Score** | `/api/trust-score` (red-team-agent) | Latest AlexTrustScore (0-100), probe count, severity breakdown. Goes amber <70, red <50. |
+| **Pending Reviews** | `/api/reviews/pending` (reviewer-worker) | Workflows awaiting safety review — destructive verbs, missing rollback, high blast radius. Operator can approve / block in-line. |
+| **Cases** | `/api/cases/kpi` (case-manager) | Open / closed counts, breach forecasts, reminder-due cases. |
+| **Voice Queue** | `/api/voice/pending` (voiceApprovals) | Pending voice-approval intents waiting on a TTS confirmation. |
+| **A2A Activity** | `/api/a2a/kpi` (a2a-policy) | Inbound A2A attempts, allowed / rejected counts, top offending callerAgentIds. |
+| **Meta Alerts** | `/api/meta/alerts` (meta-monitor) | Recent meta-monitor alerts (trust-score low, kill-switch triggered, change-freeze active). |
+| **Killed / Frozen** | `/api/governance/state` (kill-switch + change-freeze) | Big red "KILLED" / amber "FROZEN" banner when active, with the operator who toggled it. |
 
 ---
 
