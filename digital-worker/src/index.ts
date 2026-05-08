@@ -19,7 +19,7 @@ import crypto from 'crypto';
 import path from 'path';
 import { DefaultAzureCredential } from '@azure/identity';
 import { agentApplication } from './agent';
-import { startHandoverScheduler, stopHandoverScheduler, generateHandover, generateMidshiftRecap, getBriefingKpi } from './shift-handover';
+import { startHandoverScheduler, stopHandoverScheduler, generateHandover, generateMidshiftRecap, getBriefingKpi, getRecentBriefings } from './shift-handover';
 import { startIncidentMonitor, stopIncidentMonitor, runIncidentPoll } from './incident-monitor';
 import { getAuditSummary, getRecentAuditEntries } from './audit-trail';
 import { getMemoryStoreSummary } from './memory-store';
@@ -58,7 +58,6 @@ import { getGraphMailStatus } from './graph-mail';
 import { getPlannerStatus } from './planner-tasks';
 import { getSharePointStatus } from './sharepoint-docs';
 import { isApimEnabled, getApimStatus, getProxiedEndpoint } from './apim-gateway';
-import { getComputerUseStatus } from './computer-use';
 import { getTuningStatus, createTuningDataset, extractResolvedIncidents, extractResolvedProblems } from './copilot-tuning';
 import { isFoundryEnabled, getFoundryStatus } from './foundry-agents';
 import { signalRouter, type Signal } from './signal-router';
@@ -159,7 +158,6 @@ server.get('/api/platform-status', (_req: Request, res: Response) => {
       graphConnector: getConnectorStatus(),
       powerAutomate: getPowerAutomateStatus(),
       apim: getApimStatus(),
-      computerUse: getComputerUseStatus(),
       copilotTuning: getTuningStatus(),
     },
     kqlTemplates: Object.keys(getKqlTemplates()),
@@ -266,6 +264,19 @@ server.post('/api/scheduled', async (req: Request, res: Response) => {
       console.log('Incident poll triggered via /api/scheduled');
       await runIncidentPoll();
       res.status(200).json({ status: 'poll_complete', routineId, timestamp: new Date().toISOString() });
+    } else if (routineId === 'red-team-nightly') {
+      // Phase 2.1 — Foundry red-team probe run. Tenant gate is enforced
+      // inside `runRedTeamForTenant` so a tenant without `allowRedTeam=true`
+      // returns `{ skipped:true, reason }` without calling the agent.
+      console.log('Red-team nightly triggered via /api/scheduled');
+      const { runRedTeamForTenant } = await import('./red-team-agent');
+      const { getStandaloneClient } = require('./client');
+      const client = await getStandaloneClient();
+      const tenantId = process.env.TENANT_ID || 'default';
+      const result = await runRedTeamForTenant(tenantId, async (prompt: string) => {
+        return String(await client.invokeAgentWithScope(prompt));
+      });
+      res.status(200).json({ status: 'red_team_complete', tenantId, result, timestamp: new Date().toISOString() });
     } else if (routineId) {
       console.log(`Scheduled routine triggered via /api/scheduled: ${routineId}`);
       const result = await executeRoutine(routineId);
@@ -354,6 +365,12 @@ server.get('/api/workers', (_req: Request, res: Response) => {
 // Mission Control dashboard
 server.get('/mission-control', (_req: Request, res: Response) => {
   res.sendFile(path.join(__dirname, 'mission-control.html'));
+});
+server.get('/mission-control.css', (_req: Request, res: Response) => {
+  res.sendFile(path.join(__dirname, 'mission-control.css'));
+});
+server.get('/mission-control.js', (_req: Request, res: Response) => {
+  res.sendFile(path.join(__dirname, 'mission-control.js'));
 });
 
 // Tuning pipeline endpoints
@@ -1043,7 +1060,7 @@ server.get('/api/jobs/:id', async (req: Request, res: Response) => {
 
 // Apply JWT auth middleware for routes below — skip public routes
 server.use((req, res, next) => {
-  const publicPaths = ['/api/health', '/api/platform-status', '/api/voice/status', '/api/voice/avatar-config', '/api/voice/page-me', '/api/voice/kpi', '/api/workiq/kpi', '/api/a2a/kpi', '/.well-known/agent-card.json', '/voice', '/api/scheduled', '/api/signals', '/api/decisions', '/api/demo', '/api/demo/scripted-storm', '/api/foresight', '/api/foresight/run', '/api/outcomes', '/api/outcomes/kpi', '/api/cases', '/api/cases/kpi', '/api/reviewer/kpi', '/api/meta/kpi', '/api/meta/alerts', '/api/briefings/kpi', '/api/governance', '/api/governance/kill', '/api/governance/release', '/api/governance/freeze', '/api/autonomy/thresholds', '/api/goals', '/api/goals/plan', '/api/goals/pursue', '/api/experience', '/api/experience/recent', '/api/experience/find', '/api/jobs', '/api/cognition', '/api/cognition/graph', '/api/workers', '/api/approvals', '/api/approvals/callback', '/api/routines', '/api/audit', '/api/memory', '/api/reasoning', '/mission-control', '/api/a2a/message', '/api/a2a/discover', '/api/flows/callback', '/api/tuning/extract', '/api/tuning/status'];
+  const publicPaths = ['/api/health', '/api/platform-status', '/api/voice/status', '/api/voice/avatar-config', '/api/voice/page-me', '/api/voice/kpi', '/api/workiq/kpi', '/api/a2a/kpi', '/.well-known/agent-card.json', '/voice', '/api/scheduled', '/api/signals', '/api/decisions', '/api/demo', '/api/demo/scripted-storm', '/api/foresight', '/api/foresight/run', '/api/outcomes', '/api/outcomes/kpi', '/api/cases', '/api/cases/kpi', '/api/reviewer/kpi', '/api/meta/kpi', '/api/meta/alerts', '/api/briefings/kpi', '/api/briefings/recent', '/api/briefings/generate', '/api/trust/score', '/api/governance', '/api/governance/kill', '/api/governance/release', '/api/governance/freeze', '/api/autonomy/thresholds', '/api/goals', '/api/goals/plan', '/api/goals/pursue', '/api/experience', '/api/experience/recent', '/api/experience/find', '/api/jobs', '/api/cognition', '/api/cognition/graph', '/api/workers', '/api/approvals', '/api/approvals/callback', '/api/routines', '/api/audit', '/api/memory', '/api/reasoning', '/mission-control', '/api/a2a/message', '/api/a2a/discover', '/api/flows/callback', '/api/tuning/extract', '/api/tuning/status'];
   // Phase 9 — prefix matching for parameterised routes (e.g. /api/jobs/:id).
   const publicPrefixes = ['/api/jobs/', '/api/cases/'];
   if (publicPaths.some(p => req.path === p)) {
@@ -1174,6 +1191,40 @@ server.get('/api/meta/alerts', (_req: Request, res: Response) => {
 // Phase 3.6 — Briefing KPI surface (handovers + midshift recaps).
 server.get('/api/briefings/kpi', (_req: Request, res: Response) => {
   res.status(200).json(getBriefingKpi());
+});
+
+// Phase 2.5 — Recent briefing texts for the operator-console "Shift handover" panel.
+server.get('/api/briefings/recent', (_req: Request, res: Response) => {
+  res.status(200).json({ briefings: getRecentBriefings() });
+});
+
+// Phase 2.5 — Manual "generate now" trigger for shift handover. Reuses the
+// SCHEDULED_SECRET shared-secret guard the cron path already uses.
+server.post('/api/briefings/generate', async (req: Request, res: Response) => {
+  if (!signalsAuthOk(req)) return res.status(401).json({ error: 'Unauthorized' });
+  const kind = String(req.body?.kind || 'handover');
+  try {
+    if (kind === 'midshift') await generateMidshiftRecap();
+    else await generateHandover();
+    res.status(200).json({ ok: true, kind });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// Phase 2.1 — Trust score (AlexTrustScore). Sourced from the Foundry red-team
+// agent's daily probe runs (7-day rolling). Returns `{ available:false }`
+// with a reason when the tenant has not opted into red-team
+// (`allowRedTeam=false`, the default) or when no probe runs have happened yet.
+server.get('/api/trust/score', async (req: Request, res: Response) => {
+  try {
+    const { getTrustSummary } = await import('./red-team-agent');
+    const tenantId = String(req.query.tenant || process.env.TENANT_ID || 'default');
+    const summary = await getTrustSummary(tenantId);
+    res.status(200).json(summary);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
 });
 
 server.get('/api/cases', async (_req: Request, res: Response) => {

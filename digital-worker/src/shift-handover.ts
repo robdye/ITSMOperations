@@ -49,6 +49,9 @@ Problems: ${typeof problemData === 'string' ? problemData.substring(0, 1500) : J
     const client = await getStandaloneClient();
     const briefing = await client.invokeAgentWithScope(HANDOVER_PROMPT + '\n\n' + context);
 
+    // Phase 2.5 — capture for operator-console "Shift handover" panel.
+    pushRecentBriefing({ kind: 'handover', generatedAt: new Date().toISOString(), summary: String(briefing).slice(0, 4000) });
+
     // Send email to manager
     const managerEmail = process.env.MANAGER_EMAIL || '';
     if (managerEmail) {
@@ -89,6 +92,24 @@ const briefingKpi = {
   startedAt: Date.now(),
 };
 
+// Phase 2.5 — operator-console "Shift handover" panel needs the actual briefing
+// text (not just the KPI count). Keep a small in-memory ring buffer of the last
+// 10 briefings so the panel can show "last summary" without paging Teams/email.
+type BriefingKind = 'handover' | 'midshift';
+interface RecentBriefing {
+  kind: BriefingKind;
+  generatedAt: string;
+  summary: string;
+}
+const recentBriefings: RecentBriefing[] = [];
+function pushRecentBriefing(entry: RecentBriefing): void {
+  recentBriefings.unshift(entry);
+  if (recentBriefings.length > 10) recentBriefings.length = 10;
+}
+export function getRecentBriefings(): RecentBriefing[] {
+  return [...recentBriefings];
+}
+
 export function getBriefingKpi(): {
   handovers: number;
   midshifts: number;
@@ -126,6 +147,9 @@ Recent incidents: ${JSON.stringify(incidentData).substring(0, 1500)}
 
     const client = await getStandaloneClient();
     const briefing = await client.invokeAgentWithScope(MIDSHIFT_PROMPT + '\n\n' + context);
+
+    // Phase 2.5 — capture for operator-console "Shift handover" panel.
+    pushRecentBriefing({ kind: 'midshift', generatedAt: new Date().toISOString(), summary: String(briefing).slice(0, 4000) });
 
     const managerEmail = process.env.MANAGER_EMAIL || '';
     if (managerEmail) {
