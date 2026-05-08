@@ -193,4 +193,8 @@ export const ANTICIPATORY_TABLES = {
   outcomes: 'AlexOutcomes',
   tuner: 'AlexTunerState',
   governance: 'AlexGovernance',
+  // Phase 2.1 — Foundry red-team agent rolling rollup. Partition = tenantId,
+  // RowKey = ISO date (YYYY-MM-DD). Payload is the per-day score (0–100)
+  // and the probe breakdown.
+  trustScore: 'AlexTrustScore',
 } as const;

@@ -13,6 +13,13 @@ export interface TenantProfile {
   allowDemoDirector: boolean;
   /** SNOW host allow-list (substring match). Empty = no SNOW writes allowed. */
   snowAllowList: string[];
+  /**
+   * Phase 2.1 — whether the Foundry red-team agent may probe Alex on this
+   * tenant. Default false; opt-in per tenant. The probes intentionally try
+   * jailbreaks, prompt injection on SNOW worknotes, and scope-escape, so
+   * tenants must explicitly enable.
+   */
+  allowRedTeam: boolean;
 }
 
 const DEFAULT_TENANT_ID = process.env.TENANT_ID || 'default';
@@ -27,6 +34,7 @@ function fallbackProfile(tenantId: string): TenantProfile {
     profile: 'prod',
     allowDemoDirector: false,
     snowAllowList: [],
+    allowRedTeam: false,
   };
 }
 
@@ -43,6 +51,7 @@ export function loadTenantProfile(tenantId: string = DEFAULT_TENANT_ID): TenantP
         profile: raw.profile === 'demo' ? 'demo' : 'prod',
         allowDemoDirector: !!raw.allowDemoDirector,
         snowAllowList: Array.isArray(raw.snowAllowList) ? raw.snowAllowList : [],
+        allowRedTeam: !!raw.allowRedTeam,
       };
       cache.set(tenantId, profile);
       return profile;

@@ -323,6 +323,22 @@ resource acrPullEnrichment 'Microsoft.Authorization/roleAssignments@2022-04-01' 
 }
 
 // ──────────────────────────────────────────────────────────────
+// 10. Phase 2.1 — Foundry Red-Team Agent (AlexTrustScore table + RBAC)
+// ──────────────────────────────────────────────────────────────
+@description('Whether the Foundry red-team probe surface is enabled at infra level. Per-tenant opt-in still gates execution via tenantProfile.allowRedTeam.')
+param redTeamEnabled bool = false
+
+module foundryRedTeam 'modules/foundry-redteam.bicep' = {
+  name: 'foundry-redteam-deployment'
+  params: {
+    environmentName: environmentName
+    storageAccountName: dataServices.outputs.storageAccountName
+    digitalWorkerPrincipalId: containerApps.outputs.digitalWorkerPrincipalId
+    enabled: redTeamEnabled
+  }
+}
+
+// ──────────────────────────────────────────────────────────────
 // Outputs
 // ──────────────────────────────────────────────────────────────
 

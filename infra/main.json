@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "3581014517211060443"
+      "templateHash": "15228112808653240462"
     }
   },
   "parameters": {
@@ -48,6 +48,13 @@
       "defaultValue": "",
       "metadata": {
         "description": "ServiceNow basic auth password (stored in Key Vault)"
+      }
+    },
+    "redTeamEnabled": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Whether the Foundry red-team probe surface is enabled at infra level. Per-tenant opt-in still gates execution via tenantProfile.allowRedTeam."
       }
     }
   },
@@ -2337,6 +2344,112 @@
         "containerApps",
         "dataServices",
         "keyVault"
+      ]
+    },
+    "foundryRedTeam": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "foundry-redteam-deployment",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "environmentName": {
+            "value": "[parameters('environmentName')]"
+          },
+          "storageAccountName": {
+            "value": "[reference('dataServices').outputs.storageAccountName.value]"
+          },
+          "digitalWorkerPrincipalId": {
+            "value": "[reference('containerApps').outputs.digitalWorkerPrincipalId.value]"
+          },
+          "enabled": {
+            "value": "[parameters('redTeamEnabled')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "12311178803372082384"
+            }
+          },
+          "parameters": {
+            "environmentName": {
+              "type": "string",
+              "metadata": {
+                "description": "Environment name suffix."
+              }
+            },
+            "storageAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Existing storage account name (created by data-services module)."
+              }
+            },
+            "digitalWorkerPrincipalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal id of the digital-worker user-assigned managed identity."
+              }
+            },
+            "enabled": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Whether to enable the red-team probe surface. Default false; set to true once the operator is ready to opt the tenant in."
+              }
+            }
+          },
+          "variables": {
+            "storageTableDataContributor": "0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts/tableServices/tables",
+              "apiVersion": "2023-05-01",
+              "name": "[format('{0}/{1}/{2}', parameters('storageAccountName'), 'default', 'AlexTrustScore')]"
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), 'redteam-trustscore', parameters('digitalWorkerPrincipalId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageTableDataContributor'))]",
+                "principalId": "[parameters('digitalWorkerPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            }
+          ],
+          "outputs": {
+            "trustScoreTableName": {
+              "type": "string",
+              "value": "AlexTrustScore"
+            },
+            "redTeamEnabled": {
+              "type": "bool",
+              "value": "[parameters('enabled')]"
+            },
+            "rollupStorageAccount": {
+              "type": "string",
+              "value": "[parameters('storageAccountName')]"
+            },
+            "environmentLabel": {
+              "type": "string",
+              "value": "[parameters('environmentName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "containerApps",
+        "dataServices"
       ]
     }
   },

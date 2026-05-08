@@ -22,7 +22,7 @@ import { engageKillSwitch, isKillSwitchEngaged } from './governance';
 
 export interface MetaAlert {
   id: string;
-  kind: 'high-failure-rate' | 'high-suppression-rate' | 'high-block-rate' | 'high-escalation-rate';
+  kind: 'high-failure-rate' | 'high-suppression-rate' | 'high-block-rate' | 'high-escalation-rate' | 'trust_score_low';
   severity: 'warning' | 'critical';
   detail: string;
   metrics: Record<string, number>;
@@ -163,4 +163,41 @@ export function stopMetaMonitor(): void {
     clearInterval(timer);
     timer = null;
   }
+}
+
+/**
+ * Phase 2.1 — public surface for other modules (e.g. red-team-agent) to drop
+ * a meta-monitor alert directly without going through the periodic tick.
+ * Mirrors the internal `raiseAlert` shape but takes a simpler payload.
+ */
+export function recordMetaAlert(input: {
+  kind: MetaAlert['kind'];
+  severity: MetaAlert['severity'];
+  message: string;
+  details?: Record<string, unknown>;
+}): void {
+  const alert: MetaAlert = {
+    id: `meta-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    kind: input.kind,
+    severity: input.severity,
+    detail: input.message,
+    metrics: {},
+    raisedAt: new Date().toISOString(),
+  };
+  alerts.push(alert);
+  if (alerts.length > 100) alerts.shift();
+  stats.alertsRaised += 1;
+  // Best-effort audit; ignore failures so the caller never sees a throw.
+  void logAuditEntry({
+    workerId: 'meta-monitor',
+    workerName: 'Meta Monitor',
+    toolName: `meta-alert.${input.kind}`,
+    riskLevel: input.severity === 'critical' ? 'block' : 'notify',
+    triggeredBy: 'recordMetaAlert',
+    triggerType: 'scheduled',
+    parameters: JSON.stringify(input.details || {}),
+    resultSummary: `${input.severity}: ${input.message}`,
+    requiredConfirmation: false,
+    durationMs: 0,
+  }).catch(() => {});
 }

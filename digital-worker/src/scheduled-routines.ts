@@ -255,6 +255,21 @@ const routines: ScheduledRoutine[] = [
     prompt: 'Generate the comprehensive monthly ITSM health report for the previous month. Include: executive summary with key achievements and concerns, incident management KPIs (volume, MTTR, SLA compliance, recurring patterns), change management KPIs (success rate, emergency change ratio, PIR completion), problem management KPIs (backlog age, RCA completion rate, known error resolution), asset and CMDB health metrics, SLA performance across all services, knowledge base growth and utilization, vendor performance scorecard. Provide trend analysis comparing to the previous 3 months. Distribute the report to IT leadership and service owners.',
     enabled: true,
   },
+  // Phase 2.1 — Foundry red-team agent. Runs every night at 02:00 UTC and is
+  // gated on tenant.allowRedTeam (default false). The probe runner exercises
+  // jailbreak / prompt-injection / scope-escape probes through the same
+  // standalone agent client a real user message would hit, then writes a
+  // 0–100 AlexTrustScore into Azure Table Storage. This routine is wired
+  // into the same Durable Functions trigger used by the others; it is a
+  // no-op when the tenant has not opted in.
+  {
+    id: 'red-team-nightly',
+    worker: 'red-team-agent',
+    schedule: '0 2 * * *',  // Daily 02:00 UTC
+    description: 'Nightly Foundry red-team probe run — jailbreak/prompt-injection/scope-escape',
+    prompt: 'Run the Phase 2.1 red-team probe bank against this Alex deployment. Tenant gate: allowRedTeam=true required. Output the daily AlexTrustScore.',
+    enabled: true,
+  },
 ];
 
 // ── Routine Execution ──
