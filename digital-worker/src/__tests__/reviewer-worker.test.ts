@@ -17,6 +17,7 @@ import {
 
 const baseplan = (overrides: Partial<ReviewablePlan> = {}): ReviewablePlan => ({
   workflowId: 'demo-workflow',
+  workerId: 'demo-worker',
   blastRadius: 0.1,
   plan: {},
   ...overrides,

@@ -128,6 +128,14 @@ server.get('/api/health', (_req: Request, res: Response) => {
     agent: 'ITSM Operations Digital Worker',
     timestamp: new Date().toISOString(),
     uptimeMs: Math.floor(process.uptime() * 1000),
+    // Build SHA + version surfaced for production triage. Set
+    // GIT_COMMIT_SHA at container build time (CI fills it from
+    // ${{ github.sha }}); falls back to "dev" for local runs.
+    build: {
+      sha: process.env.GIT_COMMIT_SHA || 'dev',
+      shaShort: (process.env.GIT_COMMIT_SHA || 'dev').slice(0, 7),
+      builtAt: process.env.BUILD_TIMESTAMP || null,
+    },
     voiceEnabled: isVoiceEnabled(),
     features: {
       architecture: 'multi-agent',
