@@ -327,19 +327,6 @@
         { "name": "identify-duplicates", "description": "Find duplicate or overlapping knowledge articles", "sideEffects": false, "requiredScopes": ["ServiceNow.Read"], "sensitivityLevel": "low", "blastRadius": "none" }
       ],
       "knowledgeSources": ["Incident Table", "Problem Table", "Knowledge Base"]
-    },
-    {
-      "id": "computer-use-operator",
-      "name": "Computer Use Operator",
-      "description": "Operates browser-based and desktop applications through computer-use automation for tasks that lack API integration, such as legacy portals and vendor consoles.",
-      "itil_practice": "IT Operations Management",
-      "tools": [
-        { "name": "browser-navigate", "description": "Navigate to a URL and interact with web-based applications", "sideEffects": true, "requiredScopes": ["ComputerUse.Execute"], "sensitivityLevel": "critical", "blastRadius": "global", "hitl": "required" },
-        { "name": "form-fill", "description": "Fill out forms in web applications using structured data", "sideEffects": true, "requiredScopes": ["ComputerUse.Execute"], "sensitivityLevel": "critical", "blastRadius": "global", "hitl": "required" },
-        { "name": "screen-capture", "description": "Capture screenshots for audit trail and verification", "sideEffects": false, "requiredScopes": ["ComputerUse.Read"], "sensitivityLevel": "critical", "blastRadius": "none", "hitl": "required" },
-        { "name": "execute-workflow", "description": "Execute multi-step workflow in legacy applications", "sideEffects": true, "requiredScopes": ["ComputerUse.Execute"], "sensitivityLevel": "critical", "blastRadius": "global", "hitl": "required" }
-      ],
-      "knowledgeSources": ["Workflow Definitions", "Application Inventory"]
     }
   ]
 }

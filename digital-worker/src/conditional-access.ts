@@ -61,9 +61,8 @@ const CHANGE_MANAGER_ACTIONS = [
   'rollback_change', 'promote_change',
 ];
 
-/** Actions that require MFA step-up (Computer Use / high-impact) */
+/** Actions that require MFA step-up (high-impact) */
 const MFA_REQUIRED_ACTIONS = [
-  'computer_use', 'browser_action', 'remote_desktop',
   'execute_script', 'run_command', 'deploy_config',
   'modify_firewall', 'update_dns', 'restart_service',
 ];
@@ -73,14 +72,14 @@ const COMPLIANCE_REQUIRED_ACTIONS = [
   'create_change', 'approve_change', 'implement_change',
   'update_incident', 'close_incident', 'assign_incident',
   'create_problem', 'send_email', 'post_message',
-  'computer_use', 'execute_script',
+  'execute_script',
 ];
 
 /** Actions requiring approval for cross-tenant operations */
 const CROSS_TENANT_ACTIONS = [
   'create_change', 'update_change', 'create_incident',
   'update_incident', 'send_email', 'assign_incident',
-  'execute_script', 'computer_use', 'deploy_config',
+  'execute_script', 'deploy_config',
 ];
 
 // ── Policy Definitions ──
@@ -121,19 +120,19 @@ const changeWindowPolicy: ConditionalAccessPolicy = {
   },
 };
 
-/** Require MFA step-up for Computer Use agent actions */
+/** Require MFA step-up for high-impact agent actions */
 const mfaStepUpPolicy: ConditionalAccessPolicy = {
-  name: 'RequireMFAForComputerUse',
-  description: 'Requires MFA step-up verification before executing Computer Use or high-impact agent actions.',
+  name: 'RequireMFAForHighImpact',
+  description: 'Requires MFA step-up verification before executing high-impact agent actions.',
   enabled: true,
   evaluate: (ctx: ActionContext): PolicyResult => {
     const action = ctx.workerAction.toLowerCase();
     if (!MFA_REQUIRED_ACTIONS.some((a) => action.includes(a))) {
-      return { allowed: true, policyName: 'RequireMFAForComputerUse', reason: 'Action does not require MFA step-up.' };
+      return { allowed: true, policyName: 'RequireMFAForHighImpact', reason: 'Action does not require MFA step-up.' };
     }
 
     if (ctx.mfaCompleted) {
-      return { allowed: true, policyName: 'RequireMFAForComputerUse', reason: 'MFA step-up already completed.' };
+      return { allowed: true, policyName: 'RequireMFAForHighImpact', reason: 'MFA step-up already completed.' };
     }
 
     const toolClassification = classifyTool(ctx.workerAction);
@@ -145,7 +144,7 @@ const mfaStepUpPolicy: ConditionalAccessPolicy = {
 
     return {
       allowed: false,
-      policyName: 'RequireMFAForComputerUse',
+      policyName: 'RequireMFAForHighImpact',
       reason: `Action '${ctx.workerAction}' requires MFA step-up. User must re-authenticate.`,
       requiredAction: 'mfa_stepup',
       hitlPrompt,

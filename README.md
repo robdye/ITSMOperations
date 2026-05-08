@@ -344,7 +344,6 @@ ITSMOperations/
 │   │   │   ├── kql-templates.ts             # Reusable KQL queries (error rate, latency, tokens)
 │   │   │   ├── telemetry.ts                 # OpenTelemetry SDK (GenAI semantic conventions)
 │   │   │   ├── foundry-agents.ts            # Azure AI Foundry Agent Service integration
-│   │   │   ├── computer-use.ts              # Foundry Computer Use (browser automation)
 │   │   │   ├── copilot-tuning.ts            # Fine-tuning pipeline (extract → dataset → deploy)
 │   │   │   └── vision-processor.ts          # Image/screenshot analysis via GPT-4o Vision
 │   │   │
@@ -544,7 +543,6 @@ ITSMOperations/
 │   ├── security-manager/                    # Information security skill
 │   ├── finops-manager/                      # Cloud FinOps skill
 │   ├── shift-handover/                      # Shift handover briefing skill
-│   ├── computer-use/                        # Computer Use (browser automation) skill
 │   ├── agent-change-control/                # AI Governance: agent change control
 │   ├── agent-compliance-dashboard/          # AI Governance: compliance dashboard
 │   ├── agent-inventory-audit/               # AI Governance: agent inventory audit
@@ -594,7 +592,6 @@ ITSMOperations/
 | **Content Safety** | Azure AI Content Safety prompt shields with fail-closed policy | `content-safety.ts` |
 | **Reasoning Traces** | Full agent decision chain persisted in Cosmos DB for auditability | `reasoning-trace.ts`, `reasoning-rca.ts` |
 | **Service Bus Events** | Decoupled inter-worker messaging across 5 topics | `service-bus.ts` |
-| **Computer Use** | Foundry Computer Use for browser-based automation tasks | `computer-use.ts` |
 | **Fine-Tuning Pipeline** | Extract resolved incidents/problems → create tuning dataset → deploy tuned model | `copilot-tuning.ts` |
 | **A2A Protocol** | Agent-to-Agent discovery and messaging (federated agent mesh) | `connected-agents.ts` |
 | **Power Automate** | 4 flow integrations (CAB voting, change approval, emergency change, incident escalation) | `power-automate.ts`, `power-automate-flows.ts` |
@@ -816,7 +813,6 @@ The `mcp-server-enrichment/` Container App is a **separate, MCP-only** sidecar t
 | FinOps Manager | Financial Management of IT Services | — | `finops-tools.ts` | Read: none |
 | Reporting Manager | Measurement & Reporting | — | `reporting-tools.ts` | Read: none |
 | Shift Handover | (Cross-cutting) | — | `briefing-tools.ts` | None |
-| Computer Use Operator | (Automation) | — | `computer-use.ts` | Required |
 | Request Fulfilment | Request Fulfilment | — | `request-tools.ts` | Optional |
 | Catalogue Manager | Service Catalogue Management | — | `catalogue-tools.ts` | Read: none |
 | Risk Manager | Risk Management | — | `risk-tools.ts` | Read: none |
@@ -855,9 +851,9 @@ The declarative agent (`appPackage/declarativeAgent.json`) is a v1.6 schema conf
 | `EnterpriseGraphSearch` | Enabled (enterprise-wide search) |
 | `Memory` | Enabled (cross-conversation memory) |
 
-### Skills (22)
+### Skills (21)
 
-13 ITIL practice skills + 5 AI governance skills + shift-handover + finops-manager + computer-use-operator + knowledge-harvester.
+13 ITIL practice skills + 5 AI governance skills + shift-handover + finops-manager + knowledge-harvester.
 
 ### Plugins (8 + 1)
 
@@ -1261,8 +1257,6 @@ If ACS, the click-to-call link, and the avatar are all unavailable, `/api/voice/
 | `FOUNDRY_HUB` | Foundry hub name |
 | `FOUNDRY_API_KEY` | Foundry API key |
 | `ENABLE_FOUNDRY_DELEGATION` | Enable A2A delegation via Foundry |
-| `COMPUTER_USE_ENDPOINT` | Foundry Computer Use endpoint |
-| `COMPUTER_USE_API_KEY` | Computer Use API key |
 | `COPILOT_TUNING_ENDPOINT` | Fine-tuning pipeline endpoint |
 | `TUNED_MODEL_DEPLOYMENT` | Tuned model deployment name |
 | `APIM_ENDPOINT` | Azure API Management endpoint |
