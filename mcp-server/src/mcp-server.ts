@@ -22,6 +22,15 @@ import * as eol from "./eol-client.js";
 import * as azmon from "./azure-monitor.js";
 import * as search from "./search-client.js";
 import { classifyRecord, isOperationAllowed, redactPii, getDlpStatus } from './purview-dlp.js';
+import {
+  assessRisk,
+  type NistLevel,
+  NIST_LEVEL_VALUE,
+  NIST_LEVEL_COLOR,
+  rmfStepForChangeState,
+  snowChangeRiskToLikelihood,
+  snowChangeImpactToImpact,
+} from './nist.js';
 import { getPublicServerUrl } from "./index.js";
 // Phase C.1 — Loop component generators (DA-only, MCP-sourced).
 import { buildCabPackLoop, type CabPackLoopChange } from "./loop-components/cab-pack.js";
@@ -375,26 +384,59 @@ function textResponse(text: string) {
 }
 
 // ── Risk scoring ──────────────────────────────────────────
+//
+// Aligned to NIST SP 800-30 r1: a 5×5 likelihood × impact matrix yielding
+// a qualitative risk level (Very Low / Low / Moderate / High / Very High).
+// Legacy callers pass `threatLikelihood` and `businessImpact` on a 1..5
+// scale, which we translate directly into NIST levels.
+//
+// We retain the legacy `score` / `category` fields on the return object so
+// existing widgets keep working, but the canonical fields are now `level`,
+// `csfFunctions`, `rmfStep`, and `controls`.
 function calculateRiskScore(threatLikelihood: number, businessImpact: number) {
-  const score = threatLikelihood * businessImpact;
-  let category: string;
-  let color: string;
-  if (score <= 5) { category = "Low"; color = "#4caf50"; }
-  else if (score <= 12) { category = "Medium"; color = "#ff9800"; }
-  else if (score <= 19) { category = "High"; color = "#f44336"; }
-  else { category = "Critical"; color = "#9c27b0"; }
+  const clamp = (v: number) => Math.max(1, Math.min(5, Math.round(v))) as 1 | 2 | 3 | 4 | 5;
+  const tl = clamp(threatLikelihood);
+  const bi = clamp(businessImpact);
+  const levelByValue: Record<number, NistLevel> = {
+    1: 'Very Low',
+    2: 'Low',
+    3: 'Moderate',
+    4: 'High',
+    5: 'Very High',
+  };
+  const nist = assessRisk(levelByValue[tl], levelByValue[bi]);
+
+  // Back-compat label: collapse the NIST 5-band scale into the legacy
+  // 4-band scale (Low / Medium / High / Critical) used by older widgets.
+  const legacyCategory =
+    nist.level === 'Very Low' || nist.level === 'Low'
+      ? 'Low'
+      : nist.level === 'Moderate'
+        ? 'Medium'
+        : nist.level === 'High'
+          ? 'High'
+          : 'Critical';
 
   return {
-    score,
-    category,
-    color,
-    threatLikelihood,
-    businessImpact,
-    itilProcess: score <= 5 ? "Standard Change — auto-approve if pre-authorized" :
-                 score <= 12 ? "Normal Change — Change Manager approval required" :
-                 score <= 19 ? "Normal Change — mandatory CAB review required" :
-                 "Emergency/Escalated — CISO and CTO sign-off required",
-    nistControls: ["CM-3 (Change Control)", "CM-4 (Impact Analysis)", ...(score > 12 ? ["CM-5 (Access Restrictions)"] : [])],
+    // ── Canonical NIST fields ──
+    level: nist.level,
+    likelihood: nist.likelihood,
+    impact: nist.impact,
+    csfFunctions: nist.csfFunctions,
+    controls: nist.controls,
+    rmfStep: 'Authorize' as const, // change-control evaluations sit at RMF Authorize
+    changePathway: nist.changePathway,
+    approvalAuthority: nist.approvalAuthority,
+    framework: 'NIST SP 800-30 r1 (5×5 matrix); CSF 2.0; RMF SP 800-37 r2',
+
+    // ── Back-compat fields (older widgets read these) ──
+    score: nist.rawScore,
+    category: legacyCategory,
+    color: NIST_LEVEL_COLOR[nist.level],
+    threatLikelihood: tl,
+    businessImpact: bi,
+    itilProcess: nist.changePathway,
+    nistControls: nist.controls,
   };
 }
 
@@ -733,9 +775,20 @@ export function createChangeServer(): Server {
         }
 
         const snowInstance = process.env.SNOW_INSTANCE || "";
-        const data = { changeRequest: cr, riskScore, eolData, incidents, snowInstance, generatedAt: new Date().toISOString() };
+        const nistAssessment = {
+          framework: 'NIST SP 800-30 r1 (5×5 matrix); CSF 2.0; RMF SP 800-37 r2',
+          level: riskScore.level,
+          likelihood: riskScore.likelihood,
+          impact: riskScore.impact,
+          csfFunctions: riskScore.csfFunctions,
+          rmfStep: rmfStepForChangeState(cr.state),
+          controls: riskScore.controls,
+          changePathway: riskScore.changePathway,
+          approvalAuthority: riskScore.approvalAuthority,
+        };
+        const data = { changeRequest: cr, riskScore, nistAssessment, eolData, incidents, snowInstance, generatedAt: new Date().toISOString() };
         const incidentSummary = incidents.length > 0 ? ` | ${incidents.length} active incident(s) on affected CI` : '';
-        const summary = `Change Request ${cr.number}: "${cr.short_description}" | State: ${cr.state} | Risk: ${riskScore.category} (${riskScore.score}/25) | ${riskScore.itilProcess}${incidentSummary}`;
+        const summary = `Change Request ${cr.number}: "${cr.short_description}" | State: ${cr.state} | NIST 800-30 risk: ${riskScore.level} (L=${riskScore.likelihood}, I=${riskScore.impact}) | RMF step: ${nistAssessment.rmfStep} | CSF: ${riskScore.csfFunctions.join('+')} | ${riskScore.changePathway}${incidentSummary}`;
         return widgetResponse(CHANGE_REQUEST, data, summary);
       }
 
@@ -1551,6 +1604,48 @@ export function createChangeServer(): Server {
         if (slaAtRisk.length > 0)
           recommendations.push({ text: `<strong>${slaAtRisk.length} SLA(s) at risk</strong> (>75% elapsed) — prioritize resolution to avoid breach.`, urgent: true });
 
+        // ── NIST framework alignment ──
+        // Aggregate posture: take the worst-case across active P1/P2 incidents
+        // and open changes; surface CSF + RMF framing on the briefing.
+        const incidentRisks = activeIncidents.slice(0, 50).map((i: any) => {
+          const pStr = String(i.priority || '');
+          const impact = pStr.includes('1') ? 'Very High'
+            : pStr.includes('2') ? 'High'
+            : pStr.includes('3') ? 'Moderate'
+            : pStr.includes('4') ? 'Low'
+            : 'Very Low';
+          const urgency = String(i.urgency || '').includes('1') ? 'High'
+            : String(i.urgency || '').includes('2') ? 'Moderate'
+            : 'Low';
+          return assessRisk(urgency as NistLevel, impact as NistLevel);
+        });
+        const changeRisks = openCRs.slice(0, 50).map((cr: any) => {
+          const riskStr = typeof cr.risk === 'object' ? cr.risk?.display_value : cr.risk;
+          const impactStr = typeof cr.impact === 'object' ? cr.impact?.display_value : cr.impact;
+          return assessRisk(snowChangeRiskToLikelihood(riskStr), snowChangeImpactToImpact(impactStr));
+        });
+        const allRisks = [...incidentRisks, ...changeRisks];
+        const worst = allRisks.reduce<NistLevel>((acc, r) => {
+          return NIST_LEVEL_VALUE[r.level] > NIST_LEVEL_VALUE[acc] ? r.level : acc;
+        }, 'Very Low' as NistLevel);
+        const csfEngaged = Array.from(new Set(allRisks.flatMap((r) => r.csfFunctions))).sort();
+        const nistPosture = {
+          framework: 'NIST SP 800-30 r1; CSF 2.0; RMF SP 800-37 r2; FIPS 199',
+          worstCaseRisk: worst,
+          worstCaseColor: NIST_LEVEL_COLOR[worst],
+          csfFunctionsEngaged: csfEngaged,
+          rmfFocus: p1Incidents.length > 0
+            ? 'Monitor (continuous monitoring; incident response in progress)'
+            : openCRs.length > 0
+              ? 'Authorize (change authorization decisions pending)'
+              : 'Monitor (steady-state monitoring)',
+          guidance: worst === 'Very High' || worst === 'High'
+            ? 'Elevate to ECAB / IR-4 incident response per SP 800-53; engage CSF Respond + Recover.'
+            : worst === 'Moderate'
+              ? 'CAB review with security impact analysis (CM-3, CM-4, RA-3).'
+              : 'Standard governance; track via CSF Govern + Identify.',
+        };
+
         const data = {
           pulse: {
             p1Incidents: p1Incidents.length, totalIncidents: activeIncidents.length,
@@ -1560,6 +1655,7 @@ export function createChangeServer(): Server {
             openChanges: openCRs.length, collisions: collisions.length,
             changeSuccessRate, closedChanges: allCRs.length,
           },
+          nistPosture,
           majorIncidents: p1Incidents.slice(0, 10),
           slaBreaches: slaBreaches.slice(0, 5).map((s: any) => ({
             taskName: s.task?.display_value || s.task || "",
@@ -1569,7 +1665,7 @@ export function createChangeServer(): Server {
           collisions, recommendations,
           snowInstance, generatedAt: now.toISOString(),
         };
-        const summary = `ITSM Briefing: ${activeIncidents.length} active incidents (${p1Incidents.length} P1/P2, ${allIncidents.length} total) | ${openProblems.length} problems | ${slaBreaches.length} SLA breaches | ${openCRs.length} changes (${collisions.length} collisions) | ${changeSuccessRate}% change success rate`;
+        const summary = `ITSM Briefing: ${activeIncidents.length} active incidents (${p1Incidents.length} P1/P2, ${allIncidents.length} total) | ${openProblems.length} problems | ${slaBreaches.length} SLA breaches | ${openCRs.length} changes (${collisions.length} collisions) | ${changeSuccessRate}% change success rate | NIST 800-30 worst-case: ${worst} | CSF: ${csfEngaged.join('+')}`;
         return widgetResponse(ITSM_BRIEFING, data, summary);
       }
 

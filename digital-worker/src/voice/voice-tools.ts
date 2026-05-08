@@ -33,6 +33,10 @@ import {
   type DeckSpec,
 } from '../presentation-generator';
 import { DocGenerator } from '../doc-generator';
+import {
+  assessSnowIncident,
+  type NistRiskAssessment,
+} from '../nist';
 
 const mcp = new ItsmMcpClient();
 const workiq = getWorkIqClient();
@@ -759,8 +763,27 @@ export async function executeVoiceTool(
 
       case 'show_itsm_briefing': {
         try {
-          const r = await mcp.getItsmBriefing();
-          return JSON.stringify(r).slice(0, 1500);
+          const r = (await mcp.getItsmBriefing()) as Record<string, any> | undefined;
+          if (!r) return 'briefing unavailable';
+          // Hoist the NIST posture block to the top of the JSON we feed back
+          // to Alex — the rest of the briefing is verbose and easy to mis-quote.
+          const slim = {
+            nistPosture: r.nistPosture ?? null,
+            pulse: r.pulse ?? null,
+            recommendations: r.recommendations ?? [],
+            majorIncidents: Array.isArray(r.majorIncidents)
+              ? r.majorIncidents.slice(0, 5).map((i: any) => ({
+                  number: i.number,
+                  short_description: i.short_description,
+                  priority: i.priority?.display_value || i.priority,
+                  assignment_group: i.assignment_group?.display_value || i.assignment_group,
+                }))
+              : [],
+            slaBreaches: r.slaBreaches ?? [],
+            collisions: r.collisions ?? [],
+            generatedAt: r.generatedAt,
+          };
+          return JSON.stringify(slim).slice(0, 2000);
         } catch (err) {
           return `error: ${(err as Error).message}`;
         }
@@ -807,8 +830,25 @@ export async function executeVoiceTool(
         if (args.state) filters.state = args.state;
         if (args.assignment_group) filters.assignment_group = args.assignment_group;
         try {
-          const r = await mcp.getIncidents(filters);
-          return JSON.stringify(r).slice(0, 1200);
+          const r = (await mcp.getIncidents(filters)) as any;
+          // Result shape: { incidents: [...] } or just an array.
+          const list: any[] = Array.isArray(r) ? r : Array.isArray(r?.incidents) ? r.incidents : [];
+          const enriched = list.slice(0, 20).map((i) => {
+            const nist: NistRiskAssessment = assessSnowIncident(i);
+            return {
+              number: i.number,
+              short_description: i.short_description,
+              priority: i.priority?.display_value || i.priority,
+              state: i.state?.display_value || i.state,
+              assignment_group: i.assignment_group?.display_value || i.assignment_group,
+              ci: i.cmdb_ci?.display_value || i.cmdb_ci,
+              nist_risk: nist.level,
+              nist_likelihood: nist.likelihood,
+              nist_impact: nist.impact,
+              csf: nist.csfFunctions.join('+'),
+            };
+          });
+          return JSON.stringify({ count: list.length, incidents: enriched }).slice(0, 2000);
         } catch (err) {
           return `error: ${(err as Error).message}`;
         }
@@ -845,23 +885,36 @@ export async function executeVoiceTool(
         const num = String(args.number || '');
         if (!num) return 'error: number required';
         try {
-          const r = (await mcp.getChangeRequest(num)) as Record<string, unknown> | undefined;
-          if (!r || typeof r !== 'object') return `change ${num} not found`;
-          // Hoist the most useful fields so Alex can read them out and chain
-          // (e.g. into show_blast_radius) without parsing the whole envelope.
-          const ciDV = (r as any).cmdb_ci?.display_value || (r as any).cmdb_ci || '';
+          const env = (await mcp.getChangeRequest(num)) as Record<string, unknown> | undefined;
+          if (!env || typeof env !== 'object') return `change ${num} not found`;
+          // The MCP tool returns a data envelope: { changeRequest, riskScore,
+          // nistAssessment, eolData, incidents, snowInstance, generatedAt }.
+          // Older code read fields off the envelope itself which silently
+          // returned empty strings — fix by walking into changeRequest.
+          const cr = (env as any).changeRequest ?? env;
+          const nist = (env as any).nistAssessment ?? null;
+          const ciDV = cr?.cmdb_ci?.display_value || cr?.cmdb_ci || '';
           const summary = {
-            number: (r as any).number || num,
-            short_description: (r as any).short_description || (r as any).description || '',
-            state: (r as any).state?.display_value || (r as any).state || '',
-            risk: (r as any).risk?.display_value || (r as any).risk || '',
+            number: cr?.number || num,
+            short_description: cr?.short_description || cr?.description || '',
+            state: cr?.state?.display_value || cr?.state || '',
+            risk: cr?.risk?.display_value || cr?.risk || '',
             ci_name: typeof ciDV === 'string' ? ciDV : '',
             assignment_group:
-              (r as any).assignment_group?.display_value || (r as any).assignment_group || '',
-            planned_start_date: (r as any).start_date || (r as any).planned_start_date || '',
-            planned_end_date: (r as any).end_date || (r as any).planned_end_date || '',
+              cr?.assignment_group?.display_value || cr?.assignment_group || '',
+            planned_start_date: cr?.start_date || cr?.planned_start_date || '',
+            planned_end_date: cr?.end_date || cr?.planned_end_date || '',
+            // ── NIST framework alignment (read these out — never make up) ──
+            nist_risk_level: nist?.level || '',
+            nist_likelihood: nist?.likelihood || '',
+            nist_impact: nist?.impact || '',
+            csf_functions: Array.isArray(nist?.csfFunctions) ? nist.csfFunctions.join('+') : '',
+            rmf_step: nist?.rmfStep || '',
+            change_pathway: nist?.changePathway || '',
+            approval_authority: nist?.approvalAuthority || '',
+            controls: Array.isArray(nist?.controls) ? nist.controls.join('; ') : '',
           };
-          return JSON.stringify(summary).slice(0, 1500);
+          return JSON.stringify(summary).slice(0, 2000);
         } catch (err) {
           return `error: ${(err as Error).message}`;
         }

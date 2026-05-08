@@ -358,6 +358,24 @@ export function buildCurrentStateDeckSpec(briefing: any, options: { author?: str
     },
   ];
 
+  // ── NIST posture slide ──
+  const nist = briefing?.nistPosture;
+  if (nist) {
+    slides.unshift({
+      title: 'NIST Governance Baseline',
+      metrics: [
+        { label: 'Worst-case Risk', value: nist.worstCaseRisk },
+        { label: 'CSF Functions', value: Array.isArray(nist.csfFunctionsEngaged) ? nist.csfFunctionsEngaged.join(' + ') : '' },
+        { label: 'RMF Focus', value: nist.rmfFocus },
+      ],
+      bullets: [
+        `Framework: ${nist.framework}`,
+        nist.guidance || '',
+      ],
+      notes: 'All risk and change-management language in this deck is anchored to NIST SP 800-30 r1, CSF 2.0, RMF SP 800-37 r2, and FIPS 199. Use these terms when presenting.',
+    });
+  }
+
   if (topIncidents.length > 0) {
     slides.push({
       title: 'Top Active Incidents',
