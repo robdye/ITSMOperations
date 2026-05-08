@@ -30,111 +30,45 @@ The system follows **ITIL 4** practice boundaries, applies **NIST 800-53** contr
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    classDef m365 fill:#1f2937,stroke:#374151,color:#fff
-    classDef edge fill:#1e3a8a,stroke:#1e40af,color:#fff
-    classDef compute fill:#065f46,stroke:#047857,color:#fff
-    classDef data fill:#7c2d12,stroke:#9a3412,color:#fff
-    classDef ai fill:#581c87,stroke:#6b21a8,color:#fff
-    classDef obs fill:#374151,stroke:#4b5563,color:#fff
+```text
+   USER SURFACES
+   ┌────────────────────────────────────────────────────────────────────┐
+   │  Teams / M365 Copilot   ·   Voice client   ·   Mission Control     │
+   └─────────────────────────────────┬──────────────────────────────────┘
+                                     │  HTTPS  ·  WebSocket
+                                     ▼
+   AZURE SUBSCRIPTION (Bicep-managed)
+   ┌────────────────────────────────────────────────────────────────────┐
+   │  DIGITAL WORKER   Container App · Express · port 3978 · Node 20    │
+   │  ─ Runs the 18 specialist workers + autonomous control loop        │
+   │  ─ Managed Identity for every Azure call (no static credentials)   │
+   └──┬───────────────┬─────────────────┬────────────────────────┬──────┘
+      │ OBO           │ MCP/SSE         │ Managed Identity       │ MI
+      ▼               ▼                 ▼                        ▼
+   ┌──────────┐   ┌────────────┐   ┌──────────────────┐   ┌──────────────┐
+   │ Microsoft│   │ ServiceNow │   │ AI services      │   │ Data plane   │
+   │ Agent 365│   │ MCP server │   │ ─ Azure OpenAI   │   │ ─ Cosmos DB  │
+   │ (OBO +   │   │ port 3002  │   │ ─ Content Safety │   │ ─ Tables     │
+   │  tools)  │   │ Node 22    │   │ ─ Speech         │   │ ─ Redis      │
+   └────┬─────┘   └─────┬──────┘   │ ─ AI Foundry     │   │ ─ Service Bus│
+        │               │          └──────────────────┘   │ ─ AI Search  │
+        ▼               ▼                                 └──────────────┘
+   M365 MCP        ServiceNow
+   + Graph API     REST API
+   (fallback)
 
-    subgraph U[End users]
-        U1[Teams /<br/>M365 Copilot]
-        U2[Voice client<br/>browser]
-        U3[Mission Control<br/>browser]
-    end
+   SCHEDULED / ORCHESTRATED
+   ┌────────────────────────────────────────────────────────────────────┐
+   │  Function App  ·  Durable Functions                                │
+   │  11 cron timers  ·  orchestrators  ·  SNOW webhooks                │
+   │              ─── HMAC ───▶  Worker /api/scheduled                  │
+   └────────────────────────────────────────────────────────────────────┘
 
-    subgraph M[Microsoft Graph and M365]
-        M1[Graph API]
-        M2[M365 MCP servers]
-        M3[Teams Approvals]
-    end
-    class M1,M2,M3 m365
-
-    subgraph X[Microsoft Agent 365 plane]
-        X1[Tooling gateway]
-        X2[Agentic auth /<br/>OBO broker]
-    end
-    class X1,X2 edge
-
-    subgraph AZ[Azure subscription — Bicep-managed]
-        direction TB
-
-        subgraph AC[Container Apps environment]
-            AC1[Digital Worker<br/>port 3978 · Node 20]
-            AC2[ServiceNow MCP<br/>port 3002 · Node 22]
-        end
-        class AC1,AC2 compute
-
-        subgraph FN[Function App]
-            FN1[Durable timers · 11 cron]
-            FN2[Durable orchestrators]
-            FN3[HTTP triggers]
-        end
-        class FN1,FN2,FN3 compute
-
-        subgraph DAT[Data plane]
-            D1[Cosmos DB]
-            D2[Azure Tables]
-            D3[Redis]
-            D4[Service Bus]
-            D5[AI Search]
-        end
-        class D1,D2,D3,D4,D5 data
-
-        subgraph AI[AI services]
-            AI1[Azure OpenAI]
-            AI2[Content Safety]
-            AI3[Speech]
-            AI4[AI Foundry]
-        end
-        class AI1,AI2,AI3,AI4 ai
-
-        subgraph SEC[Identity and secrets]
-            SEC1[Key Vault]
-            SEC2[3 User-Assigned MIs]
-            SEC3[ACR]
-        end
-        class SEC1,SEC2,SEC3 compute
-
-        subgraph OBS[Observability]
-            OBS1[App Insights]
-            OBS2[Log Analytics]
-        end
-        class OBS1,OBS2 obs
-    end
-
-    subgraph SN[ServiceNow tenant]
-        SN1[ServiceNow REST API]
-    end
-
-    U1 --> AC1
-    U2 -- WSS --> AC1
-    U3 --> AC1
-
-    AC1 --> X2
-    AC1 --> X1
-    X1 --> M2
-    AC1 -- Graph fallback --> M1
-
-    AC1 -- MCP/SSE --> AC2
-    AC2 --> SN1
-
-    FN1 & FN2 -- HMAC --> AC1
-    SN1 -. webhook .-> FN3
-
-    AC1 -- Managed Identity --> AI1 & AI2 & AI3 & AI4
-    AC1 --> D1 & D2 & D3 & D4 & D5
-    AC2 --> D5
-
-    AC1 --> SEC1
-    AC1 & AC2 -. pulled by .- SEC2
-    SEC2 --> SEC3
-
-    AC1 & AC2 & FN1 -- OTel --> OBS1
-    OBS1 --> OBS2
-    AC1 --> M3
+   PLATFORM
+   ┌────────────────────────────────────────────────────────────────────┐
+   │  Key Vault  ·  3 User-Assigned Managed Identities  ·  ACR          │
+   │  App Insights  ·  Log Analytics + 5 KQL alert rules                │
+   └────────────────────────────────────────────────────────────────────┘
 ```
 
 **Why this shape**
