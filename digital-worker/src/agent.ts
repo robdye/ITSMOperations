@@ -31,6 +31,11 @@ import {
   asksMeeting,
   asksTeamsCall,
 } from './intent-detection';
+import { autonomyGate } from './autonomy-gate';
+import { resolveRoles } from './live-role-resolver';
+import { POLICY_VERSION, type ActionRisk } from './role-policy';
+import { recordEvidence } from './evidence-pack';
+import { notifyManagerOnException } from './exception-reporter';
 
 const mcp = new ItsmMcpClient();
 const workiq = getWorkIqClient();
@@ -231,6 +236,7 @@ export class ItsmAgent extends AgentApplication<TurnState> {
     const text = context.activity.text?.trim() || '';
     const from = context.activity?.from;
     const userId = from?.aadObjectId || from?.id || 'unknown';
+    const liveActorOid = from?.aadObjectId || '';
     const displayName = from?.name ?? 'unknown';
     console.log(`[Agent] Message from ${displayName}: ${text.substring(0, 100)}`);
 
@@ -424,6 +430,81 @@ export class ItsmAgent extends AgentApplication<TurnState> {
         const startedAt = Date.now();
         // Pass the live TurnContext so M365 MCP tools can mint OBO tokens.
         const ctx: PromptContext = { userMessage: text, displayName, requesterEmail, turnContext: context };
+
+        // Pattern 3 — interactive governance check. Resolves the live caller
+        // roles, infers action risk from the routed worker's blast radius,
+        // runs the unified autonomy-gate, records an evidence pack, and
+        // notifies the manager on DENY. REQUIRE_HITL keeps the existing
+        // approval-queue flow; ALLOW just continues with evidence trail.
+        const liveActor = liveActorOid || userId || 'unknown';
+        let live;
+        try {
+          live = await resolveRoles({ actor: liveActor, interactive: true });
+        } catch {
+          live = {
+            actor: liveActor,
+            roles: ['system'],
+            source: 'fallback' as const,
+            fetchedAt: Date.now(),
+            ttlMs: 0,
+          };
+        }
+        const wBlast = classification.worker.blastRadius ?? 0.5;
+        const interactiveRisk: ActionRisk = wBlast >= 0.66 ? 'high' : wBlast >= 0.33 ? 'medium' : 'low';
+
+        const gate = autonomyGate({
+          workflowId: `interactive:${classification.worker.id}`,
+          worker: classification.worker,
+          tenantId: 'interactive',
+          actor: live.actor,
+          actorRoles: live.roles,
+          actionRisk: interactiveRisk,
+          toolName: `interactive:${classification.worker.id}`,
+          now: Date.now(),
+        });
+
+        const conversationIdEarly = context.activity.conversation?.id || '';
+
+        if (gate.decision === 'DENY') {
+          stopTypingLoop();
+          const denyMsg = `🛑 ${classification.worker.name} blocked: ${gate.reason}`;
+          await context.sendActivity(denyMsg);
+          const pack = await recordEvidence({
+            actor: live.actor,
+            actorRoles: live.roles,
+            roleSource: live.source,
+            workerId: classification.worker.id,
+            workerName: classification.worker.name,
+            requestedAction: text.substring(0, 200),
+            toolName: `interactive:${classification.worker.id}`,
+            actionRisk: interactiveRisk,
+            mode: 'propose',
+            gateDecision: gate.decision,
+            gateReason: gate.reason,
+            policyVersion: POLICY_VERSION,
+            leverEngaged: gate.rolePolicy?.leverEngaged,
+            verifierOutcome: 'inconclusive',
+            result: { ok: false, summary: `denied: ${gate.reason}` },
+            startedAt: new Date(startedAt).toISOString(),
+            completedAt: new Date().toISOString(),
+            durationMs: Date.now() - startedAt,
+            conversationId: conversationIdEarly,
+          }).catch(() => undefined);
+          void notifyManagerOnException('gate-deny', {
+            actor: live.actor,
+            actorRoles: live.roles,
+            workerId: classification.worker.id,
+            workflowId: `interactive:${classification.worker.id}`,
+            toolName: `interactive:${classification.worker.id}`,
+            actionKey: pack?.id || `interactive-${Date.now()}`,
+            actionRisk: interactiveRisk,
+            gateDecision: gate.decision,
+            requiredRoles: gate.rolePolicy?.requiredRoles,
+            detail: `${gate.reason}${pack ? ` (evidence=${pack.id})` : ''}`,
+          }).catch(() => undefined);
+          return;
+        }
+
         const result = await runWorker(classification.worker, enrichedPrompt, ctx);
         addMessage(userId, 'assistant', result.output);
         stopTypingLoop();
@@ -444,6 +525,28 @@ export class ItsmAgent extends AgentApplication<TurnState> {
 
         const durationMs = Date.now() - startedAt;
         logOutcome(conversationId, classification.worker.id, result.output, durationMs);
+
+        // Pattern 3 — evidence pack for the executed interactive turn (best-effort).
+        void recordEvidence({
+          actor: live.actor,
+          actorRoles: live.roles,
+          roleSource: live.source,
+          workerId: classification.worker.id,
+          workerName: classification.worker.name,
+          requestedAction: text.substring(0, 200),
+          toolName: `interactive:${classification.worker.id}`,
+          actionRisk: interactiveRisk,
+          mode: gate.decision === 'REQUIRE_HITL' ? 'propose' : 'auto',
+          gateDecision: gate.decision,
+          gateReason: gate.reason,
+          policyVersion: POLICY_VERSION,
+          verifierOutcome: 'success',
+          result: { ok: true, summary: (result.output || '').substring(0, 240) },
+          startedAt: new Date(startedAt).toISOString(),
+          completedAt: new Date().toISOString(),
+          durationMs,
+          conversationId,
+        }).catch(() => undefined);
 
         await logAuditEntry({
           workerId: classification.worker.id,

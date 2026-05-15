@@ -238,6 +238,60 @@ export async function verifyWorkflowOutcome(
       .then(({ broadcastOutcomeFailure }) => broadcastOutcomeFailure(record, ctx.signal))
       .catch((err) => console.warn('[OutcomeVerifier] broadcast failed:', (err as Error)?.message));
   }
+  // Phase 4 — proactive engagement on outcome failure. Best-effort fire-and-forget.
+  if (record.label === 'failure') {
+    void import('./proactive-engagement')
+      .then(({ engageOperator }) =>
+        engageOperator('outcome-failure', {
+          workerId: ctx.workflowId,
+          signalId: ctx.signal?.id || ctx.signal?.type,
+          toolName: ctx.workflowId,
+          outcomeLabel: record.label,
+          ctxKey: ctx.executionId,
+          summary: `⚠️ Outcome failure on workflow **${ctx.workflowId}** (${ctx.executionId}). ${record.notes || ''}`.trim(),
+        }).catch(() => {}),
+      )
+      .catch(() => {});
+  }
+
+  // Phase 5.E — exception report for high-risk failures/partials. Only fires
+  // when the underlying workflow is high-risk (worker blast radius ≥ 0.66 OR
+  // the originating signal is high/critical severity). Distinct from the
+  // Phase 4 engagement above: this writes to the exception-reporter dedupe
+  // pipeline and surfaces in the manager status digest.
+  if (record.label === 'failure' || record.label === 'partial') {
+    void (async () => {
+      try {
+        const [{ notifyManagerOnException }, { workerMap }] = await Promise.all([
+          import('./exception-reporter'),
+          import('./worker-definitions'),
+        ]);
+        const worker = workerMap.get(ctx.workflowId);
+        const blast = worker?.blastRadius ?? 0;
+        const severity = ctx.signal?.severity?.toLowerCase?.() || '';
+        const isHighRisk = blast >= 0.66 || severity === 'high' || severity === 'critical';
+        if (!isHighRisk) return;
+        await notifyManagerOnException(
+          record.label === 'failure' ? 'retry-exhaustion' : 'high-risk-hitl',
+          {
+            actor: 'system:outcome-verifier',
+            workerId: worker?.id,
+            workflowId: ctx.workflowId,
+            toolName: ctx.workflowId,
+            actionKey: ctx.executionId,
+            executionId: ctx.executionId,
+            signalId: ctx.signal?.id || ctx.signal?.type,
+            actionRisk: 'high',
+            detail: `${record.label} on ${ctx.workflowId}${
+              ctx.signal ? ` (signal ${ctx.signal.type}/${ctx.signal.severity})` : ''
+            }: ${record.notes || 'no notes'}`,
+          },
+        );
+      } catch {
+        // best-effort
+      }
+    })();
+  }
   console.log(
     `[OutcomeVerifier] ${ctx.workflowId} ${ctx.executionId} → ${record.label}${
       record.rolledBack ? ' (rolled back)' : ''
