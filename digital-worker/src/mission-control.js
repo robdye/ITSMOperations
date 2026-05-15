@@ -1345,81 +1345,217 @@ async function postJson(path, body) {
   return r.json();
 }
 
-const btnStorm = byId('cc-btn-storm');
-if (btnStorm) {
-  btnStorm.addEventListener('click', async () => {
-    btnStorm.disabled = true;
-    const orig = btnStorm.textContent;
-    btnStorm.textContent = 'ÔÅ│ injectingÔÇª';
+// ── Phase 1 demo control triplet — Inject scenario / Call me about this / Reset demo data ──
+// State: the most recent demo run (server-tracked + UI-cached so a reload
+// recovers the active scenario from /api/demo/active).
+const demoState = { activeRun: null, scenarios: [], scenariosLoaded: false };
+
+function demoSecret() {
+  const el = byId('cc-demo-secret');
+  return el && el.value ? el.value.trim() : '';
+}
+
+async function postSecret(path, body) {
+  const secret = demoSecret();
+  const headers = { 'Content-Type': 'application/json' };
+  if (secret) headers['x-scheduled-secret'] = secret;
+  const r = await fetch(`${BASE}${path}`, {
+    method: 'POST', headers, body: JSON.stringify(body || {}),
+  });
+  const text = await r.text();
+  let parsed;
+  try { parsed = text ? JSON.parse(text) : {}; } catch { parsed = { raw: text }; }
+  if (!r.ok) {
+    const msg = parsed && parsed.error ? parsed.error : `${r.status} ${r.statusText}`;
+    const err = new Error(msg);
+    err.body = parsed;
+    err.status = r.status;
+    throw err;
+  }
+  return parsed;
+}
+
+function updateActivePill() {
+  const pill = byId('cc-active-pill');
+  const callBtn = byId('cc-btn-callme');
+  if (!pill) return;
+  if (demoState.activeRun) {
+    pill.style.display = 'inline-block';
+    pill.textContent = `🎬 ${demoState.activeRun.scenarioId}`;
+    pill.title = `Active demo: ${demoState.activeRun.scenarioId}\nrunId: ${demoState.activeRun.demoRunId}\n${demoState.activeRun.description || ''}`;
+    if (callBtn) {
+      callBtn.disabled = false;
+      callBtn.style.opacity = '1';
+    }
+  } else {
+    pill.style.display = 'none';
+    pill.textContent = '';
+    if (callBtn) {
+      callBtn.disabled = true;
+      callBtn.style.opacity = '0.5';
+    }
+  }
+}
+
+async function hydrateScenarios() {
+  try {
+    const r = await fetch(`${BASE}/api/demo/scenarios`);
+    const j = await r.json();
+    demoState.scenarios = Array.isArray(j.scenarios) ? j.scenarios : [];
+    demoState.scenariosLoaded = true;
+    const picker = byId('cc-scenario-picker');
+    if (picker) {
+      const prior = picker.value;
+      picker.innerHTML = '<option value="">— pick scenario —</option>' +
+        demoState.scenarios.map(s =>
+          `<option value="${s.id}" title="${(s.description || '').replace(/"/g, '&quot;')}">${s.id} (${s.stepCount}st)</option>`
+        ).join('');
+      if (prior) picker.value = prior;
+    }
+  } catch (err) {
+    addFeed(`🎬 scenarios load failed — ${err.message}`, 'demo');
+  }
+}
+
+async function hydrateActiveDemo() {
+  try {
+    const r = await fetch(`${BASE}/api/demo/active`);
+    const j = await r.json();
+    const runs = Array.isArray(j.runs) ? j.runs : [];
+    demoState.activeRun = runs.length ? runs[0] : null;
+    updateActivePill();
+  } catch {
+    /* ignore */
+  }
+}
+
+// Hydrate on boot.
+hydrateScenarios();
+hydrateActiveDemo();
+setInterval(() => { hydrateActiveDemo().catch(() => {}); }, 15000);
+
+// ── 🎬 Inject scenario ──
+const btnInject = byId('cc-btn-inject');
+if (btnInject) {
+  btnInject.addEventListener('click', async () => {
+    const picker = byId('cc-scenario-picker');
+    const scenarioId = picker ? picker.value : '';
+    if (!scenarioId) {
+      addFeed('🎬 pick a scenario first', 'demo');
+      return;
+    }
+    if (!demoSecret()) {
+      addFeed('🎬 SCHEDULED_SECRET required (paste into the box next to the buttons)', 'demo');
+      return;
+    }
+    btnInject.disabled = true;
+    const orig = btnInject.textContent;
+    btnInject.textContent = '⏳ injecting…';
     try {
-      // live:true -> every signal carries forceMode='auto', so trigger-policy
-      // bypasses confidence thresholds and the workflows run for real (not
-      // dry-run). The endpoint also posts an announcement to ITSM-Alerts.
-      const out = await postJson('/api/demo/scripted-storm', { live: true });
-      const annDelivered = (out.announcement && out.announcement.delivered) || [];
-      const channels = annDelivered.length ? ` ┬À announce ÔåÆ ${annDelivered.join(' + ')}` : '';
-      addFeed(`­ƒÄ¼ demo storm injected (LIVE) ÔÇö ${out.signalsInjected || 0} signals${channels}`, 'demo');
+      const out = await postSecret('/api/demo', { action: 'run', scenario: scenarioId });
+      const report = out.report || {};
+      const passed = report.passed === true;
+      const stepCount = Array.isArray(report.stepResults) ? report.stepResults.length : 0;
+      demoState.activeRun = out.activeRun || {
+        demoRunId: report.demoRunId,
+        scenarioId: report.scenarioId,
+        description: '',
+        startedAt: new Date().toISOString(),
+      };
+      updateActivePill();
+      addFeed(`🎬 scenario ${scenarioId} ${passed ? 'PASSED' : 'partial'} — ${stepCount} steps · runId ${(report.demoRunId || '').slice(-8)}`, 'demo');
     } catch (err) {
-      addFeed(`­ƒÄ¼ demo storm failed ÔÇö ${err.message}`, 'demo');
+      addFeed(`🎬 inject failed — ${err.message}`, 'demo');
     } finally {
-      btnStorm.disabled = false;
-      btnStorm.textContent = orig;
+      btnInject.disabled = false;
+      btnInject.textContent = orig;
     }
   });
 }
 
-const btnPageMe = byId('cc-btn-pageme');
-if (btnPageMe) {
-  btnPageMe.addEventListener('click', async () => {
-    btnPageMe.disabled = true;
-    const orig = btnPageMe.textContent;
-    btnPageMe.textContent = 'ÔÅ│ pagingÔÇª';
+// ── 📞 Call me about this scenario ──
+const btnCallMe = byId('cc-btn-callme');
+if (btnCallMe) {
+  btnCallMe.addEventListener('click', async () => {
+    if (!demoState.activeRun) {
+      addFeed('📞 no active scenario — inject one first', 'alex');
+      return;
+    }
+    btnCallMe.disabled = true;
+    const orig = btnCallMe.textContent;
+    btnCallMe.textContent = '⏳ paging…';
     try {
-      const reason = prompt('Reason for the page?', 'Alex needs you on the bridge ÔÇö major incident in progress');
-      if (reason === null) { btnPageMe.disabled = false; btnPageMe.textContent = orig; return; }
+      const run = demoState.activeRun;
+      const reason = `Alex needs you on the bridge for scenario ${run.scenarioId}${run.description ? ' — ' + run.description : ''}`;
       // notify:false -> call-only mode. Endpoint will ONLY ring the user's
-      // Teams client and surface ACS failures verbatim (HTTP 502) instead
-      // of falling back to email/Teams chat.
+      // Teams client and surface ACS failures verbatim (HTTP 502).
       let out;
       try {
-        out = await postJson('/api/voice/page-me', { reason, notify: false });
+        out = await postJson('/api/voice/page-me', {
+          reason, notify: false,
+          scenarioContext: { scenarioId: run.scenarioId, demoRunId: run.demoRunId },
+        });
       } catch (httpErr) {
-        // postJson throws on non-2xx ÔÇö recover the body for diagnostics so
-        // the operator sees the real ACS error (e.g. tenant federation 403).
         const r = await fetch('/api/voice/page-me', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reason, notify: false }),
+          body: JSON.stringify({ reason, notify: false, scenarioContext: { scenarioId: run.scenarioId, demoRunId: run.demoRunId } }),
         });
         out = await r.json().catch(() => ({ status: 'failed', errors: { http: r.status + ' ' + r.statusText } }));
       }
-
       if (out.status === 'calling') {
-        addFeed(`\ud83d\udcde Alex is calling you on Teams now (id ${(out.acsCallConnectionId || '').slice(0,8)})`, 'alex');
+        addFeed(`📞 Alex is calling you about ${run.scenarioId} (id ${(out.acsCallConnectionId || '').slice(0, 8)})`, 'alex');
       } else if (out.status === 'failed') {
         const acsErr = (out.errors && out.errors.acsCall) || 'unknown ACS error';
-        addFeed(`\ud83d\udcde page failed \u2014 ${acsErr}`, 'alex');
-        if (out.hint) addFeed(`\ud83d\udca1 ${out.hint}`, 'alex');
-        if (out.teamsCallUrl) {
-          addFeed(`\ud83d\udcde fallback: opening Teams click-to-call`, 'alex');
-          window.open(out.teamsCallUrl, '_blank', 'noopener');
-        }
-      } else if (out.status === 'sent') {
-        const channels = (out.delivered || []).join(' + ') || 'voice-link';
-        addFeed(`\ud83d\udcde Alex paged you via ${channels}`, 'alex');
-      } else if (out.status === 'call-only' && out.teamsCallUrl) {
-        addFeed(`\ud83d\udcde Opening Teams to call you`, 'alex');
-        window.open(out.teamsCallUrl, '_blank', 'noopener');
-      } else if (out.status === 'voice-only' && out.voiceUrl) {
-        addFeed(`\ud83d\udcde no Teams/email delivery available \u2014 opening voice line`, 'alex');
-        window.open(out.voiceUrl, '_blank', 'noopener');
+        addFeed(`📞 call failed — ${acsErr}`, 'alex');
+        if (out.hint) addFeed(`💡 ${out.hint}`, 'alex');
+        if (out.teamsCallUrl) window.open(out.teamsCallUrl, '_blank', 'noopener');
       } else {
-        addFeed(`\ud83d\udcde page status: ${out.status || 'unknown'}`, 'alex');
+        addFeed(`📞 page status: ${out.status || 'unknown'}`, 'alex');
       }
     } catch (err) {
-      addFeed(`­ƒô× page failed ÔÇö ${err.message}`, 'alex');
+      addFeed(`📞 call failed — ${err.message}`, 'alex');
     } finally {
-      btnPageMe.disabled = false;
-      btnPageMe.textContent = orig;
+      btnCallMe.disabled = !demoState.activeRun;
+      btnCallMe.textContent = orig;
+    }
+  });
+}
+
+// ── 🧹 Reset demo data ──
+const btnCleanup = byId('cc-btn-cleanup');
+if (btnCleanup) {
+  btnCleanup.addEventListener('click', async () => {
+    if (!demoSecret()) {
+      addFeed('🧹 SCHEDULED_SECRET required (paste into the box next to the buttons)', 'demo');
+      return;
+    }
+    const scope = demoState.activeRun
+      ? `the active scenario (${demoState.activeRun.scenarioId})`
+      : 'ALL demo-tagged records on this ServiceNow';
+    if (!confirm(`Reset demo data — will remove records for ${scope}. Continue?`)) return;
+    btnCleanup.disabled = true;
+    const orig = btnCleanup.textContent;
+    btnCleanup.textContent = '⏳ cleaning…';
+    try {
+      const body = demoState.activeRun ? { demoRunId: demoState.activeRun.demoRunId } : {};
+      const out = await postSecret('/api/demo/cleanup', body);
+      const result = out.result || {};
+      const counts = result.perTable || {};
+      const summary = Object.entries(counts)
+        .filter(([, v]) => v && v.cleaned > 0)
+        .map(([t, v]) => `${t}:${v.cleaned}`)
+        .join(' · ') || 'nothing to clean';
+      addFeed(`🧹 cleanup (${result.mode}) — ${summary}`, 'demo');
+      demoState.activeRun = null;
+      updateActivePill();
+      if (Array.isArray(result.errors) && result.errors.length) {
+        addFeed(`🧹 ${result.errors.length} cleanup error(s) — first: ${result.errors[0]}`, 'demo');
+      }
+    } catch (err) {
+      addFeed(`🧹 cleanup failed — ${err.message}`, 'demo');
+    } finally {
+      btnCleanup.disabled = false;
+      btnCleanup.textContent = orig;
     }
   });
 }
@@ -1636,3 +1772,100 @@ const btnHandoverGen = byId('op-handover-generate');
 if (btnHandoverGen) btnHandoverGen.addEventListener('click', () => triggerBriefing('handover'));
 const btnMidshiftGen = byId('op-midshift-generate');
 if (btnMidshiftGen) btnMidshiftGen.addEventListener('click', () => triggerBriefing('midshift'));
+
+// ── Phase 3 — Mission Kanban hydration ─────────────────────────────────
+// Polls /api/kanban every 10s and renders 5 lanes. EOD button POSTs to
+// /api/scheduled/end-of-day; secret read from the existing Goals panel
+// secret input (`goal-secret`) so the operator only types it once.
+function kbEscape(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function kbSeverityColor(sev) {
+  if (sev === 'critical') return '#dc2626';
+  if (sev === 'high') return '#ea580c';
+  if (sev === 'medium') return '#ca8a04';
+  if (sev === 'low') return '#16a34a';
+  return '#475569';
+}
+
+function kbRenderCard(c) {
+  const dot = `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${kbSeverityColor(c.severity)};margin-right:6px;vertical-align:middle"></span>`;
+  const sub = c.subtitle
+    ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">${kbEscape(c.subtitle)}</div>`
+    : '';
+  const meta = c.kind
+    ? `<div style="font-size:10px;color:var(--text-dim);margin-top:2px;text-transform:uppercase;letter-spacing:0.4px">${kbEscape(c.kind.replace(/-/g, ' '))}</div>`
+    : '';
+  return `<div class="kb-card" style="padding:6px 8px;margin-bottom:6px;background:var(--bg-darker);border:1px solid var(--border);border-radius:4px;font-size:12px;cursor:default">
+    <div style="font-weight:600;color:var(--text)">${dot}${kbEscape(c.title)}</div>${sub}${meta}
+  </div>`;
+}
+
+async function hydrateKanban() {
+  try {
+    const r = await fetch(`${BASE}/api/kanban`);
+    if (!r.ok) return;
+    const data = await r.json();
+    const updEl = byId('kb-updated');
+    if (updEl) {
+      try {
+        updEl.textContent = new Date(data.generatedAt).toLocaleTimeString();
+      } catch { updEl.textContent = data.generatedAt || '—'; }
+    }
+    const tzEl = byId('kb-tz');
+    if (tzEl) tzEl.textContent = data.timeZone || '';
+    const lanes = Array.isArray(data.lanes) ? data.lanes : [];
+    for (const lane of lanes) {
+      const cnt = byId(`kb-count-${lane.id}`);
+      const cards = byId(`kb-cards-${lane.id}`);
+      if (cnt) cnt.textContent = String(lane.count || 0);
+      if (!cards) continue;
+      if (!lane.cards || lane.cards.length === 0) {
+        cards.innerHTML = '<div class="empty-state" style="padding:8px"><div class="empty-text" style="font-size:11px">empty</div></div>';
+      } else {
+        cards.innerHTML = lane.cards.map(kbRenderCard).join('');
+      }
+    }
+  } catch { /* ignore */ }
+}
+
+// EOD button — uses the same secret input the Goals panel uses.
+const kbEodBtn = byId('kb-eod-btn');
+if (kbEodBtn) {
+  kbEodBtn.addEventListener('click', async () => {
+    const secretEl = byId('goal-secret');
+    const secret = secretEl ? String(secretEl.value || '').trim() : '';
+    if (!secret) {
+      addFeed('🌇 EOD report — paste SCHEDULED_SECRET in the Goals panel input first', 'system');
+      return;
+    }
+    kbEodBtn.disabled = true;
+    const orig = kbEodBtn.textContent;
+    kbEodBtn.textContent = 'Sending…';
+    try {
+      const r = await fetch(`${BASE}/api/scheduled/end-of-day`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-scheduled-secret': secret },
+        body: JSON.stringify({}),
+      });
+      const j = await r.json();
+      if (!r.ok) {
+        addFeed(`🌇 EOD report failed (${r.status}): ${j.error || 'unknown'}`, 'system');
+      } else {
+        const channels = (j.delivered || []).join(', ') || 'none';
+        addFeed(`🌇 EOD report sent — channels: ${channels}`, 'system');
+      }
+    } catch (err) {
+      addFeed(`🌇 EOD report error — ${err.message}`, 'system');
+    } finally {
+      kbEodBtn.textContent = orig;
+      kbEodBtn.disabled = false;
+    }
+  });
+}
+
+hydrateKanban();
+setInterval(() => { hydrateKanban().catch(() => {}); }, 10000);

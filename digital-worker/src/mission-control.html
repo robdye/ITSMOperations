@@ -35,10 +35,21 @@
         <span>— what ITSM Operations is doing right now</span>
       </div>
       <div class="topbar-right">
-        <button id="cc-btn-storm" title="Inject a scripted P1 storm to trigger the major-incident workflow"
-          style="background:linear-gradient(135deg,#dc2626,#7f1d1d);border:none;color:#fff;font-size:11px;font-weight:600;padding:6px 10px;border-radius:6px;cursor:pointer;letter-spacing:0.3px">🎬 Run demo storm</button>
-        <button id="cc-btn-pageme" title="Make Alex page you (Teams + email + voice link)"
-          style="background:linear-gradient(135deg,#2563eb,#1d4ed8);border:none;color:#fff;font-size:11px;font-weight:600;padding:6px 10px;border-radius:6px;cursor:pointer;letter-spacing:0.3px">📞 Page me</button>
+        <!-- Phase 1 demo control triplet — populated from /api/demo/scenarios on load. -->
+        <select id="cc-scenario-picker" title="Pick a demo scenario"
+          style="background:var(--bg-darker);border:1px solid var(--border);color:var(--text);font-size:11px;padding:5px 8px;border-radius:6px;max-width:200px">
+          <option value="">— pick scenario —</option>
+        </select>
+        <button id="cc-btn-inject" title="Inject the selected demo scenario into ServiceNow (records tagged with u_demo_run for safe cleanup)"
+          style="background:linear-gradient(135deg,#dc2626,#7f1d1d);border:none;color:#fff;font-size:11px;font-weight:600;padding:6px 10px;border-radius:6px;cursor:pointer;letter-spacing:0.3px">🎬 Inject scenario</button>
+        <button id="cc-btn-callme" title="Have Alex call you on Teams about the active scenario" disabled
+          style="background:linear-gradient(135deg,#2563eb,#1d4ed8);border:none;color:#fff;font-size:11px;font-weight:600;padding:6px 10px;border-radius:6px;cursor:pointer;letter-spacing:0.3px;opacity:0.5">📞 Call me about this</button>
+        <button id="cc-btn-cleanup" title="Delete (or close) every u_demo_run-tagged record on ServiceNow"
+          style="background:linear-gradient(135deg,#475569,#1e293b);border:none;color:#fff;font-size:11px;font-weight:600;padding:6px 10px;border-radius:6px;cursor:pointer;letter-spacing:0.3px">🧹 Reset demo data</button>
+        <input id="cc-demo-secret" type="password" placeholder="SCHEDULED_SECRET"
+          title="Required for inject/cleanup/call (stored only in this tab)"
+          style="background:var(--bg-darker);border:1px solid var(--border);color:var(--text);font-size:11px;padding:5px 8px;border-radius:6px;width:140px"/>
+        <span id="cc-active-pill" style="display:none;font-size:11px;padding:3px 8px;border-radius:10px;background:rgba(220,38,38,0.15);color:#fca5a5;border:1px solid rgba(220,38,38,0.4)" title="Active demo scenario"></span>
         <span style="font-size:12px;color:var(--text-dim)">uptime <span id="topbar-uptime" style="color:var(--text)">—</span></span>
         <span class="health-badge healthy" id="health-badge">Healthy</span>
         <div class="live-dot"></div>
@@ -76,6 +87,42 @@
             <div class="panel" style="flex:0 0 auto;max-height:220px;overflow-y:auto;"><div class="panel-title">⚙ Worker Fleet</div><div id="cc-workers-compact"></div></div>
             <div class="panel" style="flex:0 0 auto;max-height:180px;overflow-y:auto;"><div class="panel-title">⏱ Next Scheduled</div><div id="cc-routines-next"></div></div>
             <div class="panel" style="flex:1;overflow-y:auto;"><div class="panel-title">✓ Approval Queue</div><div id="cc-approvals"><div class="empty-state" style="padding:16px"><div class="empty-text">No pending approvals</div></div></div></div>
+          </div>
+        </div>
+        <!-- Phase 3 — Mission Control Kanban: 5-lane view over signals/workflows/approvals/outcomes/audit. Polls /api/kanban every 10s. -->
+        <div class="panel" style="margin-top:12px;">
+          <div class="panel-title">
+            🗂 Mission Kanban — Alex's day at a glance
+            <span style="font-size:11px;color:var(--text-muted);font-weight:400;margin-left:10px">
+              Updated <span id="kb-updated">—</span>
+              · <span id="kb-tz">—</span>
+            </span>
+            <button id="kb-eod-btn" title="Send the End-of-Day report now (uses SCHEDULED_SECRET)"
+              style="float:right;background:var(--bg-darker);border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:4px;font-size:11px;cursor:pointer">
+              Send EOD report
+            </button>
+          </div>
+          <div id="kb-lanes" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;padding:10px">
+            <div class="kb-lane" data-lane="queue">
+              <div class="kb-lane-head" style="border-color:#94a3b8">Queue <span class="kb-count" id="kb-count-queue">0</span></div>
+              <div class="kb-cards" id="kb-cards-queue"><div class="empty-state" style="padding:8px"><div class="empty-text">—</div></div></div>
+            </div>
+            <div class="kb-lane" data-lane="in-cycle">
+              <div class="kb-lane-head" style="border-color:#2563eb">In cycle <span class="kb-count" id="kb-count-in-cycle">0</span></div>
+              <div class="kb-cards" id="kb-cards-in-cycle"><div class="empty-state" style="padding:8px"><div class="empty-text">—</div></div></div>
+            </div>
+            <div class="kb-lane" data-lane="waiting">
+              <div class="kb-lane-head" style="border-color:#ca8a04">Waiting <span class="kb-count" id="kb-count-waiting">0</span></div>
+              <div class="kb-cards" id="kb-cards-waiting"><div class="empty-state" style="padding:8px"><div class="empty-text">—</div></div></div>
+            </div>
+            <div class="kb-lane" data-lane="proof">
+              <div class="kb-lane-head" style="border-color:#dc2626">Proof / review <span class="kb-count" id="kb-count-proof">0</span></div>
+              <div class="kb-cards" id="kb-cards-proof"><div class="empty-state" style="padding:8px"><div class="empty-text">—</div></div></div>
+            </div>
+            <div class="kb-lane" data-lane="done-today">
+              <div class="kb-lane-head" style="border-color:#16a34a">Done today <span class="kb-count" id="kb-count-done-today">0</span></div>
+              <div class="kb-cards" id="kb-cards-done-today"><div class="empty-state" style="padding:8px"><div class="empty-text">—</div></div></div>
+            </div>
           </div>
         </div>
       </div>
