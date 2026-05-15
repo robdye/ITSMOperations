@@ -669,7 +669,7 @@ server.post('/api/demo/cleanup', async (req: Request, res: Response) => {
   }
 });
 
-// ── Autonomous workday (Phase 2 — Morgan-shaped autonomy loop) ─────────
+// ── Autonomous workday (Phase 2 — autonomous-operator loop) ─────────────
 // State + on-demand cycle trigger + recent task buffer. All three are
 // safe to call without auth EXCEPT the cycle trigger, which mutates SNOW.
 server.get('/api/workday/state', (_req: Request, res: Response) => {
@@ -1598,7 +1598,7 @@ httpServer.listen(port, host, async () => {
   registerDefaultSubscriptions();
   console.log('  Signal-router default subscriptions registered');
 
-  // Phase 2 — Morgan-shaped autonomous workday. Off by default; enable with
+  // Phase 2 — autonomous workday loop. Off by default; enable with
   // AUTONOMOUS_WORKDAY_ENABLED=true. Respects DISABLE_CRON so the in-process
   // timer never collides with Durable Functions-driven deployments.
   if (!cronDisabled) {

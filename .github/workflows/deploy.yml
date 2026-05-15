@@ -254,14 +254,20 @@ jobs:
       - name: Build Functions
         working-directory: functions
         run: |
-          npm ci
+          npm ci --include=dev
           npm run build
+          # Flex Consumption + v4 programming model: the runtime needs
+          # node_modules in the package (no remote Oryx build). Prune dev
+          # deps so the zip only ships production runtime dependencies.
+          npm prune --omit=dev
 
       - name: Create deployment package
         working-directory: functions
         run: |
+          # Include node_modules so @azure/functions, durable-functions etc.
+          # are resolvable at host startup. Exclude only sources/tests/git.
           zip -r ../deploy-functions.zip . \
-            -x "node_modules/*" "*.git*" ".env*" "test/*" "tests/*"
+            -x "*.git*" ".env*" "test/*" "tests/*" "src/*" "tsconfig.json" "vitest.config*"
 
       - name: Validate Function App target
         run: |

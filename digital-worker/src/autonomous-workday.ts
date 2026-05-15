@@ -1,6 +1,6 @@
 // ITSM Operations — Autonomous Workday Loop
 //
-// Phase 2 of the Morgan-shaped autonomy plan. While the operating window is
+// Phase 2 of the autonomous-operator pattern. While the operating window is
 // open (default 09:00–17:00 in the configured timezone), Alex wakes every
 // `AUTONOMOUS_WORKDAY_INTERVAL_MINUTES` (default 25) and runs ONE cycle:
 //
