@@ -23,8 +23,7 @@ import { startHandoverScheduler, stopHandoverScheduler, generateHandover, genera
 import { startIncidentMonitor, stopIncidentMonitor, runIncidentPoll } from './incident-monitor';
 import { getAuditSummary, getRecentAuditEntries } from './audit-trail';
 import { getMemoryStoreSummary } from './memory-store';
-import { startScheduledRoutines, getRoutineStatus, stopScheduledRoutines, executeRoutine } from './scheduled-routines';
-import { getQueueSummary } from './approval-queue';
+import { startScheduledRoutines, getRoutineStatus, stopScheduledRoutines, executeRoutine } from './scheduled-routines';import { getQueueSummary } from './approval-queue';
 import { attachVoiceWebSocket } from './voice/voiceProxy';
 import {
   attachAcsMediaWebSocket,
@@ -68,7 +67,9 @@ import { startCaseReminderLoop, getReminderKpi } from './case-reminders';
 import { detectCorrelations, getCorrelationKpi } from './case-correlation';
 import { getReviewerKpi } from './reviewer-worker';
 import { startMetaMonitor, getMetaMonitorKpi, getRecentMetaAlerts } from './meta-monitor';
-import { DemoDirector, DemoTargetNotAllowedError } from './demo/demo-director';
+import { DemoDirector, DemoTargetNotAllowedError, type DemoCleanupMode } from './demo/demo-director';
+import { autonomousWorkday, startAutonomousWorkday, stopAutonomousWorkday } from './autonomous-workday';
+import { getKanbanSnapshot, getEndOfDaySummary } from './itsm-kanban';
 import { sendEmail as sendGraphMail } from './graph-mail';
 import { autonomousActions } from './autonomous-actions';
 import { startForesight, stopForesight, getRecentForecasts, runForesightOnce, backfillForesight } from './foresight';
@@ -285,6 +286,45 @@ server.post('/api/scheduled', async (req: Request, res: Response) => {
         return String(await client.invokeAgentWithScope(prompt));
       });
       res.status(200).json({ status: 'red_team_complete', tenantId, result, timestamp: new Date().toISOString() });
+    } else if (routineId === 'end-of-day') {
+      // Phase 3 — End-of-Day Kanban report. Computed in-process from the
+      // existing in-memory stores (no LLM call). Durable Functions should
+      // schedule this at 17:00 local for the configured time zone.
+      console.log('End-of-Day report triggered via /api/scheduled');
+      const summary = getEndOfDaySummary();
+      // Reuse the dedicated endpoint logic by issuing an in-process call —
+      // simpler is to inline the same delivery path here.
+      const teamsId = process.env.ITSM_TEAM_ID || '';
+      const channelId = process.env.ITSM_ALERTS_CHANNEL_ID || process.env.ITSM_CHANNEL_ID || '';
+      const ownerEmail = process.env.MANAGER_EMAIL || process.env.OWNER_EMAIL || '';
+      const delivered: string[] = [];
+      const errors: Record<string, string> = {};
+      const text = `End-of-Day — ${summary.totals['done-today']} done, ${summary.totals['proof']} need review, ${summary.totals['waiting']} awaiting approval (${summary.timeZone})`;
+      if (teamsId && channelId) {
+        try {
+          const r = await autonomousActions.postToTeamsChannel(teamsId, channelId, text);
+          if (r.success) delivered.push('teams');
+          else errors.teams = r.error || 'unknown';
+        } catch (err) {
+          errors.teams = (err as Error).message;
+        }
+      }
+      if (ownerEmail) {
+        try {
+          const r = await sendGraphMail({
+            to: [ownerEmail],
+            subject: `🌇 End-of-Day — Alex`,
+            body: text,
+            isHtml: false,
+            importance: 'normal',
+          });
+          if (r.sent) delivered.push('email');
+          else errors.email = r.error || 'send failed';
+        } catch (err) {
+          errors.email = (err as Error).message;
+        }
+      }
+      res.status(200).json({ status: 'end_of_day_complete', summary, delivered, errors, timestamp: new Date().toISOString() });
     } else if (routineId) {
       console.log(`Scheduled routine triggered via /api/scheduled: ${routineId}`);
       const result = await executeRoutine(routineId);
@@ -466,6 +506,66 @@ server.get('/api/decisions', (req: Request, res: Response) => {
 // ── Demo Director surface (Phase 3) ──
 // Tenant-flagged, secret-protected. Refuses to run unless the tenant profile
 // has allowDemoDirector = true and the SNOW host is on the allow-list.
+//
+// Active-runs tracking — `activeDemoRuns` holds the most recent demo runs
+// (newest first, capped) so the Mission Control command-center can:
+//   • light an "Active scenario" pill on inject,
+//   • feed scenario context into the page-me button,
+//   • pre-select the last runId in the cleanup button.
+interface ActiveDemoRun {
+  demoRunId: string;
+  scenarioId: string;
+  description: string;
+  startedAt: string;
+  passed?: boolean;
+  completedAt?: string;
+}
+const ACTIVE_DEMO_RUNS_LIMIT = 20;
+const activeDemoRuns: ActiveDemoRun[] = [];
+
+function recordActiveDemoRun(entry: ActiveDemoRun): void {
+  activeDemoRuns.unshift(entry);
+  while (activeDemoRuns.length > ACTIVE_DEMO_RUNS_LIMIT) activeDemoRuns.pop();
+}
+function markActiveDemoRunComplete(demoRunId: string, passed: boolean): void {
+  const run = activeDemoRuns.find((r) => r.demoRunId === demoRunId);
+  if (run) {
+    run.passed = passed;
+    run.completedAt = new Date().toISOString();
+  }
+}
+function removeActiveDemoRun(demoRunId: string): void {
+  const idx = activeDemoRuns.findIndex((r) => r.demoRunId === demoRunId);
+  if (idx >= 0) activeDemoRuns.splice(idx, 1);
+}
+
+// Public read — Mission Control picker pulls scenario metadata from here.
+// No mutation, no SNOW write; safe to expose without SCHEDULED_SECRET so the
+// UI can populate the dropdown on initial load.
+server.get('/api/demo/scenarios', async (_req: Request, res: Response) => {
+  const tenantId = process.env.TENANT_ID || 'default';
+  const instanceUrl = process.env.SNOW_INSTANCE_URL || '';
+  const authHeader = process.env.SNOW_AUTH_HEADER || '';
+  try {
+    const director = new DemoDirector({ tenantId, instanceUrl, authHeader });
+    res
+      .status(200)
+      .json({ scenarios: director.listDetailed(), profile: director.getProfile() });
+  } catch (err) {
+    if (err instanceof DemoTargetNotAllowedError) {
+      res.status(403).json({ error: err.message, scenarios: [] });
+      return;
+    }
+    res.status(500).json({ error: (err as Error).message, scenarios: [] });
+  }
+});
+
+// Public read — Mission Control polls this to know whether a demo is active
+// (drives the "Active scenario" pill and the page-me button enable state).
+server.get('/api/demo/active', (_req: Request, res: Response) => {
+  res.status(200).json({ runs: activeDemoRuns });
+});
+
 server.post('/api/demo', async (req: Request, res: Response) => {
   if (!signalsAuthOk(req)) {
     res.status(401).json({ error: 'Unauthorized' });
@@ -479,11 +579,11 @@ server.post('/api/demo', async (req: Request, res: Response) => {
   try {
     const director = new DemoDirector({ tenantId, instanceUrl, authHeader });
     if (action === 'list') {
-      res.status(200).json({ scenarios: director.list(), profile: director.getProfile() });
+      res.status(200).json({ scenarios: director.listDetailed(), profile: director.getProfile() });
       return;
     }
     if (action === 'status') {
-      res.status(200).json({ profile: director.getProfile() });
+      res.status(200).json({ profile: director.getProfile(), activeRuns: activeDemoRuns });
       return;
     }
     if (action === 'run') {
@@ -492,8 +592,28 @@ server.post('/api/demo', async (req: Request, res: Response) => {
         res.status(400).json({ error: 'scenario id required' });
         return;
       }
+      const meta = director.getScenarioMetadata(scenario);
+      if (!meta) {
+        res.status(404).json({ error: `Scenario not found: ${scenario}` });
+        return;
+      }
       const report = await director.run(scenario);
-      res.status(200).json({ report });
+      // Track in activeDemoRuns so the page-me + cleanup buttons can find it.
+      recordActiveDemoRun({
+        demoRunId: report.demoRunId,
+        scenarioId: report.scenarioId,
+        description: meta.description,
+        startedAt: new Date().toISOString(),
+        passed: report.passed,
+        completedAt: new Date().toISOString(),
+      });
+      markActiveDemoRunComplete(report.demoRunId, report.passed);
+      // Phase 4 — proactive engagement: scenario started + completed.
+      void import('./proactive-engagement').then(({ engageOperator }) => {
+        engageOperator('scenario-started', { scenarioId: report.scenarioId, ctxKey: report.demoRunId, summary: `🎬 Picked up scenario **${report.scenarioId}** — ${meta.description}` }).catch(() => {});
+        engageOperator('scenario-complete', { scenarioId: report.scenarioId, ctxKey: report.demoRunId, summary: `✅ Scenario **${report.scenarioId}** ${report.passed ? 'passed' : 'completed (with issues)'}. Check the Mission Control Kanban.` }).catch(() => {});
+      }).catch(() => {});
+      res.status(200).json({ report, activeRun: activeDemoRuns[0] });
       return;
     }
     res.status(400).json({ error: `unknown action: ${action}` });
@@ -504,6 +624,169 @@ server.post('/api/demo', async (req: Request, res: Response) => {
     }
     res.status(500).json({ error: (err as Error).message });
   }
+});
+
+// ── Demo cleanup ──
+// Removes (or closes) every `u_demo_run`-tagged record on incident /
+// change_request / problem / em_event so every demo starts from a clean PDI.
+// SCHEDULED_SECRET-protected since it mutates live SNOW state.
+//
+// Body: { demoRunId?: string, mode?: 'delete' | 'close' }
+//   demoRunId omitted → cleans ALL demo-tagged records (every run).
+//   mode omitted     → uses env DEMO_CLEANUP_MODE (defaults to 'delete').
+server.post('/api/demo/cleanup', async (req: Request, res: Response) => {
+  if (!signalsAuthOk(req)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const tenantId = String(req.body?.tenantId || process.env.TENANT_ID || 'default');
+  const instanceUrl = String(req.body?.instanceUrl || process.env.SNOW_INSTANCE_URL || '');
+  const authHeader = String(req.body?.authHeader || process.env.SNOW_AUTH_HEADER || '');
+  const demoRunIdRaw = req.body?.demoRunId;
+  const demoRunId =
+    typeof demoRunIdRaw === 'string' && demoRunIdRaw.trim() ? demoRunIdRaw.trim() : undefined;
+
+  const envMode = String(process.env.DEMO_CLEANUP_MODE || 'delete').toLowerCase();
+  const requestedMode = String(req.body?.mode || envMode).toLowerCase();
+  const mode: DemoCleanupMode = requestedMode === 'close' ? 'close' : 'delete';
+
+  try {
+    const director = new DemoDirector({ tenantId, instanceUrl, authHeader });
+    const result = await director.cleanup({ demoRunId, mode });
+    // Trim active runs that were cleared (or all of them when no id given).
+    if (demoRunId) {
+      removeActiveDemoRun(demoRunId);
+    } else if (result.totalCleaned > 0) {
+      activeDemoRuns.length = 0;
+    }
+    res.status(200).json({ result, activeRuns: activeDemoRuns });
+  } catch (err) {
+    if (err instanceof DemoTargetNotAllowedError) {
+      res.status(403).json({ error: err.message });
+      return;
+    }
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// ── Autonomous workday (Phase 2 — Morgan-shaped autonomy loop) ─────────
+// State + on-demand cycle trigger + recent task buffer. All three are
+// safe to call without auth EXCEPT the cycle trigger, which mutates SNOW.
+server.get('/api/workday/state', (_req: Request, res: Response) => {
+  res.status(200).json(autonomousWorkday.getState());
+});
+
+server.get('/api/workday/tasks', (req: Request, res: Response) => {
+  const limit = Math.max(1, Math.min(50, parseInt(String(req.query.limit || '25'), 10) || 25));
+  res.status(200).json({ tasks: autonomousWorkday.getTasks(limit) });
+});
+
+server.post('/api/workday/run-cycle', async (req: Request, res: Response) => {
+  if (!signalsAuthOk(req)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const force = req.body?.force === true || String(req.query.force || '').toLowerCase() === 'true';
+  try {
+    const task = await autonomousWorkday.runCycle({ force });
+    res.status(200).json({ task, state: autonomousWorkday.getState() });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// ── Mission Control Kanban (Phase 3) ───────────────────────────────────
+// Derived 5-lane view over signals / workflows / approvals / outcomes /
+// audit. Pure read — safe to poll every 5–15s from the UI.
+server.get('/api/kanban', (_req: Request, res: Response) => {
+  try {
+    res.status(200).json(getKanbanSnapshot());
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// End-of-Day report — generates the Kanban summary, posts it to the ITSM
+// alerts Teams channel, and emails MANAGER_EMAIL. SCHEDULED_SECRET-protected
+// since it sends external notifications. Triggered by scheduled-routines at
+// 17:00 local or manually for demos.
+server.post('/api/scheduled/end-of-day', async (req: Request, res: Response) => {
+  if (!signalsAuthOk(req)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const summary = getEndOfDaySummary();
+  const teamsId = process.env.ITSM_TEAM_ID || '';
+  const channelId = process.env.ITSM_ALERTS_CHANNEL_ID || process.env.ITSM_CHANNEL_ID || '';
+  const ownerEmail = process.env.MANAGER_EMAIL || process.env.OWNER_EMAIL || '';
+  const delivered: string[] = [];
+  const errors: Record<string, string> = {};
+
+  const fmtCards = (cards: typeof summary.doneToday): string =>
+    cards.length === 0
+      ? '<div style="color:#64748b;font-style:italic">none</div>'
+      : cards
+          .map(
+            (c) =>
+              `<div style="margin:4px 0;padding:6px 8px;background:#f8fafc;border-left:3px solid #2563eb;border-radius:3px"><div style="font-weight:600;font-size:13px;color:#1e293b">${escapeHtml(c.title)}</div>${c.subtitle ? `<div style="font-size:12px;color:#475569">${escapeHtml(c.subtitle)}</div>` : ''}</div>`,
+          )
+          .join('');
+
+  const html = `<div style="font-family:Segoe UI,sans-serif">
+  <div style="font-size:18px;font-weight:600;color:#1e293b">🌇 End-of-Day report — Alex</div>
+  <div style="margin:6px 0 14px;font-size:12px;color:#64748b">${summary.generatedAt} (${summary.timeZone})</div>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+    <div><span style="font-size:24px;font-weight:700;color:#16a34a">${summary.totals['done-today']}</span><div style="font-size:11px;color:#64748b;text-transform:uppercase">Done today</div></div>
+    <div><span style="font-size:24px;font-weight:700;color:#2563eb">${summary.totals['in-cycle']}</span><div style="font-size:11px;color:#64748b;text-transform:uppercase">In cycle</div></div>
+    <div><span style="font-size:24px;font-weight:700;color:#ca8a04">${summary.totals['waiting']}</span><div style="font-size:11px;color:#64748b;text-transform:uppercase">Waiting</div></div>
+    <div><span style="font-size:24px;font-weight:700;color:#dc2626">${summary.totals['proof']}</span><div style="font-size:11px;color:#64748b;text-transform:uppercase">Proof / review</div></div>
+    <div><span style="font-size:24px;font-weight:700;color:#94a3b8">${summary.totals['queue']}</span><div style="font-size:11px;color:#64748b;text-transform:uppercase">Queue</div></div>
+  </div>
+  <div style="margin:12px 0">
+    <div style="font-size:14px;font-weight:600;margin-bottom:6px">✅ Top wins (last 5)</div>
+    ${fmtCards(summary.doneToday)}
+  </div>
+  <div style="margin:12px 0">
+    <div style="font-size:14px;font-weight:600;margin-bottom:6px">🔍 Needs your eyes (proof / review)</div>
+    ${fmtCards(summary.proofReview)}
+  </div>
+  <div style="margin:12px 0">
+    <div style="font-size:14px;font-weight:600;margin-bottom:6px">⏳ Awaiting approval</div>
+    ${fmtCards(summary.waiting)}
+  </div>
+</div>`;
+
+  if (teamsId && channelId) {
+    try {
+      const r = await autonomousActions.postToTeamsChannel(teamsId, channelId, html);
+      if (r.success) delivered.push('teams');
+      else errors.teams = r.error || 'unknown';
+    } catch (err) {
+      errors.teams = (err as Error).message;
+    }
+  } else {
+    errors.teams = 'ITSM_TEAM_ID / ITSM_ALERTS_CHANNEL_ID not configured';
+  }
+
+  if (ownerEmail) {
+    try {
+      const r = await sendGraphMail({
+        to: [ownerEmail],
+        subject: `🌇 End-of-Day — ${summary.totals['done-today']} done, ${summary.totals['proof']} need review`,
+        body: html,
+        isHtml: true,
+        importance: 'normal',
+      });
+      if (r.sent) delivered.push('email');
+      else errors.email = r.error || 'send failed';
+    } catch (err) {
+      errors.email = (err as Error).message;
+    }
+  } else {
+    errors.email = 'MANAGER_EMAIL not configured';
+  }
+
+  res.status(200).json({ summary, delivered, errors });
 });
 
 // ── Demo: scripted P1 storm (no SNOW required) ─────────────────────────
@@ -1068,7 +1351,7 @@ server.get('/api/jobs/:id', async (req: Request, res: Response) => {
 
 // Apply JWT auth middleware for routes below — skip public routes
 server.use((req, res, next) => {
-  const publicPaths = ['/api/health', '/api/platform-status', '/api/voice/status', '/api/voice/avatar-config', '/api/voice/page-me', '/api/voice/kpi', '/api/workiq/kpi', '/api/a2a/kpi', '/.well-known/agent-card.json', '/voice', '/api/scheduled', '/api/signals', '/api/decisions', '/api/demo', '/api/demo/scripted-storm', '/api/foresight', '/api/foresight/run', '/api/outcomes', '/api/outcomes/kpi', '/api/cases', '/api/cases/kpi', '/api/reviewer/kpi', '/api/meta/kpi', '/api/meta/alerts', '/api/briefings/kpi', '/api/briefings/recent', '/api/briefings/generate', '/api/trust/score', '/api/governance', '/api/governance/kill', '/api/governance/release', '/api/governance/freeze', '/api/autonomy/thresholds', '/api/goals', '/api/goals/plan', '/api/goals/pursue', '/api/experience', '/api/experience/recent', '/api/experience/find', '/api/jobs', '/api/cognition', '/api/cognition/graph', '/api/workers', '/api/approvals', '/api/approvals/callback', '/api/routines', '/api/audit', '/api/memory', '/api/reasoning', '/mission-control', '/api/a2a/message', '/api/a2a/discover', '/api/flows/callback', '/api/tuning/extract', '/api/tuning/status'];
+  const publicPaths = ['/api/health', '/api/platform-status', '/api/voice/status', '/api/voice/avatar-config', '/api/voice/page-me', '/api/voice/kpi', '/api/workiq/kpi', '/api/a2a/kpi', '/.well-known/agent-card.json', '/voice', '/api/scheduled', '/api/signals', '/api/decisions', '/api/demo', '/api/demo/scenarios', '/api/demo/active', '/api/demo/cleanup', '/api/demo/scripted-storm', '/api/workday/state', '/api/workday/tasks', '/api/workday/run-cycle', '/api/kanban', '/api/foresight', '/api/foresight/run', '/api/outcomes', '/api/outcomes/kpi', '/api/cases', '/api/cases/kpi', '/api/reviewer/kpi', '/api/meta/kpi', '/api/meta/alerts', '/api/briefings/kpi', '/api/briefings/recent', '/api/briefings/generate', '/api/trust/score', '/api/governance', '/api/governance/kill', '/api/governance/release', '/api/governance/freeze', '/api/autonomy/thresholds', '/api/goals', '/api/goals/plan', '/api/goals/pursue', '/api/experience', '/api/experience/recent', '/api/experience/find', '/api/jobs', '/api/cognition', '/api/cognition/graph', '/api/workers', '/api/approvals', '/api/approvals/callback', '/api/routines', '/api/audit', '/api/memory', '/api/reasoning', '/mission-control', '/api/a2a/message', '/api/a2a/discover', '/api/flows/callback', '/api/tuning/extract', '/api/tuning/status'];
   // Phase 9 — prefix matching for parameterised routes (e.g. /api/jobs/:id).
   const publicPrefixes = ['/api/jobs/', '/api/cases/'];
   if (publicPaths.some(p => req.path === p)) {
@@ -1315,6 +1598,15 @@ httpServer.listen(port, host, async () => {
   registerDefaultSubscriptions();
   console.log('  Signal-router default subscriptions registered');
 
+  // Phase 2 — Morgan-shaped autonomous workday. Off by default; enable with
+  // AUTONOMOUS_WORKDAY_ENABLED=true. Respects DISABLE_CRON so the in-process
+  // timer never collides with Durable Functions-driven deployments.
+  if (!cronDisabled) {
+    startAutonomousWorkday();
+  } else {
+    console.log('  DISABLE_CRON=true — autonomous workday timer skipped (call /api/workday/run-cycle to trigger)');
+  }
+
   // Phase 2.3 — Outcome probes for major-incident-response,
   // change-lifecycle, and knowledge-harvest. Includes 1 reversible
   // rollback handler.
@@ -1386,6 +1678,7 @@ function gracefulShutdown(signal: string) {
     stopIncidentMonitor();
     stopHandoverScheduler();
     stopScheduledRoutines();
+    stopAutonomousWorkday();
   }
   stopForesight();
   closeServiceBus().catch(() => {});

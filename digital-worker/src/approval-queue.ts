@@ -61,6 +61,18 @@ export function queueAction(
   pendingActions.set(actionId, action);
   cleanupExpired();
 
+  // Phase 4 — proactive engagement for high-risk HITL. Best-effort, fire-and-forget.
+  if (classification.level === 'write') {
+    void import('./proactive-engagement').then(({ engageOperator }) =>
+      engageOperator('high-risk-hitl', {
+        workerId,
+        toolName,
+        ctxKey: actionId,
+        summary: `🛑 ${workerName} needs approval to run **${toolName}** (write). Review in Mission Control.`,
+      }).catch(() => {}),
+    ).catch(() => {});
+  }
+
   const card = buildApprovalCard(action);
   return { actionId, card };
 }
@@ -141,6 +153,17 @@ export function getQueueSummary(): {
     rejected: all.filter(a => a.status === 'rejected').length,
     expired: all.filter(a => a.status === 'expired').length,
   };
+}
+
+/**
+ * List all pending actions (newest first). Used by the Kanban "Waiting"
+ * lane to show every approval an operator could still act on.
+ */
+export function listPendingActions(limit = 50): PendingAction[] {
+  return Array.from(pendingActions.values())
+    .filter((a) => a.status === 'pending')
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, Math.max(1, Math.min(500, limit)));
 }
 
 // ── Cleanup ──

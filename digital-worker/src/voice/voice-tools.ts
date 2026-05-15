@@ -484,6 +484,58 @@ function stripEulaBanner(text: string): string {
     .trim();
 }
 
+function parseVoiceToolArgs(argsJson: string): { args: Record<string, unknown>; warning?: string } {
+  const raw = String(argsJson || '').trim();
+  if (!raw) return { args: {} };
+
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      args: parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {},
+    };
+  } catch {
+    // Try lightweight repair for common streaming truncation / trailing-comma cases.
+    let repaired = raw;
+    const openCurly = (repaired.match(/\{/g) || []).length;
+    const closeCurly = (repaired.match(/\}/g) || []).length;
+    const openBracket = (repaired.match(/\[/g) || []).length;
+    const closeBracket = (repaired.match(/\]/g) || []).length;
+
+    if (openCurly > closeCurly) repaired += '}'.repeat(openCurly - closeCurly);
+    if (openBracket > closeBracket) repaired += ']'.repeat(openBracket - closeBracket);
+    repaired = repaired.replace(/,\s*([}\]])/g, '$1');
+
+    try {
+      const parsed = JSON.parse(repaired);
+      return {
+        args: parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {},
+        warning: 'tool args required JSON repair',
+      };
+    } catch {
+      // Best-effort extraction of key/value pairs so tools can still run.
+      const args: Record<string, unknown> = {};
+      const pairRe = /"([^"\\]+)"\s*:\s*("(?:[^"\\]|\\.)*"|true|false|null|-?\d+(?:\.\d+)?)/g;
+      let m: RegExpExecArray | null;
+      while ((m = pairRe.exec(raw)) !== null) {
+        const key = m[1];
+        const token = m[2];
+        if (token === 'true') args[key] = true;
+        else if (token === 'false') args[key] = false;
+        else if (token === 'null') args[key] = null;
+        else if (/^-?\d+(?:\.\d+)?$/.test(token)) args[key] = Number(token);
+        else args[key] = token.slice(1, -1).replace(/\\"/g, '"');
+      }
+      if (Object.keys(args).length > 0) {
+        return {
+          args,
+          warning: 'tool args malformed JSON; used partial key/value recovery',
+        };
+      }
+      return { args: {}, warning: 'tool args malformed JSON; defaulted to empty args' };
+    }
+  }
+}
+
 /**
  * Execute a Realtime function-call.
  * `argsJson` is the raw `arguments` string from `response.function_call_arguments.done`.
@@ -494,11 +546,14 @@ export async function executeVoiceTool(
   argsJson: string,
   context: { callConnectionId?: string; managerEmail?: string },
 ): Promise<string> {
-  let args: Record<string, unknown> = {};
-  try {
-    args = argsJson ? JSON.parse(argsJson) : {};
-  } catch {
-    return `error: tool arguments were not valid JSON: ${argsJson.slice(0, 120)}`;
+  const parsed = parseVoiceToolArgs(argsJson);
+  const args = parsed.args;
+  if (parsed.warning) {
+    console.warn(`[voice-tools] ${parsed.warning}`, {
+      tool: name,
+      callConnectionId: context.callConnectionId,
+      argsPreview: String(argsJson || '').slice(0, 200),
+    });
   }
 
   const audit = (resultSummary: string, riskLevel: 'read' | 'write' | 'notify' = 'write') =>

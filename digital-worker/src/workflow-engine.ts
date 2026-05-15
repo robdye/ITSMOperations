@@ -312,6 +312,21 @@ export class WorkflowEngine {
   }
 
   /**
+   * List recent workflow executions (newest first). Used by the Kanban
+   * "In-cycle" lane to show what workflows the agent is actively running.
+   */
+  listExecutions(limit = 50): WorkflowStatus[] {
+    return Array.from(this.executions.values())
+      .sort((a, b) => (b.startedAt || '').localeCompare(a.startedAt || ''))
+      .slice(0, Math.max(1, Math.min(500, limit)));
+  }
+
+  /** Get a single execution by id (read-only snapshot). */
+  getExecution(executionId: string): WorkflowStatus | undefined {
+    return this.executions.get(executionId);
+  }
+
+  /**
    * Execute a workflow end-to-end, stepping through each step in sequence.
    * Steps with onSuccess/onFailure control flow; otherwise steps run in order.
    */

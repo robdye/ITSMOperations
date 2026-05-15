@@ -758,6 +758,36 @@ async function handleAcsMediaSocket(acsWs: WebSocket): Promise<void> {
   let realtimeWs: WebSocket | null = null;
   let realtimeReady = false;
   const pendingAudio: string[] = [];
+  // Realtime API allows only one active response at a time.
+  // Queue follow-up response.create requests until we observe response.done/cancelled.
+  let responseInFlight = false;
+  let queuedResponseInstructions: string | undefined;
+
+  const requestResponseCreate = (instructions?: string): void => {
+    if (!realtimeWs || realtimeWs.readyState !== WebSocket.OPEN) return;
+    if (responseInFlight) {
+      // Keep the latest instruction payload; it supersedes older queued prompts.
+      queuedResponseInstructions = instructions;
+      log('info', 'response.create queued (response already active)', {
+        callConnectionId,
+        hasInstructions: Boolean(instructions),
+      });
+      return;
+    }
+    const responsePayload: Record<string, unknown> = { modalities: ['audio', 'text'] };
+    if (instructions && instructions.trim().length > 0) {
+      responsePayload.instructions = instructions;
+    }
+    realtimeWs.send(JSON.stringify({ type: 'response.create', response: responsePayload }));
+    responseInFlight = true;
+  };
+
+  const flushQueuedResponseCreate = (): void => {
+    if (queuedResponseInstructions === undefined) return;
+    const instructions = queuedResponseInstructions;
+    queuedResponseInstructions = undefined;
+    requestResponseCreate(instructions);
+  };
 
   // Phase A KPI — turn-latency tracking (matches the voicelive path so the
   // demo PR can publish a like-for-like median + p95 comparison).
@@ -811,9 +841,7 @@ async function handleAcsMediaSocket(acsWs: WebSocket): Promise<void> {
         realtimeWs?.send(JSON.stringify({ type: 'input_audio_buffer.append', audio }));
       }
       // Greet first
-      realtimeWs?.send(
-        JSON.stringify({ type: 'response.create', response: { modalities: ['audio', 'text'] } }),
-      );
+      requestResponseCreate();
     });
 
     let audioDeltaCount = 0;
@@ -847,6 +875,11 @@ async function handleAcsMediaSocket(acsWs: WebSocket): Promise<void> {
           }
         } else if (msg.type === 'error') {
           log('error', 'Foundry Realtime server error', { error: msg.error });
+          const errCode = msg?.error?.code;
+          if (errCode === 'conversation_already_has_active_response') {
+            // Keep guard in sync even if upstream races us.
+            responseInFlight = true;
+          }
         } else if (msg.type === 'response.audio_transcript.done') {
           // Phase 1.4 — every completed Alex utterance goes through Content
           // Safety analyzeOutput(). Fail-closed: a flagged response ends
@@ -941,6 +974,13 @@ async function handleAcsMediaSocket(acsWs: WebSocket): Promise<void> {
           msg.type === 'response.cancelled' ||
           msg.type === 'response.audio.done'
         ) {
+          if (msg.type === 'response.created') {
+            responseInFlight = true;
+          }
+          if (msg.type === 'response.done' || msg.type === 'response.cancelled') {
+            responseInFlight = false;
+            flushQueuedResponseCreate();
+          }
           log('info', 'Foundry Realtime event', {
             type: msg.type,
             status: msg.response?.status,
@@ -982,12 +1022,7 @@ async function handleAcsMediaSocket(acsWs: WebSocket): Promise<void> {
                     },
                   }),
                 );
-                realtimeWs.send(
-                  JSON.stringify({
-                    type: 'response.create',
-                    response: { modalities: ['audio', 'text'] },
-                  }),
-                );
+                requestResponseCreate();
               }
             })
             .catch((err: Error) => {
@@ -1007,12 +1042,7 @@ async function handleAcsMediaSocket(acsWs: WebSocket): Promise<void> {
                     },
                   }),
                 );
-                realtimeWs.send(
-                  JSON.stringify({
-                    type: 'response.create',
-                    response: { modalities: ['audio', 'text'] },
-                  }),
-                );
+                requestResponseCreate();
               }
             });
         } else if (msg.type === 'conversation.item.input_audio_transcription.completed') {
@@ -1042,15 +1072,7 @@ async function handleAcsMediaSocket(acsWs: WebSocket): Promise<void> {
                 // accepts a `response.create` with an instructions
                 // override, which the model will speak using TTS.
                 if (result.confirmation && realtimeWs?.readyState === WebSocket.OPEN) {
-                  realtimeWs.send(
-                    JSON.stringify({
-                      type: 'response.create',
-                      response: {
-                        modalities: ['audio', 'text'],
-                        instructions: result.confirmation,
-                      },
-                    }),
-                  );
+                  requestResponseCreate(result.confirmation);
                 }
               })
               .catch((err: Error) => {
