@@ -10,12 +10,12 @@ on:
       environment:
         description: Target environment
         required: true
-        default: dev
+        default: prod
         type: choice
-        options: [dev, prod]
+        options: [prod]
 
 concurrency:
-  group: deploy-${{ github.event.inputs.environment || 'dev' }}
+  group: deploy-${{ github.event.inputs.environment || 'prod' }}
   cancel-in-progress: false
 
 env:
@@ -31,7 +31,7 @@ env:
   ENRICHMENT_RESOURCE_GROUP: ${{ vars.ENRICHMENT_RESOURCE_GROUP || vars.MCP_RESOURCE_GROUP }}
   ENRICHMENT_ACR_NAME: ${{ vars.ENRICHMENT_ACR_NAME || vars.MCP_ACR_NAME }}
   ENRICHMENT_ACR_LOGIN_SERVER: ${{ vars.ENRICHMENT_ACR_LOGIN_SERVER || vars.MCP_ACR_LOGIN_SERVER }}
-  FUNCTIONS_APP: ${{ vars.FUNCTIONS_APP_NAME || format('itsm-ops-{0}-func', github.event.inputs.environment || 'dev') }}
+  FUNCTIONS_APP: ${{ vars.FUNCTIONS_APP_NAME || format('itsm-ops-{0}-func', github.event.inputs.environment || 'prod') }}
   FUNCTIONS_RESOURCE_GROUP: ${{ vars.FUNCTIONS_RESOURCE_GROUP || vars.AZURE_RESOURCE_GROUP }}
 
 jobs:
@@ -40,7 +40,7 @@ jobs:
     name: Build & push Docker images
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || 'dev' }}
+    environment: ${{ github.event.inputs.environment || 'prod' }}
     permissions:
       id-token: write
       contents: read
@@ -97,7 +97,7 @@ jobs:
     name: Deploy to Azure Container Apps
     needs: build-push
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || 'dev' }}
+    environment: ${{ github.event.inputs.environment || 'prod' }}
     permissions:
       id-token: write
       contents: read
@@ -231,7 +231,7 @@ jobs:
     name: Deploy to Azure Functions
     needs: deploy
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || 'dev' }}
+    environment: ${{ github.event.inputs.environment || 'prod' }}
     permissions:
       id-token: write
       contents: read
@@ -312,9 +312,8 @@ jobs:
   update-teams-app:
     name: Update Teams app package
     needs: deploy
-    if: github.event.inputs.environment != 'prod'
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || 'dev' }}
+    environment: ${{ github.event.inputs.environment || 'prod' }}
     permissions:
       id-token: write
       contents: read
