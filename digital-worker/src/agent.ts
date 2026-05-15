@@ -200,12 +200,49 @@ export class ItsmAgent extends AgentApplication<TurnState> {
           case 'submitCabVote':
             responseText = `📝 CAB vote recorded for ${data.changeNumber}: ${data.cabVote || 'submitted'}`;
             break;
-          case 'approveAction':
-            responseText = `✅ Action ${data.toolName} approved`;
+          case 'approveAction': {
+            // Wire the HITL Adaptive Card "Approve" tap into the approval
+            // queue so the autonomous worker can actually unblock. The
+            // card carries `actionId` (queue path) and/or `signalId`/
+            // `executionId` for non-queue-backed HITL events.
+            const actor = (context.activity as any).from?.name || (context.activity as any).from?.id || 'operator';
+            const id = data.actionId;
+            const decision: 'approved' | 'rejected' = data.decision === 'rejected' ? 'rejected' : 'approved';
+            let resolved = false;
+            if (id) {
+              try {
+                const { resolveAction } = await import('./approval-queue');
+                resolved = !!resolveAction(id, decision, actor);
+              } catch (err) {
+                console.warn('[Agent] resolveAction(approve) failed', (err as Error).message);
+              }
+            }
+            const tool = data.toolName || 'action';
+            const notesPart = data.comments ? ` — notes: ${String(data.comments).slice(0, 200)}` : '';
+            responseText = resolved
+              ? `✅ **${tool}** approved by ${actor}.${notesPart}\n\nAlex is resuming the cycle now.`
+              : `✅ Approval recorded for **${tool}** by ${actor}.${notesPart}\n\n_(Action was not in the live queue — logged for audit.)_`;
             break;
-          case 'rejectAction':
-            responseText = `❌ Action ${data.toolName} rejected`;
+          }
+          case 'rejectAction': {
+            const actor = (context.activity as any).from?.name || (context.activity as any).from?.id || 'operator';
+            const id = data.actionId;
+            let resolved = false;
+            if (id) {
+              try {
+                const { resolveAction } = await import('./approval-queue');
+                resolved = !!resolveAction(id, 'rejected', actor);
+              } catch (err) {
+                console.warn('[Agent] resolveAction(reject) failed', (err as Error).message);
+              }
+            }
+            const tool = data.toolName || 'action';
+            const notesPart = data.comments ? ` — notes: ${String(data.comments).slice(0, 200)}` : '';
+            responseText = resolved
+              ? `🚫 **${tool}** denied by ${actor}.${notesPart}\n\nAlex paused the change and recorded the rejection in the evidence pack.`
+              : `🚫 Rejection recorded for **${tool}** by ${actor}.${notesPart}\n\n_(Action was not in the live queue — logged for audit.)_`;
             break;
+          }
           case 'acknowledgeHandover':
             responseText = `✅ Handover acknowledged for ${data.shift} shift`;
             break;

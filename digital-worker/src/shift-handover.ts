@@ -12,6 +12,7 @@ import { sendEmail } from './email-service';
 import { postToChannel } from './teams-channel';
 import { listOpenCases } from './case-manager';
 import { getRecentMetaAlerts } from './meta-monitor';
+import { renderBriefingEmail } from './email-render';
 
 const mcp = new ItsmMcpClient();
 
@@ -52,14 +53,25 @@ Problems: ${typeof problemData === 'string' ? problemData.substring(0, 1500) : J
     // Phase 2.5 — capture for operator-console "Shift handover" panel.
     pushRecentBriefing({ kind: 'handover', generatedAt: new Date().toISOString(), summary: String(briefing).slice(0, 4000) });
 
-    // Send email to manager
+    // Send email to manager — render the LLM Markdown as proper HTML
+    // and wrap it in an Outlook-tested email shell. Previously this used
+    // `<pre>` which surfaced raw `**bold**` / `## headers` to the reader.
     const managerEmail = process.env.MANAGER_EMAIL || '';
+    const generatedAt = new Date();
+    const dateLabel = generatedAt.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
     if (managerEmail) {
-      await sendEmail(managerEmail, `ITSM Shift Handover — ${new Date().toLocaleDateString()}`, `<pre style="font-family:Segoe UI,sans-serif">${briefing}</pre>`);
+      const html = renderBriefingEmail({
+        title: 'Shift Handover Briefing',
+        subtitle: dateLabel,
+        emoji: '📋',
+        markdown: String(briefing),
+        footerNote: `Briefing run id: handover-${generatedAt.toISOString()}`,
+      });
+      await sendEmail(managerEmail, `ITSM Shift Handover — ${dateLabel}`, html);
     }
 
     // Post to Teams channel
-    await postToChannel(`📋 **Shift Handover Briefing** — ${new Date().toLocaleTimeString()}\n\n${briefing}`);
+    await postToChannel(`📋 **Shift Handover Briefing** — ${generatedAt.toLocaleTimeString('en-US')}\n\n${briefing}`);
 
     console.log('[Handover] Briefing generated and distributed');
   } catch (err) {
@@ -152,10 +164,20 @@ Recent incidents: ${JSON.stringify(incidentData).substring(0, 1500)}
     pushRecentBriefing({ kind: 'midshift', generatedAt: new Date().toISOString(), summary: String(briefing).slice(0, 4000) });
 
     const managerEmail = process.env.MANAGER_EMAIL || '';
+    const recapAt = new Date();
+    const recapLabel = recapAt.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/New_York' });
     if (managerEmail) {
-      await sendEmail(managerEmail, `ITSM Midshift Recap — ${new Date().toLocaleString()}`, `<pre style="font-family:Segoe UI,sans-serif">${briefing}</pre>`);
+      const html = renderBriefingEmail({
+        title: 'Midshift Recap',
+        subtitle: `${recapLabel} ET`,
+        emoji: '☕',
+        accent: '#106ebe',
+        markdown: String(briefing),
+        footerNote: `Briefing run id: midshift-${recapAt.toISOString()}`,
+      });
+      await sendEmail(managerEmail, `ITSM Midshift Recap — ${recapLabel}`, html);
     }
-    await postToChannel(`☕ **Midshift Recap** — ${new Date().toLocaleTimeString()}\n\n${briefing}`);
+    await postToChannel(`☕ **Midshift Recap** — ${recapAt.toLocaleTimeString('en-US')}\n\n${briefing}`);
     console.log('[Handover] Midshift recap distributed');
   } catch (err) {
     console.error('[Handover] Midshift error:', err);

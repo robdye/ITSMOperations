@@ -23,7 +23,7 @@ import { startHandoverScheduler, stopHandoverScheduler, generateHandover, genera
 import { startIncidentMonitor, stopIncidentMonitor, runIncidentPoll } from './incident-monitor';
 import { getAuditSummary, getRecentAuditEntries } from './audit-trail';
 import { getMemoryStoreSummary } from './memory-store';
-import { startScheduledRoutines, getRoutineStatus, stopScheduledRoutines, executeRoutine } from './scheduled-routines';import { getQueueSummary } from './approval-queue';
+import { startScheduledRoutines, getRoutineStatus, stopScheduledRoutines, executeRoutine } from './scheduled-routines';import { getQueueSummary, resolveAction } from './approval-queue';
 import { attachVoiceWebSocket } from './voice/voiceProxy';
 import {
   attachAcsMediaWebSocket,
@@ -353,6 +353,63 @@ server.post('/api/approvals/callback', (req: Request, res: Response) => {
   const { approvalId, status, respondedBy, comments } = req.body;
   const handled = handleApprovalCallback(approvalId, status, respondedBy, comments);
   res.json({ handled });
+});
+
+// One-tap GET approval endpoint — used by the email approve/deny buttons in
+// exception-reporter's approval email. Returns a friendly confirmation HTML
+// page so the operator's browser shows something useful after the redirect.
+//   GET /api/approvals/action?id=<actionId>&decision=approved|rejected&by=<name>
+server.get('/api/approvals/action', (req: Request, res: Response) => {
+  const id = String(req.query.id || '').trim();
+  const raw = String(req.query.decision || '').trim().toLowerCase();
+  const decision: 'approved' | 'rejected' = raw === 'rejected' || raw === 'deny' || raw === 'denied'
+    ? 'rejected'
+    : 'approved';
+  const by = String(req.query.by || 'operator').trim() || 'operator';
+
+  if (!id) {
+    res.status(400)
+      .set('Content-Type', 'text/html; charset=utf-8')
+      .send('<h2>Missing <code>id</code> parameter</h2>');
+    return;
+  }
+
+  let resolved: { actionId?: string; toolName?: string } | null = null;
+  let errorMsg = '';
+  try {
+    const r = resolveAction(id, decision, by);
+    resolved = r ? { actionId: (r as any).actionId, toolName: (r as any).toolName } : null;
+  } catch (err) {
+    errorMsg = (err as Error).message;
+  }
+
+  const badge = decision === 'approved'
+    ? '<span style="background:#22c55e;color:#fff;padding:4px 12px;border-radius:6px;font-weight:600">✅ Approved</span>'
+    : '<span style="background:#dc2626;color:#fff;padding:4px 12px;border-radius:6px;font-weight:600">🚫 Denied</span>';
+  const status = resolved
+    ? `<p>Recorded <strong>${decision}</strong> for <code>${resolved.toolName || resolved.actionId || id}</code>.</p><p>Alex is updating the evidence pack now. You can close this tab.</p>`
+    : `<p>Decision <strong>${decision}</strong> recorded for audit, but no live queued action matched id <code>${id}</code> — it may have already been resolved or expired.</p>${errorMsg ? `<p style="color:#dc2626">${errorMsg}</p>` : ''}`;
+
+  res.status(200)
+    .set('Content-Type', 'text/html; charset=utf-8')
+    .send(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Approval recorded</title>
+<style>
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background:#0f172a; color:#e2e8f0; margin:0; padding:40px 24px; }
+  .card { max-width:560px; margin:60px auto; background:#1e293b; border:1px solid #334155; border-radius:12px; padding:28px 32px; }
+  h1 { margin:0 0 6px; font-size:22px; }
+  code { background:#0f172a; padding:2px 6px; border-radius:4px; font-size:13px; color:#a5b4fc; }
+  p { line-height:1.55; }
+  .small { color:#94a3b8; font-size:12px; margin-top:18px; border-top:1px solid #334155; padding-top:12px; }
+</style></head>
+<body>
+  <div class="card">
+    <h1>Approval recorded ${badge}</h1>
+    ${status}
+    <div class="small">Approver: <code>${by}</code> · Action id: <code>${id}</code></div>
+  </div>
+</body></html>`);
 });
 
 // Scheduled routines status endpoint
@@ -952,6 +1009,228 @@ server.post('/api/demo/scripted-storm', async (req: Request, res: Response) => {
   });
 });
 
+// ── Live Action Strip — single-button autonomous actions ──────────────
+// Four highly visible buttons in Mission Control prove that Alex really
+// does the work end-to-end:
+//   1. POST /api/demo/action/email   → emails a styled status update to MANAGER_EMAIL
+//   2. POST /api/demo/action/meeting → schedules a 30-min CAB bridge tomorrow 09:00 ET
+//   3. POST /api/demo/action/cabpack → publishes a CAB pack to Teams + email
+//   4. /api/voice/page-me (existing)  → ACS outbound Teams call to MANAGER_TEAMS_OID
+// All three new endpoints are SCHEDULED_SECRET-protected so the same
+// mission-control demo header guards the same envelope as the existing
+// scripted-storm / page-me buttons.
+
+server.post('/api/demo/action/email', async (req: Request, res: Response) => {
+  if (!signalsAuthOk(req)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const to = (req.body?.to as string) || process.env.MANAGER_EMAIL || process.env.OWNER_EMAIL || '';
+  if (!to) {
+    res.status(400).json({ error: 'no recipient — MANAGER_EMAIL not configured and no `to` supplied' });
+    return;
+  }
+  try {
+    const snap = getEndOfDaySummary();
+    const { renderBriefingEmail } = await import('./email-render');
+    const kpis = [
+      { label: 'Done today', value: snap.totals['done-today'] },
+      { label: 'In cycle', value: snap.totals['in-cycle'] },
+      { label: 'Need review', value: snap.totals['proof'] },
+      { label: 'Awaiting approval', value: snap.totals['waiting'] },
+    ];
+    const fmtLine = (c: { title: string; subtitle?: string }) => `- **${c.title}**${c.subtitle ? ` — ${c.subtitle}` : ''}`;
+    const md = [
+      `## Status update — ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })} ET`,
+      '',
+      snap.proofReview.length > 0
+        ? `### 🔍 Needs your eyes\n${snap.proofReview.map(fmtLine).join('\n')}`
+        : '### ✅ Nothing waiting on you',
+      '',
+      snap.waiting.length > 0
+        ? `### ⏳ Awaiting approval\n${snap.waiting.map(fmtLine).join('\n')}`
+        : '',
+      snap.doneToday.length > 0
+        ? `### 🏁 Recent wins\n${snap.doneToday.map(fmtLine).join('\n')}`
+        : '',
+      '',
+      '> I am still on shift. Reply with **stop** if you want me to hold off; otherwise I will keep working the queue.',
+    ].filter(Boolean).join('\n');
+    const html = renderBriefingEmail({
+      title: 'Status update from Alex',
+      subtitle: `${snap.generatedAt} · ${snap.timeZone}`,
+      emoji: '📧',
+      kpis,
+      markdown: md,
+      footerNote: 'Triggered manually from Mission Control · Live Action Strip',
+    });
+    const r = await sendGraphMail({
+      to: [to],
+      subject: `Alex — Status update · ${snap.totals['proof']} need review, ${snap.totals['waiting']} awaiting approval`,
+      body: html,
+      isHtml: true,
+      importance: 'normal',
+    });
+    res.status(200).json({ status: r.sent ? 'sent' : 'failed', to, ...(r.error ? { error: r.error } : {}) });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+server.post('/api/demo/action/meeting', async (req: Request, res: Response) => {
+  if (!signalsAuthOk(req)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const to = (req.body?.to as string) || process.env.MANAGER_EMAIL || process.env.OWNER_EMAIL || '';
+  if (!to) {
+    res.status(400).json({ error: 'no recipient — MANAGER_EMAIL not configured and no `to` supplied' });
+    return;
+  }
+  try {
+    // Default to tomorrow 09:00 ET, 30 minutes. The Container App TZ is UTC
+    // so we anchor in ET explicitly. ET = UTC-5 (EST) or UTC-4 (EDT); we
+    // pass the local time + IANA zone so Graph handles DST correctly.
+    const subject = (req.body?.subject as string) || 'CAB Bridge — change review with Alex';
+    const tz = (req.body?.timeZone as string) || 'America/New_York';
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const y = tomorrow.getFullYear();
+    const m = String(tomorrow.getMonth() + 1).padStart(2, '0');
+    const d = String(tomorrow.getDate()).padStart(2, '0');
+    const startLocal = `${y}-${m}-${d}T09:00:00`;
+    const endLocal = `${y}-${m}-${d}T09:30:00`;
+    const body = `<p>Alex (autonomous IT Ops Manager) scheduled this CAB bridge to walk through pending changes and blast-radius analysis.</p>
+<p><strong>Agenda</strong></p>
+<ul>
+  <li>Open P1 / P2 incidents — current state and SLA timers</li>
+  <li>Pending changes — risk class, CAB approval status, planned windows</li>
+  <li>Anything Alex paused for human approval (Pattern 3 gate)</li>
+  <li>Q&amp;A — anything you want me to dig into live</li>
+</ul>
+<p>Triggered manually from <strong>Mission Control · Live Action Strip</strong>.</p>`;
+    const r = await autonomousActions.createCalendarEvent(
+      subject,
+      startLocal,
+      endLocal,
+      [{ email: to }],
+      body,
+      true, // isOnlineMeeting → Teams join link
+      { timeZone: tz, location: 'Microsoft Teams meeting' },
+    );
+    if (!r.success) {
+      res.status(500).json({ status: 'failed', error: r.error });
+      return;
+    }
+    res.status(200).json({
+      status: 'scheduled',
+      to,
+      startLocal,
+      endLocal,
+      timeZone: tz,
+      joinUrl: r.joinUrl,
+      webLink: r.webLink,
+      eventId: r.id,
+    });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+server.post('/api/demo/action/cabpack', async (req: Request, res: Response) => {
+  if (!signalsAuthOk(req)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const to = (req.body?.to as string) || process.env.MANAGER_EMAIL || process.env.OWNER_EMAIL || '';
+  const teamsId = process.env.ITSM_TEAM_ID || '';
+  const channelId = process.env.ITSM_ALERTS_CHANNEL_ID || process.env.ITSM_CHANNEL_ID || '';
+  const delivered: string[] = [];
+  const errors: Record<string, string> = {};
+  try {
+    const snap = getEndOfDaySummary();
+    const { renderBriefingEmail } = await import('./email-render');
+    const cardLine = (c: { title: string; subtitle?: string }) =>
+      `- **${c.title}**${c.subtitle ? ` — ${c.subtitle}` : ''}`;
+    const md = [
+      `## CAB Pack — Week ending ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
+      '',
+      '### Executive summary',
+      `Alex (autonomous IT Ops Manager) handled **${snap.totals['done-today']}** items end-to-end since the last CAB, paused **${snap.totals['waiting']}** for human approval per the Pattern 3 governance gate, and queued **${snap.totals['proof']}** items for your review. NIST SP 800-30 risk classification was applied to every change.`,
+      '',
+      '### 🏁 Changes completed without intervention',
+      snap.doneToday.length > 0 ? snap.doneToday.map(cardLine).join('\n') : '_None this period._',
+      '',
+      '### ⏳ Changes awaiting CAB approval',
+      snap.waiting.length > 0 ? snap.waiting.map(cardLine).join('\n') : '_None this period._',
+      '',
+      '### 🔍 Items flagged for review',
+      snap.proofReview.length > 0 ? snap.proofReview.map(cardLine).join('\n') : '_None this period._',
+      '',
+      '### Governance posture',
+      `- **Policy version:** ITSM-Ops Pattern 3 governance gate enabled`,
+      `- **Risk framework:** NIST SP 800-30 r1 (Very Low / Low / Moderate / High / Very High)`,
+      `- **Controls reviewed:** CM-3 (Config Change Control), CM-4 (Impact Analyses), CM-5 (Access Restrictions for Change), RA-3 (Risk Assessment)`,
+      `- **RMF step:** Authorize — CAB approves before promotion to production`,
+      '',
+      '> Reply or open the Mission Control Kanban for one-tap approve / deny on the items above.',
+    ].join('\n');
+
+    const html = renderBriefingEmail({
+      title: 'CAB Pack — weekly bundle',
+      subtitle: `${snap.generatedAt} · ${snap.timeZone}`,
+      emoji: '📄',
+      accent: '#106ebe',
+      kpis: [
+        { label: 'Done', value: snap.totals['done-today'] },
+        { label: 'In cycle', value: snap.totals['in-cycle'] },
+        { label: 'Awaiting CAB', value: snap.totals['waiting'] },
+        { label: 'Need review', value: snap.totals['proof'] },
+      ],
+      markdown: md,
+      footerNote: 'Triggered manually from Mission Control · Live Action Strip',
+    });
+
+    if (to) {
+      try {
+        const r = await sendGraphMail({
+          to: [to],
+          subject: `📄 CAB Pack — ${snap.totals['waiting']} awaiting approval, ${snap.totals['proof']} for review`,
+          body: html,
+          isHtml: true,
+          importance: 'normal',
+        });
+        if (r.sent) delivered.push('email');
+        else errors.email = r.error || 'send failed';
+      } catch (err) {
+        errors.email = (err as Error).message;
+      }
+    } else {
+      errors.email = 'MANAGER_EMAIL / OWNER_EMAIL not configured';
+    }
+
+    if (teamsId && channelId) {
+      try {
+        const r = await autonomousActions.postToTeamsChannel(teamsId, channelId, html);
+        if (r.success) delivered.push('teams');
+        else errors.teams = r.error || 'unknown';
+      } catch (err) {
+        errors.teams = (err as Error).message;
+      }
+    } else {
+      errors.teams = 'ITSM_TEAM_ID / ITSM_ALERTS_CHANNEL_ID not configured';
+    }
+
+    res.status(200).json({
+      status: delivered.length > 0 ? 'published' : 'failed',
+      delivered,
+      errors: Object.keys(errors).length ? errors : undefined,
+    });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 // ── ACS Call Automation callback events ──
 // ACS POSTs CloudEvents-formatted JSON arrays here for each call lifecycle
 // event (CallConnected, CallDisconnected, CreateCallFailed, etc.). Must be
@@ -1351,7 +1630,7 @@ server.get('/api/jobs/:id', async (req: Request, res: Response) => {
 
 // Apply JWT auth middleware for routes below — skip public routes
 server.use((req, res, next) => {
-  const publicPaths = ['/api/health', '/api/platform-status', '/api/voice/status', '/api/voice/avatar-config', '/api/voice/page-me', '/api/voice/kpi', '/api/workiq/kpi', '/api/a2a/kpi', '/.well-known/agent-card.json', '/voice', '/api/scheduled', '/api/signals', '/api/decisions', '/api/demo', '/api/demo/scenarios', '/api/demo/active', '/api/demo/cleanup', '/api/demo/scripted-storm', '/api/workday/state', '/api/workday/tasks', '/api/workday/run-cycle', '/api/kanban', '/api/foresight', '/api/foresight/run', '/api/outcomes', '/api/outcomes/kpi', '/api/cases', '/api/cases/kpi', '/api/reviewer/kpi', '/api/meta/kpi', '/api/meta/alerts', '/api/briefings/kpi', '/api/briefings/recent', '/api/briefings/generate', '/api/trust/score', '/api/governance', '/api/governance/kill', '/api/governance/release', '/api/governance/freeze', '/api/autonomy/thresholds', '/api/goals', '/api/goals/plan', '/api/goals/pursue', '/api/experience', '/api/experience/recent', '/api/experience/find', '/api/jobs', '/api/cognition', '/api/cognition/graph', '/api/workers', '/api/approvals', '/api/approvals/callback', '/api/routines', '/api/audit', '/api/memory', '/api/reasoning', '/mission-control', '/api/a2a/message', '/api/a2a/discover', '/api/flows/callback', '/api/tuning/extract', '/api/tuning/status'];
+  const publicPaths = ['/api/health', '/api/platform-status', '/api/voice/status', '/api/voice/avatar-config', '/api/voice/page-me', '/api/voice/kpi', '/api/workiq/kpi', '/api/a2a/kpi', '/.well-known/agent-card.json', '/voice', '/api/scheduled', '/api/signals', '/api/decisions', '/api/demo', '/api/demo/scenarios', '/api/demo/active', '/api/demo/cleanup', '/api/demo/scripted-storm', '/api/demo/action/email', '/api/demo/action/meeting', '/api/demo/action/cabpack', '/api/approvals/action', '/api/workday/state', '/api/workday/tasks', '/api/workday/run-cycle', '/api/kanban', '/api/foresight', '/api/foresight/run', '/api/outcomes', '/api/outcomes/kpi', '/api/cases', '/api/cases/kpi', '/api/reviewer/kpi', '/api/meta/kpi', '/api/meta/alerts', '/api/briefings/kpi', '/api/briefings/recent', '/api/briefings/generate', '/api/trust/score', '/api/governance', '/api/governance/kill', '/api/governance/release', '/api/governance/freeze', '/api/autonomy/thresholds', '/api/goals', '/api/goals/plan', '/api/goals/pursue', '/api/experience', '/api/experience/recent', '/api/experience/find', '/api/jobs', '/api/cognition', '/api/cognition/graph', '/api/workers', '/api/approvals', '/api/approvals/callback', '/api/routines', '/api/audit', '/api/memory', '/api/reasoning', '/mission-control', '/api/a2a/message', '/api/a2a/discover', '/api/flows/callback', '/api/tuning/extract', '/api/tuning/status'];
   // Phase 9 — prefix matching for parameterised routes (e.g. /api/jobs/:id).
   const publicPrefixes = ['/api/jobs/', '/api/cases/'];
   if (publicPaths.some(p => req.path === p)) {

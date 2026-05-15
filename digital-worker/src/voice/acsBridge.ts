@@ -376,6 +376,12 @@ const DEFAULT_INSTRUCTIONS =
   "You are Alex — the autonomous IT Operations Manager for this organisation. " +
   "You initiated this Teams call yourself, unprompted, because something on the operational picture needs the human now. " +
   "\n\n" +
+  "=== LANGUAGE — HARD LOCK ===\n" +
+  "You MUST speak in English (United States, en-US) at all times. " +
+  "Do NOT switch to German, French, Spanish, Japanese, or any other language under any circumstances, even briefly, even if the caller speaks another language to you, even if a tool result contains foreign text. " +
+  "If you ever find yourself starting a sentence in another language, stop immediately and restart that sentence in English. " +
+  "Numbers, ticket IDs, and CI names are read in English ('INC zero zero one zero six zero five', not 'INC null null eins null sechs null fünf'). " +
+  "\n\n" +
   "=== OPENING THE CALL ===\n" +
   "BEFORE YOU SAY ANYTHING SUBSTANTIVE, silently call `show_itsm_briefing` so you have a real snapshot of the estate to talk about. " +
   "Then open by leading STRAIGHT INTO THE SITUATION \u2014 do NOT use formulaic openers like 'Hi, I called you' or 'I'm the one who initiated this call' or 'It's Alex here'. " +
@@ -825,7 +831,11 @@ async function handleAcsMediaSocket(acsWs: WebSocket): Promise<void> {
           // Phase 1.5 — enable user-side transcription so voiceApprovals
           // can match approve/deny/hold utterances. Whisper-1 is the
           // safe default on the preview Realtime API.
-          input_audio_transcription: { model: 'whisper-1' },
+          // Phase 1.6 — pin Whisper to English so transcription cannot
+          // drift to German/French even if the caller utters a single
+          // foreign word. Combined with the LANGUAGE HARD LOCK in
+          // DEFAULT_INSTRUCTIONS this stops Alex from replying in German.
+          input_audio_transcription: { model: 'whisper-1', language: 'en' },
           // Phase E.7 — equip Alex with real tools during the call so
           // she can actually email, post to Teams, update SNOW, etc.
           // Schemas + executor live in voice-tools.ts.

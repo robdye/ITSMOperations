@@ -1560,6 +1560,131 @@ if (btnCleanup) {
   });
 }
 
+// ── 🚀 Live Action Strip — single-button autonomous actions ─────────────
+// Each button is wired to a /api/demo/action/* endpoint (or /api/voice/page-me
+// for "Call me now"). The demo secret is the same one the rest of the strip
+// already reads from #cc-demo-secret. Status pill #la-status mirrors the
+// current operation so the operator sees "sending…", "scheduled ✓", etc.
+(function bindLiveActionButtons() {
+  const statusEl = byId('la-status');
+  function setStatus(text, tone) {
+    if (!statusEl) return;
+    statusEl.textContent = text;
+    const map = {
+      idle:    { bg: 'rgba(0,0,0,0.25)',   fg: 'var(--text-dim)',     bd: 'var(--border)' },
+      busy:    { bg: 'rgba(245,158,11,0.20)', fg: '#fbbf24',          bd: 'rgba(245,158,11,0.45)' },
+      ok:      { bg: 'rgba(34,197,94,0.20)',  fg: '#4ade80',          bd: 'rgba(34,197,94,0.45)' },
+      err:     { bg: 'rgba(220,38,38,0.20)',  fg: '#fca5a5',          bd: 'rgba(220,38,38,0.45)' },
+    };
+    const s = map[tone || 'idle'];
+    statusEl.style.background = s.bg;
+    statusEl.style.color = s.fg;
+    statusEl.style.borderColor = s.bd;
+  }
+
+  async function runAction(btn, opts) {
+    if (!btn) return;
+    if (opts.needsSecret && !demoSecret()) {
+      addFeed(`${opts.icon} SCHEDULED_SECRET required (paste into the box next to the buttons)`, 'demo');
+      setStatus('secret missing', 'err');
+      return;
+    }
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.style.opacity = '0.65';
+    setStatus(opts.busyLabel || 'working…', 'busy');
+    try {
+      const out = opts.needsSecret
+        ? await postSecret(opts.path, opts.body || {})
+        : await postJson(opts.path, opts.body || {});
+      const result = opts.onSuccess ? opts.onSuccess(out) : { feed: `${opts.icon} done`, pill: 'done ✓' };
+      setStatus(result.pill, 'ok');
+      addFeed(result.feed, 'alex');
+    } catch (err) {
+      const msg = (err && err.message) ? err.message : String(err);
+      setStatus('failed', 'err');
+      addFeed(`${opts.icon} failed — ${msg.slice(0, 140)}`, 'alex');
+    } finally {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.innerHTML = orig;
+    }
+  }
+
+  // 📧 Email me an update
+  const btnEmail = byId('la-btn-email');
+  if (btnEmail) {
+    btnEmail.addEventListener('click', () => runAction(btnEmail, {
+      icon: '📧',
+      path: '/api/demo/action/email',
+      needsSecret: true,
+      busyLabel: 'sending email…',
+      onSuccess: (out) => ({
+        feed: `📧 status email sent → ${out.to || 'manager'}`,
+        pill: `sent → ${(out.to || 'manager').split('@')[0]} ✓`,
+      }),
+    }));
+  }
+
+  // 📅 Schedule CAB bridge
+  const btnMeeting = byId('la-btn-meeting');
+  if (btnMeeting) {
+    btnMeeting.addEventListener('click', () => runAction(btnMeeting, {
+      icon: '📅',
+      path: '/api/demo/action/meeting',
+      needsSecret: true,
+      busyLabel: 'scheduling…',
+      onSuccess: (out) => {
+        const when = (out.startLocal || '').replace('T', ' ').replace(/:00$/, '');
+        return {
+          feed: `📅 CAB bridge scheduled for ${when} ${out.timeZone || 'ET'} — ${out.joinUrl ? 'Teams join URL captured' : 'invite sent'}`,
+          pill: `scheduled ${when || 'tomorrow'} ✓`,
+        };
+      },
+    }));
+  }
+
+  // 📄 Publish CAB pack
+  const btnCabpack = byId('la-btn-cabpack');
+  if (btnCabpack) {
+    btnCabpack.addEventListener('click', () => runAction(btnCabpack, {
+      icon: '📄',
+      path: '/api/demo/action/cabpack',
+      needsSecret: true,
+      busyLabel: 'publishing…',
+      onSuccess: (out) => ({
+        feed: `📄 CAB pack delivered → ${(out.delivered || []).join(' + ') || 'no channels'}`,
+        pill: `published ${((out.delivered || []).length)}/2 ✓`,
+      }),
+    }));
+  }
+
+  // 📞 Call me now — does NOT need the demo secret; uses /api/voice/page-me.
+  const btnCallMeNow = byId('la-btn-callme');
+  if (btnCallMeNow) {
+    btnCallMeNow.addEventListener('click', () => runAction(btnCallMeNow, {
+      icon: '📞',
+      path: '/api/voice/page-me',
+      needsSecret: false,
+      body: { reason: 'Live Action Strip — operator clicked Call me now', notify: false },
+      busyLabel: 'paging…',
+      onSuccess: (out) => {
+        if (out.status === 'calling') {
+          return {
+            feed: `📞 Alex is calling you (call id ${(out.acsCallConnectionId || '').slice(0, 8)})`,
+            pill: 'calling ✓',
+          };
+        }
+        const errMsg = (out.errors && out.errors.acsCall) || out.status || 'unknown';
+        if (out.teamsCallUrl) window.open(out.teamsCallUrl, '_blank', 'noopener');
+        return { feed: `📞 call status: ${errMsg}`, pill: `status: ${errMsg.slice(0, 30)}` };
+      },
+    }));
+  }
+
+  setStatus('idle', 'idle');
+})();
+
 // ── Phase 2.5 — Operator Console (Cases / Trust / Shift handover / Meta-monitor / A2A audit) ──
 async function loadOperatorConsole() {
   const [casesR, trustR, briefR, metaR, a2aR, agentsR] = await Promise.allSettled([

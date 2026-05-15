@@ -496,6 +496,115 @@ export function createChangeApprovalCard(change: {
   return toAttachment(card);
 }
 
+// ── HITL Approval Card (proactive Pattern-3 gate) ────────────────────
+// Sent via Teams 1:1 to the operator whenever the autonomous workday
+// blocks a cycle on REQUIRE_HITL. Action.Execute verbs `approveAction` /
+// `rejectAction` are wired in agent.ts (onActivity 'invoke') to resolve
+// the action via approval-queue.resolveAction(...).
+export function createHitlApprovalCard(opts: {
+  actionId?: string;
+  signalId?: string;
+  executionId?: string;
+  toolName?: string;
+  scenarioId?: string;
+  actor?: string;
+  actorRoles?: string[];
+  requiredRoles?: string[];
+  decision?: string;
+  riskClass?: string;
+  reason?: string;
+  missionControlUrl?: string;
+}): Attachment {
+  const tool = opts.toolName || 'an action';
+  const reason = opts.reason || 'Pattern 3 governance gate required human review.';
+  const facts: Array<{ title: string; value: string }> = [
+    { title: 'Action', value: tool },
+  ];
+  if (opts.scenarioId) facts.push({ title: 'Scenario', value: opts.scenarioId });
+  if (opts.riskClass) facts.push({ title: 'Risk class', value: opts.riskClass });
+  if (opts.decision) facts.push({ title: 'Gate decision', value: opts.decision });
+  if (opts.actor) facts.push({ title: 'Requested by', value: opts.actor });
+  if (opts.actorRoles && opts.actorRoles.length) {
+    facts.push({ title: 'Caller roles', value: opts.actorRoles.join(', ') });
+  }
+  if (opts.requiredRoles && opts.requiredRoles.length) {
+    facts.push({ title: 'Required roles', value: opts.requiredRoles.join(', ') });
+  }
+  if (opts.signalId) facts.push({ title: 'Signal id', value: opts.signalId });
+  if (opts.executionId) facts.push({ title: 'Evidence id', value: opts.executionId });
+
+  // Data envelope that travels with every action. agent.ts looks up
+  // `actionId` first (queue path); falls back to signalId/executionId for
+  // audit logging when the action isn't queue-backed.
+  const data = {
+    actionId: opts.actionId,
+    signalId: opts.signalId,
+    executionId: opts.executionId,
+    toolName: opts.toolName,
+    scenarioId: opts.scenarioId,
+  };
+
+  const actions: unknown[] = [
+    {
+      type: 'Action.Execute',
+      title: '✅ Approve',
+      verb: 'approveAction',
+      style: 'positive',
+      data: { ...data, decision: 'approved' },
+    },
+    {
+      type: 'Action.Execute',
+      title: '🚫 Deny',
+      verb: 'rejectAction',
+      style: 'destructive',
+      data: { ...data, decision: 'rejected' },
+    },
+  ];
+  if (opts.missionControlUrl) {
+    actions.push({
+      type: 'Action.OpenUrl',
+      title: '🧭 Open Mission Control',
+      url: opts.missionControlUrl,
+    });
+  }
+
+  const cardObj = createCard(
+    [
+      {
+        type: 'TextBlock',
+        text: '🛑 Human approval needed',
+        weight: 'Bolder',
+        size: 'Large',
+        color: 'Attention',
+      },
+      {
+        type: 'TextBlock',
+        text: `Alex paused **${tool}** because it crossed the Pattern 3 risk gate. Approving runs the next planned step against the live tenant; denying records the rejection in the evidence pack and keeps the change paused.`,
+        wrap: true,
+        spacing: 'Small',
+      },
+      { type: 'FactSet', facts },
+      {
+        type: 'TextBlock',
+        text: reason,
+        wrap: true,
+        isSubtle: true,
+        spacing: 'Medium',
+      },
+      {
+        type: 'Input.Text',
+        id: 'comments',
+        label: 'Notes (optional)',
+        isMultiline: true,
+        placeholder: 'Anything Alex should record with this decision…',
+      },
+    ],
+    actions,
+  );
+
+  return toAttachment(cardObj);
+}
+
 // ── HITL Confirmation Card (Generic) ──
 
 export function createConfirmationCard(action: {

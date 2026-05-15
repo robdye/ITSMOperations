@@ -15,10 +15,12 @@
 //   - Env-driven gate `PROACTIVE_ENGAGEMENT_ENABLED=true` (default off so
 //     existing deployments don't change behavior)
 
-import type { ConversationReference } from '@microsoft/agents-activity';
+import type { Attachment, ConversationReference } from '@microsoft/agents-activity';
+import { Activity } from '@microsoft/agents-activity';
 import type { TurnContext } from '@microsoft/agents-hosting';
 import { agentApplication, getConversationReferences } from './agent';
 import { initiateOutboundTeamsCall } from './voice/acsBridge';
+import { createHitlApprovalCard } from './adaptive-cards';
 
 export type EngagementKind =
   | 'scenario-started'
@@ -43,6 +45,17 @@ export interface EngagementContext {
   severity?: EngagementSeverity;
   /** Optional explicit dedupe key extension. */
   ctxKey?: string;
+  // ── HITL extras (used to build the Teams Adaptive Card for
+  //    'high-risk-hitl'). All optional — when absent the card renders
+  //    with only the fields we do know.
+  actor?: string;
+  actorRoles?: string[];
+  requiredRoles?: string[];
+  decision?: string;
+  riskClass?: string;
+  executionId?: string;
+  actionId?: string;
+  reason?: string;
 }
 
 export interface EngagementResult {
@@ -105,8 +118,29 @@ function buildMessage(kind: EngagementKind, ctx: EngagementContext): string {
         : '';
       return `✍️ First write completed for scenario **${ctx.scenarioId || 'current'}**${link}.`;
     }
-    case 'high-risk-hitl':
-      return `🛑 High-risk action needs your approval: **${ctx.toolName || 'unknown tool'}** on scenario **${ctx.scenarioId || 'current'}**. Check the Mission Control approval queue.`;
+    case 'high-risk-hitl': {
+      // Phase 3.7 — make the HITL ask concrete. Previously this message just
+      // said "Check the Mission Control approval queue" with no link, which
+      // is why the operator saw a "Cycle blocked" feed entry but never got
+      // anything actionable. Now we surface Approve / Deny / Open queue
+      // links so they can act in one tap from Teams or email.
+      const tool = ctx.toolName || 'unknown action';
+      const scenario = ctx.scenarioId || 'autonomous workday';
+      const host = (process.env.PUBLIC_HOSTNAME || '').replace(/\/$/, '');
+      const queueUrl = host ? `https://${host}/mission-control.html#approvals` : '';
+      const approveUrl = host && ctx.signalId
+        ? `https://${host}/api/approvals/callback?action=approve&signal=${encodeURIComponent(ctx.signalId)}`
+        : '';
+      const denyUrl = host && ctx.signalId
+        ? `https://${host}/api/approvals/callback?action=deny&signal=${encodeURIComponent(ctx.signalId)}`
+        : '';
+      const cta: string[] = [];
+      if (approveUrl) cta.push(`[✅ Approve](${approveUrl})`);
+      if (denyUrl) cta.push(`[🚫 Deny](${denyUrl})`);
+      if (queueUrl) cta.push(`[🧭 Open queue](${queueUrl})`);
+      const ctaLine = cta.length > 0 ? `\n\n${cta.join(' · ')}` : '';
+      return `🛑 **Human approval needed** — Alex paused **${tool}** on **${scenario}** because it crossed the Pattern 3 risk gate. You'll see "Cycle blocked by Pattern 3 gate" in the Live Ops Feed — that's me waiting on you.${ctaLine}`;
+    }
     case 'outcome-failure':
       return `⚠️ Outcome **${ctx.outcomeLabel || 'failure'}** on scenario **${ctx.scenarioId || 'current'}** (tool: ${ctx.toolName || 'unknown'}). Calling now.`;
     case 'scenario-complete':
@@ -119,10 +153,17 @@ function buildMessage(kind: EngagementKind, ctx: EngagementContext): string {
 /**
  * Post a proactive Teams 1:1 message to every captured conversation reference.
  *
+ * Optional `attachments` lets callers ship an Adaptive Card alongside (or
+ * instead of) the plain text. Used by 'high-risk-hitl' to send the
+ * approve/deny card.
+ *
  * In practice the deployed bot only has a couple of refs (Alex × the operator).
  * Returns the number of refs we successfully posted to.
  */
-async function postProactiveTeamsMessage(message: string): Promise<{ posted: number; errors: string[] }> {
+async function postProactiveTeamsMessage(
+  message: string,
+  attachments?: Attachment[],
+): Promise<{ posted: number; errors: string[] }> {
   const errors: string[] = [];
   const refs = getConversationReferences();
   if (refs.size === 0) {
@@ -143,7 +184,16 @@ async function postProactiveTeamsMessage(message: string): Promise<{ posted: num
       }).continueConversation(
         ref as Partial<ConversationReference>,
         async (context: TurnContext) => {
-          await context.sendActivity(message);
+          if (attachments && attachments.length > 0) {
+            const activity = Activity.fromObject({
+              type: 'message',
+              text: message,
+              attachments,
+            });
+            await context.sendActivity(activity);
+          } else {
+            await context.sendActivity(message);
+          }
         },
       );
       posted += 1;
@@ -152,6 +202,29 @@ async function postProactiveTeamsMessage(message: string): Promise<{ posted: num
     }
   }
   return { posted, errors };
+}
+
+/**
+ * Build the HITL approve/deny attachment from an engagement context.
+ * Exposed so exception-reporter can also embed it in email (future).
+ */
+function buildHitlAttachment(ctx: EngagementContext): Attachment {
+  const host = (process.env.PUBLIC_HOSTNAME || '').replace(/\/$/, '');
+  const missionControlUrl = host ? `https://${host}/mission-control.html#approvals` : undefined;
+  return createHitlApprovalCard({
+    actionId: ctx.actionId || ctx.ctxKey,
+    signalId: ctx.signalId,
+    executionId: ctx.executionId,
+    toolName: ctx.toolName,
+    scenarioId: ctx.scenarioId,
+    actor: ctx.actor,
+    actorRoles: ctx.actorRoles,
+    requiredRoles: ctx.requiredRoles,
+    decision: ctx.decision,
+    riskClass: ctx.riskClass,
+    reason: ctx.reason || ctx.summary,
+    missionControlUrl,
+  });
 }
 
 /**
@@ -201,11 +274,21 @@ export async function engageOperator(
   const delivered: string[] = [];
   const errors: Record<string, string> = {};
 
-  // 1) Teams 1:1 chat (best-effort).
+  // 1) Teams 1:1 chat (best-effort). For 'high-risk-hitl' we attach an
+  //    Adaptive Card with Approve / Deny buttons so the operator can
+  //    act in one tap — no need to open Mission Control.
   try {
     const message = buildMessage(kind, ctx);
-    const r = await postProactiveTeamsMessage(message);
-    if (r.posted > 0) delivered.push('teams-chat');
+    const attachments: Attachment[] = kind === 'high-risk-hitl'
+      ? [buildHitlAttachment(ctx)]
+      : [];
+    const r = await postProactiveTeamsMessage(
+      message,
+      attachments.length > 0 ? attachments : undefined,
+    );
+    if (r.posted > 0) {
+      delivered.push(attachments.length > 0 ? 'teams-card' : 'teams-chat');
+    }
     if (r.errors.length > 0) errors['teams-chat'] = r.errors.join('; ');
   } catch (err) {
     errors['teams-chat'] = (err as Error).message;

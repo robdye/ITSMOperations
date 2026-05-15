@@ -16,6 +16,8 @@
 
 import { engageOperator } from './proactive-engagement';
 import type { RolePolicyDecision, ActionRisk } from './role-policy';
+import { sendEmail as sendGraphMail } from './graph-mail';
+import { renderBriefingEmail } from './email-render';
 
 export type ExceptionKind =
   | 'gate-deny'
@@ -168,12 +170,123 @@ export async function notifyManagerOnException(
       summary,
       severity: severity === 'critical' ? 'high' : severity === 'info' ? 'info' : severity,
       ctxKey: `${kind}:${ctx.actionKey || ctx.toolName || ctx.workflowId || 'unknown'}`,
+      // \u2500\u2500 HITL extras \u2014 feed the Adaptive Card builder so the
+      //    Teams card surfaces full context (actor / roles / risk class).
+      actor: ctx.actor,
+      actorRoles: ctx.actorRoles,
+      requiredRoles: ctx.requiredRoles,
+      decision: ctx.gateDecision,
+      riskClass: ctx.actionRisk,
+      executionId: ctx.executionId,
+      reason: ctx.detail,
     });
-    return { kind, severity, notified: r.delivered.length > 0 };
+    const notified = r.delivered.length > 0;
+
+    // Phase 3.7 — Email floor for critical / high exceptions. The Teams
+    // 1:1 channel only fires when (a) PROACTIVE_ENGAGEMENT_ENABLED=true
+    // AND (b) we have a captured conversation reference for the operator.
+    // Either condition can be false on a fresh container, leaving the user
+    // staring at a "Cycle blocked" entry in the feed with no way to act.
+    // Always send a styled email for critical/high HITL events so the
+    // operator can approve/deny without depending on the bot channel.
+    const isHighStakes = severity === 'critical' || severity === 'high';
+    const needsApproval = kind === 'high-risk-hitl' || kind === 'gate-deny';
+    if (isHighStakes && needsApproval) {
+      try {
+        await sendApprovalEmail(kind, ctx, severity);
+      } catch (err) {
+        console.warn('[ExceptionReporter] approval email failed:', (err as Error)?.message);
+      }
+    }
+
+    return { kind, severity, notified };
   } catch (err) {
     console.warn('[ExceptionReporter] engageOperator failed:', (err as Error)?.message);
     return { kind, severity, notified: false };
   }
+}
+
+/**
+ * Send a styled approval-request email to MANAGER_EMAIL with explicit
+ * Approve / Deny / Open-queue links. This is the deterministic floor so the
+ * operator is always paged for high-stakes HITL events even when Teams 1:1
+ * or ACS engagement isn't reachable.
+ */
+async function sendApprovalEmail(
+  kind: ExceptionKind,
+  ctx: ExceptionContext,
+  severity: ExceptionSeverity,
+): Promise<void> {
+  const to = process.env.MANAGER_EMAIL || process.env.OWNER_EMAIL || '';
+  if (!to) return;
+  const host = (process.env.PUBLIC_HOSTNAME || '').replace(/\/$/, '');
+  const tool = ctx.toolName || ctx.actionKey || ctx.workflowId || 'an action';
+  const actor = ctx.actor || 'autonomous worker';
+  const reason = ctx.detail || 'Pattern 3 governance gate required human review.';
+  const risk = ctx.actionRisk || 'high';
+  const decision = ctx.gateDecision || 'REQUIRE_HITL';
+  const roles = (ctx.actorRoles || []).join(', ') || 'unknown';
+  const required = (ctx.requiredRoles || []).join(', ') || 'n/a';
+  const queueUrl = host ? `https://${host}/mission-control.html#approvals` : '';
+  // The approve/deny links target the GET /api/approvals/action endpoint so
+  // a single tap from the email resolves the queued action (or records the
+  // decision for audit if the action has already drained). We prefer
+  // `actionKey` (queue id) over `signalId` because the queue path keys on
+  // actionKey; `signalId` is a fallback for non-queue-backed HITL events.
+  const decisionId = ctx.actionKey || ctx.toolName || ctx.signalId || '';
+  const approveUrl = host && decisionId
+    ? `https://${host}/api/approvals/action?id=${encodeURIComponent(decisionId)}&decision=approved&by=${encodeURIComponent(ctx.actor || 'email-approver')}`
+    : '';
+  const denyUrl = host && decisionId
+    ? `https://${host}/api/approvals/action?id=${encodeURIComponent(decisionId)}&decision=rejected&by=${encodeURIComponent(ctx.actor || 'email-approver')}`
+    : '';
+  const title = kind === 'gate-deny' ? 'Action denied — please review' : 'Human approval required';
+  const accent = kind === 'gate-deny' ? '#a4262c' : '#8764b8';
+  const ctaBtn = (url: string, label: string, bg: string): string => `<a href="${url}" style="display:inline-block;background:${bg};color:#fff;padding:9px 18px;border-radius:5px;text-decoration:none;font-weight:600;margin-right:8px;">${label}</a>`;
+  const buttons = [
+    approveUrl ? ctaBtn(approveUrl, '✅ Approve', '#107c10') : '',
+    denyUrl ? ctaBtn(denyUrl, '🚫 Deny', '#a4262c') : '',
+    queueUrl ? ctaBtn(queueUrl, '🧭 Open queue', '#0078d4') : '',
+  ].filter(Boolean).join('');
+  const buttonsBlock = buttons
+    ? `\n\n<div style="margin:12px 0 4px;">${buttons}</div>`
+    : '';
+
+  const md = `### ${escapeMd(reason)}
+
+- **Decision:** ${decision}
+- **Action:** \`${escapeMd(tool)}\`
+- **Risk class:** ${risk}
+- **Requested by:** ${escapeMd(actor)}
+- **Caller roles:** ${escapeMd(roles)}
+- **Required roles:** ${escapeMd(required)}
+${ctx.signalId ? `- **Signal id:** \`${escapeMd(ctx.signalId)}\`` : ''}
+${ctx.executionId ? `- **Execution id:** \`${escapeMd(ctx.executionId)}\`` : ''}
+
+> Alex paused the cycle and is waiting on you. Approving runs the next planned step against the live tenant; denying records the rejection in the evidence pack and keeps the change paused.${buttonsBlock}`;
+
+  const html = renderBriefingEmail({
+    title,
+    subtitle: `${decision} · severity ${severity}`,
+    emoji: '🛑',
+    accent,
+    markdown: md,
+    footerNote: ctx.executionId ? `Evidence id: ${ctx.executionId}` : undefined,
+  });
+
+  await sendGraphMail({
+    to: [to],
+    subject: `[Approval Required] ${tool} — ${decision}`,
+    body: html,
+    isHtml: true,
+    importance: 'high',
+  });
+}
+
+function escapeMd(s: string): string {
+  // Light escaping for markdown — prevent stray `_` or `*` in IDs from
+  // breaking emphasis runs in the rendered email.
+  return String(s).replace(/([*_`\[\]\\])/g, '\\$1');
 }
 
 /**

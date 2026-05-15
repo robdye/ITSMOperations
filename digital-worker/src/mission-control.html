@@ -74,6 +74,41 @@
           <div class="stat-card"><div class="stat-value" style="color:var(--orange)" id="kpi-meta">0</div><div class="stat-label">Meta Alerts (3.5)</div></div>
           <div class="stat-card"><div class="stat-value purple" id="kpi-briefings">0</div><div class="stat-label">Briefings/Shift (3.6)</div></div>
         </div>
+        <!-- Live Action Strip — single-button autonomous actions. Each button -->
+        <!-- fires a /api/demo/action/* endpoint and updates the status pill. -->
+        <!-- Demo secret is read from #cc-demo-secret (already in the topbar). -->
+        <div class="panel" id="live-action-strip" style="margin-top:12px;background:linear-gradient(135deg,rgba(135,100,184,0.06),rgba(37,99,235,0.04));border:1px solid rgba(135,100,184,0.25)">
+          <div class="panel-title" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <span>🚀 Live Action Strip — prove Alex does the work</span>
+            <span id="la-status" style="font-size:11px;font-weight:500;color:var(--text-dim);padding:3px 10px;border-radius:10px;background:rgba(0,0,0,0.25);border:1px solid var(--border)">idle</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:6px 4px 2px">
+            <button id="la-btn-email"
+              title="Send a styled status-update email to MANAGER_EMAIL using the latest kanban snapshot"
+              style="background:linear-gradient(135deg,#2563eb,#1d4ed8);border:none;color:#fff;font-size:12px;font-weight:600;padding:10px 12px;border-radius:6px;cursor:pointer;letter-spacing:0.3px;text-align:left;line-height:1.35">
+              <div style="font-size:14px">📧 Email me an update</div>
+              <div style="font-size:10px;opacity:0.85;font-weight:400;margin-top:2px">Live kanban totals · styled HTML</div>
+            </button>
+            <button id="la-btn-meeting"
+              title="Schedule a 30-min CAB bridge tomorrow at 09:00 ET (Teams meeting)"
+              style="background:linear-gradient(135deg,#7c3aed,#5b21b6);border:none;color:#fff;font-size:12px;font-weight:600;padding:10px 12px;border-radius:6px;cursor:pointer;letter-spacing:0.3px;text-align:left;line-height:1.35">
+              <div style="font-size:14px">📅 Schedule CAB bridge</div>
+              <div style="font-size:10px;opacity:0.85;font-weight:400;margin-top:2px">Tomorrow 09:00 ET · Teams invite</div>
+            </button>
+            <button id="la-btn-cabpack"
+              title="Publish a CAB pack to the ITSM-Alerts Teams channel and email MANAGER_EMAIL"
+              style="background:linear-gradient(135deg,#0e7490,#155e75);border:none;color:#fff;font-size:12px;font-weight:600;padding:10px 12px;border-radius:6px;cursor:pointer;letter-spacing:0.3px;text-align:left;line-height:1.35">
+              <div style="font-size:14px">📄 Publish CAB pack</div>
+              <div style="font-size:10px;opacity:0.85;font-weight:400;margin-top:2px">Teams channel + email · NIST framing</div>
+            </button>
+            <button id="la-btn-callme"
+              title="Have Alex call you on Teams (ACS outbound)"
+              style="background:linear-gradient(135deg,#dc2626,#7f1d1d);border:none;color:#fff;font-size:12px;font-weight:600;padding:10px 12px;border-radius:6px;cursor:pointer;letter-spacing:0.3px;text-align:left;line-height:1.35">
+              <div style="font-size:14px">📞 Call me now</div>
+              <div style="font-size:10px;opacity:0.85;font-weight:400;margin-top:2px">Outbound Teams call · English voice</div>
+            </button>
+          </div>
+        </div>
         <div style="display:grid;grid-template-columns:1fr 340px;gap:12px;">
           <!-- Left: Recent Agent Activity -->
           <div class="panel" style="max-height:calc(100vh - 240px);overflow-y:auto;">

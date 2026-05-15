@@ -152,6 +152,10 @@ jobs:
           add_env "ITSM_ALERTS_CHANNEL_ID" "$ITSM_ALERTS_CHANNEL_ID"
           add_env "ROUTINE_REPORT_RECIPIENTS" "$ROUTINE_REPORT_RECIPIENTS"
           add_env "SCHEDULED_SECRET" "$SCHEDULED_SECRET"
+          # Always enable proactive engagement so HITL Adaptive Cards are
+          # actually posted to the operator's Teams 1:1 chat instead of
+          # being silently dropped on the floor.
+          add_env "PROACTIVE_ENGAGEMENT_ENABLED" "true"
 
           if [ ${#ENV_ARGS[@]} -eq 0 ]; then
             echo "No optional digital-worker runtime settings supplied via GitHub environment/secrets."
