@@ -268,7 +268,8 @@ jobs:
           az functionapp show \
             --resource-group ${{ env.FUNCTIONS_RESOURCE_GROUP }} \
             --name ${{ env.FUNCTIONS_APP }} \
-            --output table
+            --query "{name:name,state:state,defaultHostName:defaultHostName}" \
+            -o table
 
       - name: Deploy Functions (config-zip)
         run: |
