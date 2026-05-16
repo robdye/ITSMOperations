@@ -14,9 +14,11 @@
 
 import type { Signal } from './signal-router';
 import type { WorkflowResult } from './workflow-engine';
-import { engageOperator } from './proactive-engagement';
-import { renderBriefingEmail } from './email-render';
-import { sendEmail as sendGraphMail } from './graph-mail';
+// engageOperator + renderBriefingEmail + sendGraphMail are imported
+// lazily inside notifyOnCompletion() so that this module's top-level
+// import graph stays tiny. Pulling them in eagerly would drag in
+// proactive-engagement → agent → worker-registry → worker-definitions,
+// which breaks vi.mock('../worker-definitions') in workflow-engine tests.
 
 /** Workflows the operator wants to know about when they finish. */
 const NOTIFY_ON_COMPLETE = new Set<string>([
@@ -75,6 +77,7 @@ export async function notifyOnCompletion(ctx: CompletionContext): Promise<void> 
 
   // ── Teams card (best-effort) ──
   try {
+    const { engageOperator } = await import('./proactive-engagement');
     await engageOperator('scenario-complete', {
       scenarioId: ctx.workflowId,
       ctxKey: ctx.executionId,
@@ -114,6 +117,8 @@ export async function notifyOnCompletion(ctx: CompletionContext): Promise<void> 
     : 'Alex hit an issue and needs your attention. Open the trace for the full step-by-step.'}`;
 
   try {
+    const { renderBriefingEmail } = await import('./email-render');
+    const { sendEmail: sendGraphMail } = await import('./graph-mail');
     const html = renderBriefingEmail({
       title: `${friendly} ${outcomeWord}`,
       subtitle: ctx.signal?.id ? `Triggered by ${ctx.signal.source}: ${ctx.signal.id}` : undefined,

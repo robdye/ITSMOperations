@@ -130,35 +130,38 @@ describe('sendEmail', () => {
     expect(sendEmailAdvancedMock).not.toHaveBeenCalled();
   });
 
-  it('returns source=unavailable when no MCP tool is discovered (MCP-first strict, no Graph fallback for turn)', async () => {
+  it('falls back to Graph app-only when no MCP tool is discovered (deterministic floor)', async () => {
+    // Production behavior (post-demo fix): the chat agent must never tell the
+    // user “the mail tool is unavailable” when GRAPH_MAIL_SENDER is configured.
+    // When no MCP MailTools server is discovered, fall through to Graph app-only.
     hasMcpToolServerMock.mockReturnValue(false);
+    sendEmailAdvancedMock.mockResolvedValueOnce({ success: true, messageId: 'graph-fallback-1' });
 
     const result = await sendEmail(
       { to: 'a@b.com', subject: 'S', body: 'B' },
       fakeContext,
     );
 
-    expect(result.source).toBe('unavailable');
-    expect(result.success).toBe(false);
-    expect(result.error).toMatch(/MCP MailTools unavailable/i);
-    // CRITICAL: Graph app-only must NOT have been called for a user turn
-    // (it would 403 in production). The user gets a clear MCP-down error.
-    expect(sendEmailAdvancedMock).not.toHaveBeenCalled();
+    expect(result.source).toBe('graph');
+    expect(result.success).toBe(true);
+    expect(result.messageId).toBe('graph-fallback-1');
+    expect(sendEmailAdvancedMock).toHaveBeenCalledTimes(1);
   });
 
-  it('returns source=unavailable when MCP throws (MCP-first strict, no Graph fallback for turn)', async () => {
+  it('falls back to Graph app-only when MCP tool throws (deterministic floor)', async () => {
     hasMcpToolServerMock.mockImplementation((n: string) => n === 'mcp_MailTools_sendMail');
     invokeMcpToolMock.mockRejectedValueOnce(new Error('boom'));
+    sendEmailAdvancedMock.mockResolvedValueOnce({ success: true, messageId: 'graph-fallback-2' });
 
     const result = await sendEmail(
       { to: 'a@b.com', subject: 'S', body: 'B' },
       fakeContext,
     );
 
-    expect(result.source).toBe('unavailable');
-    expect(result.success).toBe(false);
-    expect(result.error).toMatch(/MCP MailTools.sendMail failed.*boom/);
-    expect(sendEmailAdvancedMock).not.toHaveBeenCalled();
+    expect(result.source).toBe('graph');
+    expect(result.success).toBe(true);
+    expect(result.messageId).toBe('graph-fallback-2');
+    expect(sendEmailAdvancedMock).toHaveBeenCalledTimes(1);
   });
 
   it('autonomous path (no context) skips MCP and goes straight to Graph', async () => {
