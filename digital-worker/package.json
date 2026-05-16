@@ -51,7 +51,7 @@
     "@opentelemetry/sdk-trace-node": "^2.7.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "@types/ws": "^8.18.1",
-    "dotenv": "^17.2.2",
+    "dotenv": "^17.4.2",
     "express": "^5.1.0",
     "openai": "^4.77.0",
     "pptxgenjs": "^4.0.1",
