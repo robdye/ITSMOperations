@@ -4,7 +4,8 @@
 **Audience:** IT Ops managers, CAB stakeholders, platform operators, executive sponsors  
 **Target duration:** 22–28 minutes end-to-end  
 **Killer beat:** Live Teams Adaptive Card HITL approval — Alex pauses a high-risk action, the operator's Teams 1:1 chat with Alex lights up with an Approve/Deny card, one tap from any device unblocks the worker, and the audit trail captures every signature.  
-**Live worker:** `itsm-operations-worker.jollysand-88b78b02.eastus.azurecontainerapps.io` — image SHA `159d8cc`, revision `…--0000129`, `PROACTIVE_ENGAGEMENT_ENABLED=true`.
+**Live worker:** `itsm-operations-worker.jollysand-88b78b02.eastus.azurecontainerapps.io` — image SHA `e76b9cb`, revision `…--0000130`, `PROACTIVE_ENGAGEMENT_ENABLED=true`.  
+**Live MCP server:** `itsm-mcp-server.graycoast-8df9ee76.eastus.azurecontainerapps.io` — image SHA `e76b9cb`, revision `…--0000063`, `SCHEDULED_SECRET` + `WORKER_BASE_URL` wired so the chat agent can email reliably.
 
 ---
 
@@ -49,6 +50,10 @@ Hit these in the open so the customer hears them before they see them:
 | **English voice hard-pin** | Alex now speaks English every time (the locale was previously occasionally drifting to German). Tap "Call me" → Alex calls and briefs in English. |
 | **Styled HTML emails everywhere** | Manager emails (approvals, shift handover, exception reports) render with a clean dark-theme shell instead of raw Markdown. Forwardable to executives without apology. |
 | **Pipeline self-enables HITL** | Every deploy now sets `PROACTIVE_ENGAGEMENT_ENABLED=true` on the worker so the Teams card path can never be silently off in production. |
+| **HITL email buttons are real buttons (NEW today)** | Approve/Deny in the email body now render as proper Outlook-compatible tap targets (`ctaButtons` → nested-table CTAs), not raw markdown links. Tap works from mobile mail clients, no app, no sign-in. |
+| **Chat agent can email reliably (NEW today)** | DA / Alex in chat now have a `send-email` tool wired straight through the MCP server → digital-worker → Graph (with MCP-Graph fallback). Ask *"Email me that CAB summary"* and Alex actually does. Previously this said *"I don't have an email tool."* |
+| **Auto-notify on workflow completion (NEW today)** | Every allow-listed workflow (RCA, major-incident-response, change-lifecycle, vulnerability-to-change, incident-to-problem, knowledge-harvest, SLA-breach-escalation) now fires a Teams card **and** a branded email the moment it finishes — green on success, red+high-importance on failure. The operator's inbox is a continuous receipt of Alex's night shift. |
+| **SNOW preflight gates (NEW today)** | Workflows that require seeded ServiceNow data now check up front. If the seed is missing, the workflow is **skipped + audited** instead of failing partway through. Audit row carries `outcome: SKIPPED · no SNOW seed` so the demo path can recover with a one-line reseed. |
 
 If only one of these makes it on screen, make it the **Adaptive Card**. That's the moment that converts skepticism into excitement.
 
@@ -78,7 +83,7 @@ If you only have one presenter, run the Manager Journey first and then physicall
 - Ensure seeded incident ID for outcome story exists (example in script uses `INC0010001` / `INC0011423`).
 
 ### Agent Alex readiness
-- `/api/health` → `status: "healthy"`, **`build.shaShort` is the deployed SHA** (today: `159d8cc`), `features.hitlControls: true`, `voiceEnabled: true`.
+- `/api/health` → `status: "healthy"`, **`build.shaShort` is the deployed SHA** (today: `e76b9cb`), `features.hitlControls: true`, `voiceEnabled: true`.
 - Mission Control loads at `https://itsm-operations-worker.jollysand-88b78b02.eastus.azurecontainerapps.io/mission-control.html`.
 - `/api/routines`, `/api/outcomes`, `/api/cognition/graph` all return 200.
 - `/api/workday/state` shows `enabled: true`, `running: true`, `inWindow: true`.
@@ -88,6 +93,8 @@ If you only have one presenter, run the Manager Journey first and then physicall
 - Send Alex a "hi" in Teams → confirm a reply comes back. (This warms the proactive conversation reference so the card has somewhere to land.)
 - Confirm `MANAGER_EMAIL` and `GRAPH_MAIL_SENDER` are set on the container app, and a previous routine email has reached the operator's inbox in the last 24 h (proves Graph mail consent and routing).
 - Confirm container env: `az containerapp show -n itsm-operations-worker -g rg-portfolio-agent --query "properties.template.containers[0].env[?name=='PROACTIVE_ENGAGEMENT_ENABLED']"` → `value: "true"`.
+- **Chat-email tool readiness:** confirm the MCP server has `SCHEDULED_SECRET` + `WORKER_BASE_URL` set: `az containerapp show -n itsm-mcp-server -g rg-itsm-operations --query "properties.template.containers[0].env[?name=='SCHEDULED_SECRET' || name=='WORKER_BASE_URL'].name"`. Both must be present. Then ask Alex in chat: *"Send me a one-line test email."* — confirm an inbox arrival within 15 s.
+- **Auto-completion notification readiness:** trigger any allow-listed workflow once (e.g. `POST /api/scheduled -d '{"routineId":"reasoning-rca"}'`) and confirm a Teams card **plus** a branded email both land within 30 s. This proves the new completion notifier is firing in production.
 
 ### Voice readiness (only if voice is on the run-of-show)
 - `/api/voice/status` returns `enabled: true`.
@@ -259,16 +266,17 @@ curl -X POST \
 - Under the covers: `agent.ts` resolves the actor from `context.activity.from`, dynamically imports `approval-queue`, calls `resolveAction(actionId, 'approved', actor)`. The live queue drains.
 - Alex replies in the same chat: *"✅ **`<tool>`** approved by `<operator>`. Comments: `<…>`. Alex is resuming the cycle now."*
 
-**Beat 5 — Worker resumes + audit reveal (≈30 sec)**
+**Beat 5 — Worker resumes + auto-completion + audit reveal (≈30 sec)**
 - Mission Control's Pending Reviews row clears.
 - Cases panel shows the workflow advancing.
+- **NEW today:** seconds after the workflow finishes, a **completion card** lands in the operator's Teams chat (green header, workflow name, outcome label) and a **branded completion email** lands in the manager inbox. Hold both up to camera — the operator sees Alex finish on its own. No polling, no "is it done yet?".
 - Switch to `/api/outcomes` → newest entry is the just-resolved action with:
   - `decision: "approved"`
   - `approvedBy: "<operator>"`
   - `comments: "<the operator's note>"`
   - `engagement.delivered: "teams-card"` ← prove the card was the channel
-  - Full timeline including the gate evaluation, the card post, the resolve event.
-- *Talk:* *"Every signature in that audit trail is the operator's. The agent did not authorize itself. And the same hooks that let us approve from Teams let us deny — same speed, same proof."*
+  - Full timeline including the gate evaluation, the card post, the resolve event, **and the completion notification fan-out**.
+- *Talk:* *"Every signature in that audit trail is the operator's. The agent did not authorize itself. The same hooks that let us approve from Teams let us deny — and the same hooks tell the operator when the work is done, automatically, without them having to ask."*
 
 **Phase C success criteria**
 - Adaptive Card visibly appears in Teams within 5 sec of the gate firing.
@@ -441,6 +449,18 @@ Run the enrichment KEV scenario:
 - Show the outcome in `/api/outcomes` and explain: *"In production, this same routine fires every 5 minutes autonomously via Azure Functions timers."*
 - No loss of credibility; shows you understand the deployment topology.
 
+### If a workflow shows `SKIPPED · no SNOW seed` in `/api/outcomes`
+- This is the **new SNOW preflight gate** doing its job — it skipped instead of crashing partway.
+- Re-seed via DA prompt: *"Seed the ServiceNow dev instance with demo data."*
+- Wait ~10 s for DA to confirm seed completion, then retry the signal (re-fire `scripted-storm` or publish the manual signal from earlier).
+- Audit row stays clean — narrate as *"Alex refused to act on a half-empty ServiceNow; that's the SNOW preflight gate. Nothing was written; nothing leaked."*
+
+### If the chat agent says "I don't have an email tool" when asked to email
+- This shouldn't happen on `e76b9cb` — the MCP server's `send-email` tool is registered. If it does, the MCP server is on an older revision.
+- Producer: `az containerapp revision list -n itsm-mcp-server -g rg-itsm-operations --query "[?properties.active].{rev:name, image:properties.template.containers[0].image}" -o table` — confirm `:e76b9cb` is the active image.
+- If a stale revision is active, single-revision mode will already have pinned latest; just refresh the chat and retry.
+- Fall-back narrative if it still fails: *"This is a regression we caught in T-15 and we'll ship the patch tonight; the manual `/api/mail/send` proxy still works and is the path the autonomous routines use."* — then 📧 button on the Live Action Strip proves the underlying path is healthy.
+
 ### If Mission Control panel stalls
 - Refresh once.
 - Continue using API-backed evidence from `/api/health`, `/api/routines`, `/api/outcomes`, `/api/cognition/graph` endpoints.
@@ -485,14 +505,17 @@ Deliver these immediately after the session:
 ## 13) Presenter clipboard checklist
 
 ### Pre-demo (T-60 min)
-- [ ] `/api/health` → `status: healthy`, `shaShort` matches expected build, `hitlControls: true`, `voiceEnabled: true`.
+- [ ] `/api/health` → `status: healthy`, `shaShort` is `e76b9cb`, `hitlControls: true`, `voiceEnabled: true`.
 - [ ] `/api/workday/state` → `running: true`, `inFlight: false`.
 - [ ] DA prompt: *"Seed the ServiceNow dev instance with demo data."*
 - [ ] Verify DA starters visible in Copilot.
 - [ ] Send "hi" to Alex in Teams → reply received (warms the proactive conversation reference).
 - [ ] Click 📧 on Live Action Strip → manager inbox receives email.
+- [ ] **Ask Alex in chat: *"Send me a one-line test email."*** → inbox arrival within 15 s (validates the new `send-email` MCP tool).
+- [ ] **Fire one allow-listed workflow** (`POST /api/scheduled -d '{"routineId":"reasoning-rca"}'`) → completion Teams card + branded email arrive within 30 s (validates auto-completion notifier).
 - [ ] Confirm `PROACTIVE_ENGAGEMENT_ENABLED=true` on the container app.
-- [ ] Dry-run `scripted-storm` (`{"live": false}`) → outcomes recorded, queue empty.
+- [ ] Confirm `SCHEDULED_SECRET` + `WORKER_BASE_URL` set on the MCP server (`itsm-mcp-server` / `rg-itsm-operations`).
+- [ ] Dry-run `scripted-storm` (`{"live": false}`) → outcomes recorded, queue empty, **no rows show `SKIPPED · no SNOW seed`** (proves seed is healthy and SNOW preflight gates will let workflows run).
 - [ ] Confirm seeded incident ID exists for outcome story (e.g. `INC0010001`).
 
 ### During demo
