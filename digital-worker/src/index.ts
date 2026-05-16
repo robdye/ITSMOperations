@@ -1231,6 +1231,88 @@ server.post('/api/demo/action/cabpack', async (req: Request, res: Response) => {
   }
 });
 
+// ── Generic mail send ──
+// `POST /api/mail/send` — used by the MCP `send-email` tool so the chat
+// agent (Alex IT Ops in Teams) can email a user on request. SCHEDULED_SECRET-
+// protected so only the trusted MCP server (and the worker itself) can call
+// it; we never expose unauthenticated email send to the internet.
+//
+// Body: { to: string|string[], subject: string, markdown?: string,
+//         html?: string, cc?: string[], importance?: 'low'|'normal'|'high',
+//         title?: string, subtitle?: string, emoji?: string }
+//
+// Either `markdown` or `html` must be supplied. When `markdown` is used we
+// wrap it in the standard email shell so it has the Alex header + audit
+// footer; clients can pass `html` directly to bypass the shell.
+server.post('/api/mail/send', async (req: Request, res: Response) => {
+  if (!signalsAuthOk(req)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const body = (req.body || {}) as {
+    to?: string | string[];
+    cc?: string[];
+    subject?: string;
+    markdown?: string;
+    html?: string;
+    title?: string;
+    subtitle?: string;
+    emoji?: string;
+    accent?: string;
+    footerNote?: string;
+    importance?: 'low' | 'normal' | 'high';
+  };
+  const recipients = Array.isArray(body.to)
+    ? body.to.filter(Boolean)
+    : body.to
+      ? [body.to]
+      : [];
+  if (recipients.length === 0) {
+    res.status(400).json({ error: 'missing `to`' });
+    return;
+  }
+  const subject = (body.subject || '').trim();
+  if (!subject) {
+    res.status(400).json({ error: 'missing `subject`' });
+    return;
+  }
+  if (!body.markdown && !body.html) {
+    res.status(400).json({ error: 'missing `markdown` or `html` body' });
+    return;
+  }
+  try {
+    let html: string;
+    if (body.html) {
+      html = body.html;
+    } else {
+      const { renderBriefingEmail } = await import('./email-render');
+      html = renderBriefingEmail({
+        title: body.title || subject,
+        subtitle: body.subtitle,
+        emoji: body.emoji || '📧',
+        accent: body.accent,
+        markdown: body.markdown || '',
+        footerNote: body.footerNote || 'Sent by Alex IT Ops on request',
+      });
+    }
+    const r = await sendGraphMail({
+      to: recipients,
+      cc: body.cc,
+      subject,
+      body: html,
+      isHtml: true,
+      importance: body.importance || 'normal',
+    });
+    if (!r.sent) {
+      res.status(502).json({ status: 'failed', error: r.error || 'send failed', method: r.method });
+      return;
+    }
+    res.status(200).json({ status: 'sent', to: recipients, subject, method: r.method });
+  } catch (err) {
+    res.status(500).json({ status: 'failed', error: (err as Error).message });
+  }
+});
+
 // ── ACS Call Automation callback events ──
 // ACS POSTs CloudEvents-formatted JSON arrays here for each call lifecycle
 // event (CallConnected, CallDisconnected, CreateCallFailed, etc.). Must be

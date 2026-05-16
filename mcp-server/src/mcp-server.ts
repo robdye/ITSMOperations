@@ -709,6 +709,8 @@ export function createChangeServer(): Server {
       { name: "present-cab-pack-as-loop", description: "Render the upcoming CAB pack as a live Microsoft Loop component you can share into Teams, Outlook or the Loop app. The component is co-editable — receivers see updates in real-time.", inputSchema: { type: "object" as const, properties: { cab_date: { type: "string" as const, description: "CAB meeting date (ISO 8601, optional)" } }, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(LOOP_COMPONENT) } as any,
       { name: "present-outcome-story-as-loop", description: "Render the resolution story for a ServiceNow incident as a live Microsoft Loop component you can share into Teams, Outlook or the Loop app. Co-editable across all three surfaces.", inputSchema: { type: "object" as const, properties: { incident_number: { type: "string" as const, description: "Incident number (e.g. INC0010042)" } }, required: ["incident_number"] as const, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(LOOP_COMPONENT) } as any,
       { name: "present-shift-handover-as-loop", description: "Render the morning shift-handover briefing as a live Microsoft Loop component you can share into Teams, Outlook or the Loop app. Top actions are co-editable tasks.", inputSchema: { type: "object" as const, properties: { range_hours: { type: "number" as const, description: "Look-back window in hours (default 12)" } }, additionalProperties: false }, annotations: { readOnlyHint: true }, _meta: descriptorMeta(LOOP_COMPONENT) } as any,
+      // ── Outbound communications ──
+      { name: "send-email", description: "Send an email on behalf of Alex IT Ops via Microsoft Graph. Use this whenever a user asks Alex to email someone (CAB briefings, status updates, incident summaries, handover reports, etc.). Body accepts Markdown and is wrapped in the Alex-branded email shell automatically. Returns { status, to, subject }.", inputSchema: { type: "object" as const, properties: { to: { type: "string" as const, description: "Recipient email address. For multiple recipients, comma-separate." }, subject: { type: "string" as const, description: "Email subject line." }, markdown: { type: "string" as const, description: "Email body as Markdown (headings, lists, bold, links). Will be rendered in the Alex email template." }, cc: { type: "string" as const, description: "Optional CC recipients, comma-separated." }, importance: { type: "string" as const, description: "Optional importance: low | normal | high. Default normal." }, title: { type: "string" as const, description: "Optional banner title shown at the top of the email (defaults to subject)." }, subtitle: { type: "string" as const, description: "Optional banner subtitle below the title." } }, required: ["to", "subject", "markdown"] as const, additionalProperties: false } },
     ];
     return { tools };
   });
@@ -2948,6 +2950,65 @@ export function createChangeServer(): Server {
         });
         return widgetResponse(LOOP_COMPONENT, payload,
           `Shift handover as Loop component covering the last ${rangeHours} h: ${incidents.length} open incidents, ${changes.length} changes, ${slaRisks.length} SLA risks, ${actions.length} actions. Co-editable across Teams, Outlook and the Loop app.`);
+      }
+
+      // ── send-email ──
+      // Proxies to the digital-worker's `/api/mail/send` endpoint so the
+      // outbound mail path is consistent (same Graph credentials, same
+      // branded shell, same audit log). We never call Graph directly from
+      // the MCP server — the mail SP credentials are only mounted on the
+      // worker container.
+      case "send-email": {
+        const a = (args || {}) as {
+          to?: string;
+          cc?: string;
+          subject?: string;
+          markdown?: string;
+          importance?: 'low' | 'normal' | 'high';
+          title?: string;
+          subtitle?: string;
+        };
+        const to = (a.to || '').split(',').map(s => s.trim()).filter(Boolean);
+        const cc = (a.cc || '').split(',').map(s => s.trim()).filter(Boolean);
+        const subject = (a.subject || '').trim();
+        const markdown = a.markdown || '';
+        if (to.length === 0) return textResponse('send-email: missing `to`.');
+        if (!subject) return textResponse('send-email: missing `subject`.');
+        if (!markdown) return textResponse('send-email: missing `markdown` body.');
+
+        const workerBase = (process.env.WORKER_BASE_URL || process.env.DIGITAL_WORKER_URL || '').replace(/\/$/, '');
+        const secret = process.env.SCHEDULED_SECRET || '';
+        if (!workerBase) return textResponse('send-email: WORKER_BASE_URL not configured on MCP server.');
+        if (!secret) return textResponse('send-email: SCHEDULED_SECRET not configured on MCP server.');
+
+        try {
+          const r = await fetch(`${workerBase}/api/mail/send`, {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              'x-scheduled-secret': secret,
+            },
+            body: JSON.stringify({
+              to,
+              cc: cc.length > 0 ? cc : undefined,
+              subject,
+              markdown,
+              importance: a.importance,
+              title: a.title,
+              subtitle: a.subtitle,
+              emoji: '✉️',
+              footerNote: 'Sent by Alex IT Ops on request',
+            }),
+          });
+          const body = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            return textResponse(`send-email failed (${r.status}): ${(body as { error?: string }).error || r.statusText}`);
+          }
+          const out = body as { status?: string; to?: string[]; subject?: string };
+          return textResponse(`✉️ Email ${out.status || 'sent'} to ${(out.to || to).join(', ')} — subject: "${out.subject || subject}".`);
+        } catch (err) {
+          return textResponse(`send-email failed: ${(err as Error).message}`);
+        }
       }
 
       default:

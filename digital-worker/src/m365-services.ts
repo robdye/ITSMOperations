@@ -138,7 +138,7 @@ export async function sendEmail(
   },
   context?: TurnContext,
 ): Promise<EmailResult> {
-  // \u2500\u2500 MCP path (MCP-first strict for turn requests) \u2500\u2500
+  // ── MCP path (MCP-first when turn context is present) ──
   if (context) {
     await ensureMcpDiscovered(context);
     const toolName = pickMcpTool([
@@ -148,6 +148,11 @@ export async function sendEmail(
       'sendMail',
       'sendEmail',
       'mcp_MailTools_send_mail',
+      // Our change-mgmt-mcp `send-email` tool (proxies to digital-worker
+      // /api/mail/send → Microsoft Graph). Lets Alex email recipients when
+      // Microsoft Agent 365's MailTools MCP isn't connected to the session.
+      'send-email',
+      'mcp_change-mgmt-mcp_send-email',
     ]);
     if (toolName) {
       try {
@@ -155,32 +160,29 @@ export async function sendEmail(
           to: params.to,
           subject: params.subject,
           body: params.body,
+          // Our send-email tool expects `markdown`; the MS MailTools tools
+          // expect `body`. Send both so the right one is picked up.
+          markdown: params.body,
           importance: params.importance ?? 'normal',
         })) as { messageId?: string };
         console.log(`[M365] sendEmail via MCP "${toolName}" → ${params.to}`);
         return { success: true, messageId: result?.messageId, source: 'mcp' };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[M365] sendEmail MCP "${toolName}" failed: ${msg}`);
-        return {
-          success: false,
-          error: `MCP MailTools.sendMail failed: ${msg}. Cannot send email without an active user session.`,
-          source: 'unavailable',
-        };
+        console.warn(`[M365] sendEmail MCP "${toolName}" failed, falling back to Graph: ${msg}`);
+        // fall through to Graph app-only path below
       }
+    } else {
+      console.warn(
+        `[M365] No MCP mail tool discovered (have: ${getDiscoveredToolNames().join(', ') || 'none'}). Falling back to Graph app-only.`,
+      );
     }
-    console.warn(
-      `[M365] No MCP mail tool discovered (have: ${getDiscoveredToolNames().join(', ') || 'none'})`,
-    );
-    return {
-      success: false,
-      error:
-        'MCP MailTools unavailable — cannot send email without an active user session. Try again in a moment, or ask an admin to verify the Microsoft Agent 365 mail tool registration.',
-      source: 'unavailable',
-    };
+    // Fall through to Graph app-only — sends as the Alex mailbox identity.
+    // This is the deterministic floor so the chat agent never tells the
+    // user "the mail tool is unavailable" when GRAPH_MAIL_SENDER is set.
   }
 
-  // ── Autonomous Graph fallback (no TurnContext) ──
+  // ── Autonomous / fallback Graph (no TurnContext or MCP path failed) ──
   const result = await emailService.sendEmailAdvanced({
     to: [params.to],
     cc: params.cc,

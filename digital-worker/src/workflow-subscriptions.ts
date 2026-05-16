@@ -10,6 +10,8 @@ import { createApproval } from './teams-approvals';
 import { logAuditEntry } from './audit-trail';
 import { requireReviewIfBlastRadius } from './reviewer-worker';
 import { applyTag } from './cognition-tags';
+import { assertSnowPrecondition, auditSnowBlocked } from './snow-preflight';
+import { notifyManagerOnException } from './exception-reporter';
 
 /**
  * Phase E — Inspect a signal's payload for an embedded CVSS base score
@@ -255,6 +257,24 @@ async function runWorkflowWithModes(
   workerId: string,
   signal: Signal,
 ): Promise<void> {
+  // Preflight — refuse to run when SNOW lacks the seeded record the
+  // workflow expects. Catches the "no SNOW sys_id on originating signal"
+  // and "record-not-found" classes of bad outcomes BEFORE any tool runs.
+  const pf = await assertSnowPrecondition(workflowId, signal);
+  if (!pf.ok) {
+    await auditSnowBlocked(workflowId, signal, pf);
+    await notifyManagerOnException('change-freeze-blocked', {
+      actor: signal.source || 'signal-router',
+      workflowId,
+      toolName: workflowId,
+      actionKey: `preflight:${workflowId}`,
+      scenarioId: workflowId,
+      signalId: signal.id,
+      detail: pf.reason,
+    }).catch(() => undefined);
+    return;
+  }
+
   const worker = workerMap.get(workerId);
   const decision = evaluateTrigger({ workflowId, signal, worker });
 
@@ -390,6 +410,23 @@ async function proposeWorkflow(
 }
 
 async function runMajorIncidentResponse(signal: Signal): Promise<void> {
+  // Preflight — must have a verifiable SNOW incident before MIR fires.
+  // Customer requirement: never run workflows without seeded data.
+  const pf = await assertSnowPrecondition('major-incident-response', signal);
+  if (!pf.ok) {
+    await auditSnowBlocked('major-incident-response', signal, pf);
+    await notifyManagerOnException('change-freeze-blocked', {
+      actor: signal.source || 'signal-router',
+      workflowId: 'major-incident-response',
+      toolName: 'major-incident-response',
+      actionKey: 'preflight:major-incident-response',
+      scenarioId: 'major-incident-response',
+      signalId: signal.id,
+      detail: pf.reason,
+    }).catch(() => undefined);
+    return;
+  }
+
   const worker = workerMap.get('incident-manager');
   const decision = evaluateTrigger({
     workflowId: 'major-incident-response',

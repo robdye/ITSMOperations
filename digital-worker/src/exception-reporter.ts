@@ -233,25 +233,25 @@ async function sendApprovalEmail(
   // decision for audit if the action has already drained). We prefer
   // `actionKey` (queue id) over `signalId` because the queue path keys on
   // actionKey; `signalId` is a fallback for non-queue-backed HITL events.
-  const decisionId = ctx.actionKey || ctx.toolName || ctx.signalId || '';
+  const decisionId = ctx.actionKey || ctx.executionId || ctx.toolName || ctx.signalId || '';
+  // The `by` actor must be the HUMAN reading the email, not the worker
+  // that triggered the gate. Default to the email recipient (the manager)
+  // so the audit trail records a real human signature when they tap.
+  const recipientActor = to.split('@')[0] || 'email-approver';
   const approveUrl = host && decisionId
-    ? `https://${host}/api/approvals/action?id=${encodeURIComponent(decisionId)}&decision=approved&by=${encodeURIComponent(ctx.actor || 'email-approver')}`
+    ? `https://${host}/api/approvals/action?id=${encodeURIComponent(decisionId)}&decision=approved&by=${encodeURIComponent(recipientActor)}`
     : '';
   const denyUrl = host && decisionId
-    ? `https://${host}/api/approvals/action?id=${encodeURIComponent(decisionId)}&decision=rejected&by=${encodeURIComponent(ctx.actor || 'email-approver')}`
+    ? `https://${host}/api/approvals/action?id=${encodeURIComponent(decisionId)}&decision=rejected&by=${encodeURIComponent(recipientActor)}`
     : '';
   const title = kind === 'gate-deny' ? 'Action denied — please review' : 'Human approval required';
   const accent = kind === 'gate-deny' ? '#a4262c' : '#8764b8';
-  const ctaBtn = (url: string, label: string, bg: string): string => `<a href="${url}" style="display:inline-block;background:${bg};color:#fff;padding:9px 18px;border-radius:5px;text-decoration:none;font-weight:600;margin-right:8px;">${label}</a>`;
-  const buttons = [
-    approveUrl ? ctaBtn(approveUrl, '✅ Approve', '#107c10') : '',
-    denyUrl ? ctaBtn(denyUrl, '🚫 Deny', '#a4262c') : '',
-    queueUrl ? ctaBtn(queueUrl, '🧭 Open queue', '#0078d4') : '',
-  ].filter(Boolean).join('');
-  const buttonsBlock = buttons
-    ? `\n\n<div style="margin:12px 0 4px;">${buttons}</div>`
-    : '';
 
+  // IMPORTANT: do NOT put raw <a>/<div> HTML inside `md` — renderMarkdown
+  // HTML-escapes paragraph text, so embedded HTML renders as literal
+  // `<a href=…>` characters in the email. Pass buttons via `ctaButtons`
+  // on the email shell instead so they're rendered as a real Outlook-safe
+  // button row below the markdown body.
   const md = `### ${escapeMd(reason)}
 
 - **Decision:** ${decision}
@@ -263,7 +263,12 @@ async function sendApprovalEmail(
 ${ctx.signalId ? `- **Signal id:** \`${escapeMd(ctx.signalId)}\`` : ''}
 ${ctx.executionId ? `- **Execution id:** \`${escapeMd(ctx.executionId)}\`` : ''}
 
-> Alex paused the cycle and is waiting on you. Approving runs the next planned step against the live tenant; denying records the rejection in the evidence pack and keeps the change paused.${buttonsBlock}`;
+> Alex paused the cycle and is waiting on you. Approving runs the next planned step against the live tenant; denying records the rejection in the evidence pack and keeps the change paused.`;
+
+  const ctaButtons: Array<{ label: string; url: string; accent?: string }> = [];
+  if (approveUrl) ctaButtons.push({ label: '✅ Approve', url: approveUrl, accent: '#107c10' });
+  if (denyUrl) ctaButtons.push({ label: '🚫 Deny', url: denyUrl, accent: '#a4262c' });
+  if (queueUrl) ctaButtons.push({ label: '🧭 Open queue', url: queueUrl, accent: '#0078d4' });
 
   const html = renderBriefingEmail({
     title,
@@ -271,6 +276,7 @@ ${ctx.executionId ? `- **Execution id:** \`${escapeMd(ctx.executionId)}\`` : ''}
     emoji: '🛑',
     accent,
     markdown: md,
+    ctaButtons,
     footerNote: ctx.executionId ? `Evidence id: ${ctx.executionId}` : undefined,
   });
 

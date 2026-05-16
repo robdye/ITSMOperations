@@ -7,6 +7,7 @@ import { workerMap } from './worker-definitions';
 import { addWorkNote, getSnowClientStatus } from './snow-client';
 import { autonomyGate } from './autonomy-gate';
 import { verifyWorkflowOutcome } from './outcome-verifier';
+import { notifyOnCompletion } from './workflow-completion-notifier';
 import { recordTunerSignal } from './autonomy-tuner';
 import type { Signal } from './signal-router';
 import type { TriggerDecision } from './trigger-policy';
@@ -485,6 +486,15 @@ export class WorkflowEngine {
         workflowResult: result,
       }, { autoRollback: true });
       recordTunerSignal(workflowId, sig?.type, record.label);
+      // Auto-notify the operator when a high-touch workflow finishes
+      // (RCA, MIR, change-lifecycle, etc.). Best-effort; never throws.
+      await notifyOnCompletion({
+        workflowId,
+        executionId,
+        signal: sig,
+        result,
+        outcomeLabel: record.label,
+      }).catch(() => undefined);
     } catch (err) {
       console.warn('[WorkflowEngine] outcome verification failed:', (err as Error).message);
     }
@@ -654,6 +664,15 @@ export class WorkflowEngine {
         { autoRollback: true },
       );
       recordTunerSignal(workflowId, sig?.type, record.label);
+      // Same auto-notify hook as the linear path. Fires for DAG workflows
+      // like major-incident-response-dag when DAG_MAJOR_INCIDENT=1.
+      await notifyOnCompletion({
+        workflowId,
+        executionId,
+        signal: sig,
+        result,
+        outcomeLabel: record.label,
+      }).catch(() => undefined);
     } catch (err) {
       console.warn('[WorkflowEngine] outcome verification failed:', (err as Error).message);
     }
