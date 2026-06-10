@@ -65,6 +65,14 @@ export interface WorkNoteResult {
   error?: string;
 }
 
+export interface SnowReadProbeResult {
+  ok: boolean;
+  status: number;
+  table: 'incident' | 'change_request';
+  checkedAt: string;
+  error?: string;
+}
+
 interface SnowRequestOptions {
   method: 'GET' | 'POST' | 'PATCH' | 'PUT';
   path: string;
@@ -117,6 +125,31 @@ async function snowRequest({
   }
 
   return { ok: res.ok, status: res.status, body: parsed };
+}
+
+export async function probeSnowTable(table: 'incident' | 'change_request'): Promise<SnowReadProbeResult> {
+  const checkedAt = new Date().toISOString();
+  try {
+    const result = await snowRequest({
+      method: 'GET',
+      path: `/api/now/table/${table}?sysparm_limit=1&sysparm_fields=sys_id,number,sys_updated_on`,
+    });
+    return {
+      ok: result.ok,
+      status: result.status,
+      table,
+      checkedAt,
+      error: result.ok ? undefined : `ServiceNow ${table} read returned ${result.status}`,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      table,
+      checkedAt,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 function buildReasoningLink(ctx: WriteContext): string {
@@ -186,6 +219,17 @@ export async function getIncident(sysId: string): Promise<{ ok: boolean; record?
   const res = await snowRequest({ method: 'GET', path: `/api/now/table/incident/${encodeURIComponent(sysId)}` });
   const record = (res.body as { result?: Record<string, unknown> } | null)?.result;
   return { ok: res.ok, record };
+}
+
+export async function getIncidentByNumber(number: string): Promise<{ ok: boolean; record?: Record<string, unknown> }> {
+  const query = new URLSearchParams({
+    sysparm_query: `number=${number}`,
+    sysparm_limit: '1',
+    sysparm_fields: 'sys_id,number,state,short_description',
+  });
+  const res = await snowRequest({ method: 'GET', path: `/api/now/table/incident?${query.toString()}` });
+  const records = (res.body as { result?: Record<string, unknown>[] } | null)?.result || [];
+  return { ok: res.ok, record: records[0] };
 }
 
 export async function addWorkNote(

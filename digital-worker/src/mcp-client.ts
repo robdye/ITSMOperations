@@ -11,7 +11,7 @@ export class ItsmMcpClient {
   public changeEndpoint: string;
 
   constructor() {
-    this.changeEndpoint = process.env.MCP_CHANGE_ENDPOINT || '';
+    this.changeEndpoint = process.env.MCP_CHANGE_ENDPOINT || process.env.CHANGE_MCP_ENDPOINT || '';
   }
 
   /**

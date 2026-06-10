@@ -139,6 +139,8 @@ async function fetchAll() {
     fetch(`${BASE}/api/briefings/kpi`).then(r => r.json()).catch(() => null),
   ]);
 
+  try { await renderSourceStatus(); } catch (e) { console.error('renderSourceStatus failed', e); }
+
   const health = healthR.status === 'fulfilled' ? healthR.value : null;
   const workers = workersR.status === 'fulfilled' ? workersR.value : null;
   const routines = routinesR.status === 'fulfilled' ? routinesR.value : null;
@@ -205,6 +207,28 @@ async function fetchAll() {
     addFeed('All systems online — polling every 10s', 'system');
     firstFetch = false;
   }
+}
+
+async function renderSourceStatus() {
+  const banner = byId('source-status-banner');
+  if (!banner) return;
+  const modeEl = byId('source-status-mode');
+  const detailEl = byId('source-status-detail');
+  const chipEl = byId('source-status-chip');
+  const res = await fetch(`${BASE}/api/source-status`);
+  const status = await res.json();
+  const mode = status.sourceMode || 'unknown';
+  const live = mode === 'live-servicenow';
+  const error = mode === 'auth-failed' || mode === 'mcp-unavailable';
+  banner.className = `source-status-banner ${live ? 'source-status-live' : error ? 'source-status-error' : 'source-status-warning'}`;
+  if (modeEl) modeEl.textContent = live ? 'Live ServiceNow source verified' : `Source mode: ${mode}`;
+  if (detailEl) {
+    const warnings = Array.isArray(status.warnings) ? status.warnings.join(' · ') : '';
+    detailEl.textContent = live
+      ? `MCP ${status.mcp?.status || 'unknown'} · ServiceNow reads ok`
+      : warnings || 'Operational reads are not proven live. Do not treat dashboard data as live ITIL state.';
+  }
+  if (chipEl) chipEl.textContent = live ? 'live' : 'not live';
 }
 
 // ── Render: Health ──

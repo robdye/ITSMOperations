@@ -45,6 +45,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
 .stat-value.blue { color: var(--blue); } .stat-value.green { color: var(--green); }
 .stat-value.orange { color: var(--orange); } .stat-value.purple { color: var(--purple); }
 
+.source-status-banner { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; background: rgba(88,166,255,0.08); }
+.source-status-banner strong { display: block; font-size: 13px; color: var(--text); margin-bottom: 3px; }
+.source-status-banner span { font-size: 11px; color: var(--text-dim); }
+#source-status-chip { flex: 0 0 auto; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--border); font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text); background: rgba(13,17,23,0.65); }
+.source-status-live { border-color: rgba(63,185,80,0.5); background: rgba(63,185,80,0.08); }
+.source-status-warning { border-color: rgba(240,136,62,0.55); background: rgba(240,136,62,0.1); }
+.source-status-error { border-color: rgba(248,81,73,0.55); background: rgba(248,81,73,0.1); }
+
 /* ── Panels ── */
 .panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .panel { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }

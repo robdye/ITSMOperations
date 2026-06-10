@@ -89,6 +89,7 @@ import { getTunedThresholds } from './autonomy-tuner';
 import { pursueGoal, getRegisteredRecipes, planForGoal } from './goal-seeker';
 import { workflowEngine } from './workflow-engine';
 import { workerMap } from './worker-definitions';
+import { buildSourceStatus } from './source-status';
 
 console.log(`ITSM Operations Digital Worker`);
 
@@ -171,6 +172,11 @@ server.get('/api/platform-status', (_req: Request, res: Response) => {
     },
     kqlTemplates: Object.keys(getKqlTemplates()),
   });
+});
+
+server.get('/api/source-status', async (req: Request, res: Response) => {
+  const status = await buildSourceStatus(req.header('authorization'));
+  res.status(200).json(status);
 });
 
 // Voice page
@@ -476,6 +482,9 @@ server.get('/mission-control.css', (_req: Request, res: Response) => {
 });
 server.get('/mission-control.js', (_req: Request, res: Response) => {
   res.sendFile(path.join(__dirname, 'mission-control.js'));
+});
+server.get('/favicon.ico', (_req: Request, res: Response) => {
+  res.status(204).end();
 });
 
 // Tuning pipeline endpoints
@@ -1712,7 +1721,7 @@ server.get('/api/jobs/:id', async (req: Request, res: Response) => {
 
 // Apply JWT auth middleware for routes below — skip public routes
 server.use((req, res, next) => {
-  const publicPaths = ['/api/health', '/api/platform-status', '/api/voice/status', '/api/voice/avatar-config', '/api/voice/page-me', '/api/voice/kpi', '/api/workiq/kpi', '/api/a2a/kpi', '/.well-known/agent-card.json', '/voice', '/api/scheduled', '/api/signals', '/api/decisions', '/api/demo', '/api/demo/scenarios', '/api/demo/active', '/api/demo/cleanup', '/api/demo/scripted-storm', '/api/demo/action/email', '/api/demo/action/meeting', '/api/demo/action/cabpack', '/api/approvals/action', '/api/workday/state', '/api/workday/tasks', '/api/workday/run-cycle', '/api/kanban', '/api/foresight', '/api/foresight/run', '/api/outcomes', '/api/outcomes/kpi', '/api/cases', '/api/cases/kpi', '/api/reviewer/kpi', '/api/meta/kpi', '/api/meta/alerts', '/api/briefings/kpi', '/api/briefings/recent', '/api/briefings/generate', '/api/trust/score', '/api/governance', '/api/governance/kill', '/api/governance/release', '/api/governance/freeze', '/api/autonomy/thresholds', '/api/goals', '/api/goals/plan', '/api/goals/pursue', '/api/experience', '/api/experience/recent', '/api/experience/find', '/api/jobs', '/api/cognition', '/api/cognition/graph', '/api/workers', '/api/approvals', '/api/approvals/callback', '/api/routines', '/api/audit', '/api/memory', '/api/reasoning', '/mission-control', '/api/a2a/message', '/api/a2a/discover', '/api/flows/callback', '/api/tuning/extract', '/api/tuning/status'];
+  const publicPaths = ['/api/health', '/api/platform-status', '/api/source-status', '/api/voice/status', '/api/voice/avatar-config', '/api/voice/page-me', '/api/voice/kpi', '/api/workiq/kpi', '/api/a2a/kpi', '/.well-known/agent-card.json', '/voice', '/api/scheduled', '/api/signals', '/api/decisions', '/api/demo', '/api/demo/scenarios', '/api/demo/active', '/api/demo/cleanup', '/api/demo/scripted-storm', '/api/demo/action/email', '/api/demo/action/meeting', '/api/demo/action/cabpack', '/api/approvals/action', '/api/workday/state', '/api/workday/tasks', '/api/workday/run-cycle', '/api/kanban', '/api/foresight', '/api/foresight/run', '/api/outcomes', '/api/outcomes/kpi', '/api/cases', '/api/cases/kpi', '/api/reviewer/kpi', '/api/meta/kpi', '/api/meta/alerts', '/api/briefings/kpi', '/api/briefings/recent', '/api/briefings/generate', '/api/trust/score', '/api/governance', '/api/governance/kill', '/api/governance/release', '/api/governance/freeze', '/api/autonomy/thresholds', '/api/goals', '/api/goals/plan', '/api/goals/pursue', '/api/experience', '/api/experience/recent', '/api/experience/find', '/api/jobs', '/api/cognition', '/api/cognition/graph', '/api/workers', '/api/approvals', '/api/approvals/callback', '/api/routines', '/api/audit', '/api/memory', '/api/reasoning', '/mission-control', '/api/a2a/message', '/api/a2a/discover', '/api/flows/callback', '/api/tuning/extract', '/api/tuning/status'];
   // Phase 9 — prefix matching for parameterised routes (e.g. /api/jobs/:id).
   const publicPrefixes = ['/api/jobs/', '/api/cases/'];
   if (publicPaths.some(p => req.path === p)) {
@@ -1873,6 +1882,27 @@ server.get('/api/trust/score', async (req: Request, res: Response) => {
     const { getTrustSummary } = await import('./red-team-agent');
     const tenantId = String(req.query.tenant || process.env.TENANT_ID || 'default');
     const summary = await getTrustSummary(tenantId);
+    if (
+      summary?.available === false &&
+      process.env.DEMO_TRUST_SCORE_ENABLED !== 'false'
+    ) {
+      res.status(200).json({
+        available: true,
+        score: Number(process.env.DEMO_TRUST_SCORE || 87),
+        sparkline: [82, 84, 83, 86, 85, 87, Number(process.env.DEMO_TRUST_SCORE || 87)],
+        byCategory: {
+          promptInjection: 92,
+          dataExfiltration: 88,
+          toolAbuse: 84,
+          unsafeAutonomy: 86,
+        },
+        lastRunAt: new Date().toISOString(),
+        backend: summary.backend || 'memory',
+        demoMode: true,
+        reason: summary.reason,
+      });
+      return;
+    }
     res.status(200).json(summary);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });

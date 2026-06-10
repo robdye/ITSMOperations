@@ -57,6 +57,13 @@
     </header>
     <div class="content">
       <div class="view active" id="view-command-center">
+        <div id="source-status-banner" class="source-status-banner source-status-loading">
+          <div>
+            <strong id="source-status-mode">Checking source mode...</strong>
+            <span id="source-status-detail">Verifying MCP and ServiceNow read path.</span>
+          </div>
+          <span id="source-status-chip">checking</span>
+        </div>
         <div class="stats-row" style="grid-template-columns:repeat(6,1fr)"><div class="stat-card"><div class="stat-value blue" id="s-conversations">0</div><div class="stat-label">Conversations</div></div>
           <div class="stat-card"><div class="stat-value green" id="s-toolcalls">0</div><div class="stat-label">Tool Calls</div></div>
           <div class="stat-card"><div class="stat-value orange" id="s-approvals">0</div><div class="stat-label">Pending Approvals</div></div>
