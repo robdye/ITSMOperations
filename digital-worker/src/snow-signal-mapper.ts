@@ -38,7 +38,6 @@ export function computeSignalId(payload: SnowBusinessRulePayload): string {
 
 export function mapSnowPayloadToSignal(payload: SnowBusinessRulePayload): Signal {
   const severity = severityFrom(payload.current);
-  const isDemo = !!payload.current?.['u_demo_run'];
   return {
     id: computeSignalId(payload),
     source: 'servicenow',
@@ -55,7 +54,7 @@ export function mapSnowPayloadToSignal(payload: SnowBusinessRulePayload): Signal
     correlationId: (payload.current?.correlation_id as string | undefined) || undefined,
     confidence: 1,
     predicted: false,
-    origin: isDemo ? 'scripted' : 'observed',
+    origin: 'observed',
   };
 }
 

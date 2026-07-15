@@ -10,12 +10,7 @@ import { Client } from '@microsoft/microsoft-graph-client';
 import { TokenCredentialAuthenticationProvider } from '@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials';
 import { ClientSecretCredential, DefaultAzureCredential, type TokenCredential } from '@azure/identity';
 
-// ── Configuration ──
-const GRAPH_SENDER = process.env.GRAPH_MAIL_SENDER || ''; // UPN or object ID of sending user/mailbox
 const GRAPH_SCOPES = ['https://graph.microsoft.com/.default'];
-const GRAPH_TENANT_ID = process.env.GRAPH_TENANT_ID || '';
-const GRAPH_APP_ID = process.env.GRAPH_APP_ID || '';
-const GRAPH_APP_SECRET = process.env.GRAPH_APP_SECRET || '';
 
 let graphClient: Client | null = null;
 
@@ -108,7 +103,8 @@ export const EMAIL_TEMPLATES = {
 
 function getGraphClient(): Client | null {
   if (graphClient) return graphClient;
-  if (!GRAPH_SENDER) {
+  const sender = process.env.GRAPH_MAIL_SENDER || '';
+  if (!sender) {
     console.warn('[GraphMail] GRAPH_MAIL_SENDER not configured');
     return null;
   }
@@ -119,9 +115,12 @@ function getGraphClient(): Client | null {
     // managed identity does not own the Exchange RBAC role assignment for
     // sending mail — only the dedicated mail SP does.
     let credential: TokenCredential;
-    if (GRAPH_TENANT_ID && GRAPH_APP_ID && GRAPH_APP_SECRET) {
-      credential = new ClientSecretCredential(GRAPH_TENANT_ID, GRAPH_APP_ID, GRAPH_APP_SECRET);
-      console.log(`[GraphMail] Using ClientSecretCredential for app ${GRAPH_APP_ID}`);
+    const tenantId = process.env.GRAPH_TENANT_ID || '';
+    const appId = process.env.GRAPH_APP_ID || '';
+    const appSecret = process.env.GRAPH_APP_SECRET || '';
+    if (tenantId && appId && appSecret) {
+      credential = new ClientSecretCredential(tenantId, appId, appSecret);
+      console.log(`[GraphMail] Using ClientSecretCredential for app ${appId}`);
     } else {
       credential = new DefaultAzureCredential();
       console.log('[GraphMail] Using DefaultAzureCredential (managed identity)');
@@ -140,10 +139,10 @@ function getGraphClient(): Client | null {
 
 export async function sendEmail(message: EmailMessage): Promise<EmailResult> {
   const client = getGraphClient();
+  const sender = process.env.GRAPH_MAIL_SENDER || '';
   
-  if (!client || !GRAPH_SENDER) {
-    console.warn('[GraphMail] Graph not configured, logging email instead');
-    console.log(`[GraphMail:Fallback] To: ${message.to.join(', ')} | Subject: ${message.subject}`);
+  if (!client || !sender) {
+    console.warn('[GraphMail] Graph Mail is not configured');
     return { sent: false, error: 'Graph Mail not configured', method: 'fallback' };
   }
 
@@ -173,7 +172,7 @@ export async function sendEmail(message: EmailMessage): Promise<EmailResult> {
       saveToSentItems: true,
     };
 
-    await client.api(`/users/${GRAPH_SENDER}/sendMail`).post(graphMessage);
+    await client.api(`/users/${sender}/sendMail`).post(graphMessage);
     
     console.log(`[GraphMail] Sent to ${message.to.join(', ')}: ${message.subject}`);
     return { sent: true, method: 'graph' };
@@ -213,8 +212,9 @@ export async function sendApprovalRequest(
 // ── Status ──
 
 export function getGraphMailStatus(): { enabled: boolean; sender: string } {
+  const sender = process.env.GRAPH_MAIL_SENDER || '';
   return {
-    enabled: !!GRAPH_SENDER && !!getGraphClient(),
-    sender: GRAPH_SENDER || 'not-configured',
+    enabled: !!sender,
+    sender: sender || 'not-configured',
   };
 }

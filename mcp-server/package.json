@@ -12,9 +12,7 @@
     "test:watch": "vitest",
     "lint": "eslint --config ../eslint.config.mjs src/",
     "typecheck": "tsc --noEmit",
-    "inspector": "npx @modelcontextprotocol/inspector",
-    "seed:4months": "node --env-file=.env --import tsx scripts/seed-4months.ts",
-    "seed:close-open": "node --env-file=.env --import tsx scripts/seed-4months.ts --close-only"
+    "inspector": "npx @modelcontextprotocol/inspector"
   },
   "dependencies": {
     "@azure/search-documents": "^13.0.0",

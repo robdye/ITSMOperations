@@ -6,8 +6,7 @@
 //
 // Two failure modes this catches:
 //   1. Signal references a SNOW record (sys_id / number) that doesn't
-//      exist (or isn't readable) — typical of a stale fixture or a demo
-//      seed that wasn't run before scripted-storm.
+//      exist or isn't readable.
 //   2. Signal carries NO SNOW reference at all for a workflow that
 //      always needs one (major-incident-response, change-lifecycle,
 //      incident-to-problem, knowledge-harvest, sla-breach-escalation,
@@ -77,7 +76,7 @@ function hasEnrichmentGrounding(signal: Signal): boolean {
  * { ok: false, reason, missingRef } when the workflow must be blocked.
  *
  * Always succeeds for workflows not in the strict/enrichment-tolerant
- * lists (e.g. cognition-tag-* synthetic workflows). Never throws.
+ * lists (e.g. cognition-tag workflows). Never throws.
  */
 export async function assertSnowPrecondition(
   workflowId: string,
@@ -97,9 +96,7 @@ export async function assertSnowPrecondition(
       return {
         ok: false,
         missingRef: 'no-sys-id',
-        reason:
-          `${workflowId} requires a SNOW sys_id on the originating signal but none was supplied. ` +
-          `Run "Reset demo data" / re-seed SNOW before firing this signal.`,
+        reason: `${workflowId} requires a ServiceNow sys_id on the originating signal but none was supplied.`,
       };
     }
     try {
@@ -108,10 +105,7 @@ export async function assertSnowPrecondition(
         return {
           ok: false,
           missingRef: 'record-not-found',
-          reason:
-            `${workflowId} signal references SNOW sys_id ${ref.sysId} but no record exists ` +
-            `(or the API returned an error). SNOW must be seeded with the matching record ` +
-            `before this workflow can run.`,
+          reason: `${workflowId} signal references ServiceNow sys_id ${ref.sysId}, but that record could not be read.`,
         };
       }
     } catch (err) {

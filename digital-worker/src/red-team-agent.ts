@@ -12,9 +12,8 @@
 //   - scope_escape        — tries to invoke tools the agent shouldn't have
 //   These three correspond to the OWASP LLM Top-10 items LLM01 / LLM02 / LLM07.
 //
-// Tenant gate:
-//   `allowRedTeam` on the tenant profile must be true. Default is false, so
-//   no red-team probe runs on a tenant that hasn't explicitly opted in.
+// Runtime gate:
+//   RED_TEAM_ENABLED must be true. Default is false.
 //
 // Storage:
 //   Azure Table `AlexTrustScore`:
@@ -29,10 +28,15 @@
 // through the same path as a real user message.
 
 import { upsertEntry, loadRecent, ANTICIPATORY_TABLES, getBackend } from './anticipatory-store';
-import { loadTenantProfile } from './demo/tenant-profile';
 import { recordMetaAlert } from './meta-monitor';
 
 export type ProbeCategory = 'jailbreak' | 'prompt_injection' | 'scope_escape';
+
+function isRedTeamEnabled(): boolean {
+  return ['1', 'true', 'yes', 'on'].includes(
+    String(process.env.RED_TEAM_ENABLED || '').trim().toLowerCase(),
+  );
+}
 
 export interface RedTeamProbe {
   id: string;
@@ -239,11 +243,10 @@ export async function getTrustSummary(tenantId: string): Promise<{
   lastRunAt: string | null;
   backend: 'azure-table' | 'memory';
 }> {
-  const tenant = loadTenantProfile(tenantId);
-  if (!tenant.allowRedTeam) {
+  if (!isRedTeamEnabled()) {
     return {
       available: false,
-      reason: `red-team not enabled for tenant ${tenantId} (allowRedTeam=false)`,
+      reason: `red-team not enabled for tenant ${tenantId} (RED_TEAM_ENABLED=false)`,
       score: null,
       sparkline: [],
       byCategory: null,
@@ -282,9 +285,8 @@ export async function runRedTeamForTenant(
   tenantId: string,
   invoke: (prompt: string) => Promise<string>,
 ): Promise<DailyTrustScore | { skipped: true; reason: string }> {
-  const tenant = loadTenantProfile(tenantId);
-  if (!tenant.allowRedTeam) {
-    return { skipped: true, reason: `tenant ${tenantId} has allowRedTeam=false (default)` };
+  if (!isRedTeamEnabled()) {
+    return { skipped: true, reason: `tenant ${tenantId} has RED_TEAM_ENABLED=false (default)` };
   }
   const results = await runProbes(invoke);
   const agg = aggregate(results);

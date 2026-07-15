@@ -151,7 +151,12 @@ export class ItsmAgent extends AgentApplication<TurnState> {
   constructor() {
     super({
       storage: new MemoryStorage(),
-      authorization: { agentic: { type: 'agentic' } },
+      authorization: {
+        agentic: {
+          type: 'agentic',
+          scopes: getObservabilityAuthenticationScope(),
+        },
+      },
     });
 
     // Handle direct messages

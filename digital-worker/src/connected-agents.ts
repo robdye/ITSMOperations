@@ -36,19 +36,19 @@ const connectedAgents = new Map<string, ConnectedAgent>();
 
 /**
  * Register the ServiceNow first-party agent for A2A delegation.
- * Uses the SNOW_INSTANCE env var to build the agent endpoint.
+ * Uses an explicit A2A endpoint; a normal ServiceNow instance is not an A2A server.
  */
 export function registerServiceNowAgent(): void {
-  const snowInstance = process.env.SNOW_INSTANCE || '';
-  if (!snowInstance) {
-    console.log('[A2A] SNOW_INSTANCE not set — ServiceNow agent not registered');
+  const endpoint = (process.env.SERVICENOW_AGENT_ENDPOINT || '').replace(/\/+$/, '');
+  if (!endpoint) {
+    console.log('[A2A] SERVICENOW_AGENT_ENDPOINT not set — ServiceNow agent not registered');
     return;
   }
 
   const agent: ConnectedAgent = {
     id: 'servicenow-agent',
     name: 'ServiceNow Virtual Agent',
-    endpoint: snowInstance,
+    endpoint,
     capabilities: [
       'incident-management',
       'change-management',
@@ -155,7 +155,7 @@ export async function healthCheckAll(): Promise<Map<string, boolean>> {
 
   for (const [id, agent] of connectedAgents.entries()) {
     try {
-      const res = await fetch(`${agent.endpoint}/health`, {
+      const res = await fetch(`${agent.endpoint}/api/health`, {
         signal: AbortSignal.timeout(5000),
       });
       const healthy = res.ok;
@@ -221,7 +221,7 @@ export function getDiscoveryManifest(): Record<string, unknown> {
     endpoints: {
       a2a: '/api/a2a/message',
       discovery: '/api/a2a/discover',
-      health: '/health',
+      health: '/api/health',
     },
     connectedAgents: getConnectedAgents().map(a => ({
       id: a.id,

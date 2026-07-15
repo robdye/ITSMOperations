@@ -177,7 +177,6 @@ function deriveQueueLane(): KanbanLane {
     recordId: recordIdFromPayload(s.payload),
     meta: {
       origin: s.origin,
-      forceMode: s.forceMode || '',
       correlationId: s.correlationId || '',
     },
   }));

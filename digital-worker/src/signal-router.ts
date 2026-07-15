@@ -1,6 +1,6 @@
 // ITSM Operations — Signal Router
 // Central event-driven dispatcher. Replaces cron-first triggering by letting
-// any source (ServiceNow webhook, scheduler, demo-director, internal monitor)
+// any source (ServiceNow webhook, scheduler, internal monitor)
 // publish typed Signals that route to subscribed workflows under a policy gate.
 //
 // Pillar 1 of the Anticipatory-Alex architecture (MVP slice).
@@ -11,12 +11,12 @@ import { logTrace } from './reasoning-trace';
 // ── Types ──
 
 export type SignalSeverity = 'info' | 'low' | 'medium' | 'high' | 'critical';
-export type SignalOrigin = 'observed' | 'predicted' | 'scripted';
+export type SignalOrigin = 'observed' | 'predicted';
 
 export interface Signal {
   /** Stable id used for dedupe (5-min window). Caller must ensure uniqueness. */
   id: string;
-  /** Source system: 'servicenow' | 'scheduler' | 'monitor' | 'demo' | 'foresight' | ... */
+  /** Source system: 'servicenow' | 'scheduler' | 'monitor' | 'foresight' | ... */
   source: string;
   /** Hierarchical type: '<table>.<action>' for SNOW, '<routine>.<event>' for scheduler. */
   type: string;
@@ -33,22 +33,8 @@ export interface Signal {
   confidence?: number;
   /** Whether this signal is the output of a forecast (vs. an observed event). */
   predicted?: boolean;
-  /**
-   * Provenance for governance, mission-control color-coding, and prod/demo
-   * separation. Mission-control hides 'scripted' in the prod profile.
-   */
+  /** Provenance for governance and mission-control color-coding. */
   origin: SignalOrigin;
-  /**
-   * Optional override that bypasses trigger-policy confidence math. When
-   * set, the policy returns this mode directly (subject only to hard gates
-   * + the per-tenant action budget for `auto`). Demo / scripted-storm
-   * signals use this to force live workflows past the conservative
-   * production thresholds.
-   *
-   * Kept as a string union (instead of importing TriggerMode) to avoid a
-   * cyclic dependency between signal-router and trigger-policy.
-   */
-  forceMode?: 'auto' | 'propose' | 'dry-run' | 'notify-only';
 }
 
 export interface SignalSubscription {

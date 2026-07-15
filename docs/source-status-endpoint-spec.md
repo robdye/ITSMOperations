@@ -34,7 +34,7 @@ Expose whether ITSMOperations is operating against live ServiceNow, synthetic da
     "lastIncidentRead": "iso|null",
     "lastChangeRead": "iso|null"
   },
-  "sourceMode": "live-servicenow|synthetic-servicenow|scenario-injected|cached|auth-failed|mcp-unavailable",
+  "sourceMode": "live-servicenow|cached|auth-failed|mcp-unavailable",
   "fallbackActive": false,
   "warnings": []
 }

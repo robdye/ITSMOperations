@@ -28,13 +28,8 @@ copyFile(path.join('src', 'mission-control.html'), path.join('dist', 'mission-co
 copyFile(path.join('src', 'mission-control.css'), path.join('dist', 'mission-control.css'));
 copyFile(path.join('src', 'mission-control.js'), path.join('dist', 'mission-control.js'));
 
-// Demo JSON resources
 const isJson = (name) => name.endsWith('.json');
-copyDir(path.join('src', 'demo', 'scenarios'), path.join('dist', 'demo', 'scenarios'), isJson);
-copyDir(path.join('src', 'demo', 'seed-data'), path.join('dist', 'demo', 'seed-data'), isJson);
-copyDir(path.join('src', 'demo', 'tenant-profiles'), path.join('dist', 'demo', 'tenant-profiles'), isJson);
-
 // A2A resources
 copyDir(path.join('src', 'a2a'), path.join('dist', 'a2a'), isJson);
 
-console.log('Copied demo JSON resources');
+console.log('Copied static resources');

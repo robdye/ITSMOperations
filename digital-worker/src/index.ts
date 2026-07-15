@@ -67,7 +67,6 @@ import { startCaseReminderLoop, getReminderKpi } from './case-reminders';
 import { detectCorrelations, getCorrelationKpi } from './case-correlation';
 import { getReviewerKpi } from './reviewer-worker';
 import { startMetaMonitor, getMetaMonitorKpi, getRecentMetaAlerts } from './meta-monitor';
-import { DemoDirector, DemoTargetNotAllowedError, type DemoCleanupMode } from './demo/demo-director';
 import { autonomousWorkday, startAutonomousWorkday, stopAutonomousWorkday } from './autonomous-workday';
 import { getKanbanSnapshot, getEndOfDaySummary } from './itsm-kanban';
 import { sendEmail as sendGraphMail } from './graph-mail';
@@ -106,27 +105,20 @@ function isEnvFlagEnabled(name: string): boolean {
 }
 
 let authConfig: AuthConfiguration = {};
-if (!isDevelopment) {
-  try {
-    authConfig = loadAuthConfigFromEnv();
-  } catch (err) {
-    console.error('Failed to load auth config from env, continuing with empty config:', err);
-  }
-}
 console.log(`Environment: NODE_ENV=${process.env.NODE_ENV}, isDevelopment=${isDevelopment}`);
-
-// Fail fast if SCHEDULED_SECRET not set in production
-if (!isDevelopment && !process.env.SCHEDULED_SECRET) {
-  console.warn('⚠️  SCHEDULED_SECRET is not set. The /api/scheduled endpoint will reject all requests in production.');
-}
 
 const server = express();
 server.use(express.json());
 
+let startupReady = false;
+let startupError: string | null = null;
+
 // Health endpoint
 server.get('/api/health', (_req: Request, res: Response) => {
-  res.status(200).json({
-    status: 'healthy',
+  res.status(startupReady ? 200 : 503).json({
+    status: startupReady ? 'healthy' : startupError ? 'failed' : 'starting',
+    ready: startupReady,
+    error: startupError,
     agent: 'ITSM Operations Digital Worker',
     timestamp: new Date().toISOString(),
     uptimeMs: Math.floor(process.uptime() * 1000),
@@ -151,6 +143,21 @@ server.get('/api/health', (_req: Request, res: Response) => {
       hitlControls: true,
     },
   });
+});
+
+const publicPaths = ['/api/health', '/api/platform-status', '/api/source-status', '/api/voice/status', '/api/voice/avatar-config', '/api/voice/page-me', '/api/voice/kpi', '/api/workiq/kpi', '/api/a2a/kpi', '/.well-known/agent-card.json', '/voice', '/api/scheduled', '/api/signals', '/api/decisions', '/api/approvals/action', '/api/workday/state', '/api/workday/tasks', '/api/workday/run-cycle', '/api/kanban', '/api/foresight', '/api/foresight/run', '/api/outcomes', '/api/outcomes/kpi', '/api/cases', '/api/cases/kpi', '/api/reviewer/kpi', '/api/meta/kpi', '/api/meta/alerts', '/api/briefings/kpi', '/api/briefings/recent', '/api/briefings/generate', '/api/trust/score', '/api/governance', '/api/governance/kill', '/api/governance/release', '/api/governance/freeze', '/api/autonomy/thresholds', '/api/goals', '/api/goals/plan', '/api/goals/pursue', '/api/experience', '/api/experience/recent', '/api/experience/find', '/api/jobs', '/api/cognition', '/api/cognition/graph', '/api/workers', '/api/approvals', '/api/approvals/callback', '/api/routines', '/api/audit', '/api/memory', '/api/reasoning', '/mission-control', '/mission-control.css', '/mission-control.js', '/favicon.ico', '/api/a2a/message', '/api/a2a/discover', '/api/flows/callback', '/api/tuning/extract', '/api/tuning/status'];
+const publicPrefixes = ['/api/jobs/', '/api/cases/'];
+
+server.use((req, res, next) => {
+  if (req.path === '/api/health') return next();
+  if (!startupReady) {
+    res.status(503).json({ error: startupError || 'service-starting' });
+    return;
+  }
+  if (publicPaths.includes(req.path) || publicPrefixes.some(p => req.path.startsWith(p))) {
+    return next();
+  }
+  return authorizeJWT(authConfig)(req, res, next);
 });
 
 // Comprehensive platform status — all integrated services
@@ -569,172 +576,6 @@ server.get('/api/decisions', (req: Request, res: Response) => {
   res.status(200).json({ decisions: signalRouter.getRecentDecisions(limit) });
 });
 
-// ── Demo Director surface (Phase 3) ──
-// Tenant-flagged, secret-protected. Refuses to run unless the tenant profile
-// has allowDemoDirector = true and the SNOW host is on the allow-list.
-//
-// Active-runs tracking — `activeDemoRuns` holds the most recent demo runs
-// (newest first, capped) so the Mission Control command-center can:
-//   • light an "Active scenario" pill on inject,
-//   • feed scenario context into the page-me button,
-//   • pre-select the last runId in the cleanup button.
-interface ActiveDemoRun {
-  demoRunId: string;
-  scenarioId: string;
-  description: string;
-  startedAt: string;
-  passed?: boolean;
-  completedAt?: string;
-}
-const ACTIVE_DEMO_RUNS_LIMIT = 20;
-const activeDemoRuns: ActiveDemoRun[] = [];
-
-function recordActiveDemoRun(entry: ActiveDemoRun): void {
-  activeDemoRuns.unshift(entry);
-  while (activeDemoRuns.length > ACTIVE_DEMO_RUNS_LIMIT) activeDemoRuns.pop();
-}
-function markActiveDemoRunComplete(demoRunId: string, passed: boolean): void {
-  const run = activeDemoRuns.find((r) => r.demoRunId === demoRunId);
-  if (run) {
-    run.passed = passed;
-    run.completedAt = new Date().toISOString();
-  }
-}
-function removeActiveDemoRun(demoRunId: string): void {
-  const idx = activeDemoRuns.findIndex((r) => r.demoRunId === demoRunId);
-  if (idx >= 0) activeDemoRuns.splice(idx, 1);
-}
-
-// Public read — Mission Control picker pulls scenario metadata from here.
-// No mutation, no SNOW write; safe to expose without SCHEDULED_SECRET so the
-// UI can populate the dropdown on initial load.
-server.get('/api/demo/scenarios', async (_req: Request, res: Response) => {
-  const tenantId = process.env.TENANT_ID || 'default';
-  const instanceUrl = process.env.SNOW_INSTANCE_URL || '';
-  const authHeader = process.env.SNOW_AUTH_HEADER || '';
-  try {
-    const director = new DemoDirector({ tenantId, instanceUrl, authHeader });
-    res
-      .status(200)
-      .json({ scenarios: director.listDetailed(), profile: director.getProfile() });
-  } catch (err) {
-    if (err instanceof DemoTargetNotAllowedError) {
-      res.status(403).json({ error: err.message, scenarios: [] });
-      return;
-    }
-    res.status(500).json({ error: (err as Error).message, scenarios: [] });
-  }
-});
-
-// Public read — Mission Control polls this to know whether a demo is active
-// (drives the "Active scenario" pill and the page-me button enable state).
-server.get('/api/demo/active', (_req: Request, res: Response) => {
-  res.status(200).json({ runs: activeDemoRuns });
-});
-
-server.post('/api/demo', async (req: Request, res: Response) => {
-  if (!signalsAuthOk(req)) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
-  const action = String(req.body?.action || '');
-  const tenantId = String(req.body?.tenantId || process.env.TENANT_ID || 'default');
-  const instanceUrl = String(req.body?.instanceUrl || process.env.SNOW_INSTANCE_URL || '');
-  const authHeader = String(req.body?.authHeader || process.env.SNOW_AUTH_HEADER || '');
-
-  try {
-    const director = new DemoDirector({ tenantId, instanceUrl, authHeader });
-    if (action === 'list') {
-      res.status(200).json({ scenarios: director.listDetailed(), profile: director.getProfile() });
-      return;
-    }
-    if (action === 'status') {
-      res.status(200).json({ profile: director.getProfile(), activeRuns: activeDemoRuns });
-      return;
-    }
-    if (action === 'run') {
-      const scenario = String(req.body?.scenario || '');
-      if (!scenario) {
-        res.status(400).json({ error: 'scenario id required' });
-        return;
-      }
-      const meta = director.getScenarioMetadata(scenario);
-      if (!meta) {
-        res.status(404).json({ error: `Scenario not found: ${scenario}` });
-        return;
-      }
-      const report = await director.run(scenario);
-      // Track in activeDemoRuns so the page-me + cleanup buttons can find it.
-      recordActiveDemoRun({
-        demoRunId: report.demoRunId,
-        scenarioId: report.scenarioId,
-        description: meta.description,
-        startedAt: new Date().toISOString(),
-        passed: report.passed,
-        completedAt: new Date().toISOString(),
-      });
-      markActiveDemoRunComplete(report.demoRunId, report.passed);
-      // Phase 4 — proactive engagement: scenario started + completed.
-      void import('./proactive-engagement').then(({ engageOperator }) => {
-        engageOperator('scenario-started', { scenarioId: report.scenarioId, ctxKey: report.demoRunId, summary: `🎬 Picked up scenario **${report.scenarioId}** — ${meta.description}` }).catch(() => {});
-        engageOperator('scenario-complete', { scenarioId: report.scenarioId, ctxKey: report.demoRunId, summary: `✅ Scenario **${report.scenarioId}** ${report.passed ? 'passed' : 'completed (with issues)'}. Check the Mission Control Kanban.` }).catch(() => {});
-      }).catch(() => {});
-      res.status(200).json({ report, activeRun: activeDemoRuns[0] });
-      return;
-    }
-    res.status(400).json({ error: `unknown action: ${action}` });
-  } catch (err) {
-    if (err instanceof DemoTargetNotAllowedError) {
-      res.status(403).json({ error: err.message });
-      return;
-    }
-    res.status(500).json({ error: (err as Error).message });
-  }
-});
-
-// ── Demo cleanup ──
-// Removes (or closes) every `u_demo_run`-tagged record on incident /
-// change_request / problem / em_event so every demo starts from a clean PDI.
-// SCHEDULED_SECRET-protected since it mutates live SNOW state.
-//
-// Body: { demoRunId?: string, mode?: 'delete' | 'close' }
-//   demoRunId omitted → cleans ALL demo-tagged records (every run).
-//   mode omitted     → uses env DEMO_CLEANUP_MODE (defaults to 'delete').
-server.post('/api/demo/cleanup', async (req: Request, res: Response) => {
-  if (!signalsAuthOk(req)) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
-  const tenantId = String(req.body?.tenantId || process.env.TENANT_ID || 'default');
-  const instanceUrl = String(req.body?.instanceUrl || process.env.SNOW_INSTANCE_URL || '');
-  const authHeader = String(req.body?.authHeader || process.env.SNOW_AUTH_HEADER || '');
-  const demoRunIdRaw = req.body?.demoRunId;
-  const demoRunId =
-    typeof demoRunIdRaw === 'string' && demoRunIdRaw.trim() ? demoRunIdRaw.trim() : undefined;
-
-  const envMode = String(process.env.DEMO_CLEANUP_MODE || 'delete').toLowerCase();
-  const requestedMode = String(req.body?.mode || envMode).toLowerCase();
-  const mode: DemoCleanupMode = requestedMode === 'close' ? 'close' : 'delete';
-
-  try {
-    const director = new DemoDirector({ tenantId, instanceUrl, authHeader });
-    const result = await director.cleanup({ demoRunId, mode });
-    // Trim active runs that were cleared (or all of them when no id given).
-    if (demoRunId) {
-      removeActiveDemoRun(demoRunId);
-    } else if (result.totalCleaned > 0) {
-      activeDemoRuns.length = 0;
-    }
-    res.status(200).json({ result, activeRuns: activeDemoRuns });
-  } catch (err) {
-    if (err instanceof DemoTargetNotAllowedError) {
-      res.status(403).json({ error: err.message });
-      return;
-    }
-    res.status(500).json({ error: (err as Error).message });
-  }
-});
-
 // ── Autonomous workday (Phase 2 — autonomous-operator loop) ─────────────
 // State + on-demand cycle trigger + recent task buffer. All three are
 // safe to call without auth EXCEPT the cycle trigger, which mutates SNOW.
@@ -855,12 +696,6 @@ server.post('/api/scheduled/end-of-day', async (req: Request, res: Response) => 
   res.status(200).json({ summary, delivered, errors });
 });
 
-// ── Demo: scripted P1 storm (no SNOW required) ─────────────────────────
-// One-click button on Mission Control fires this. It synthesizes the same
-// scripted signals that `verify-mir-workflow` used during validation so the
-// signal-router → trigger-policy → major-incident-bridge / sla-breach
-// workflows light up end-to-end without needing a live ServiceNow tenant.
-
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -869,376 +704,6 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
-
-server.post('/api/demo/scripted-storm', async (req: Request, res: Response) => {
-  // ── Live vs dry-run mode ───────────────────────────────────────
-  // Default: live (every signal carries forceMode='auto' so trigger-policy
-  // bypasses the conservative production thresholds and runs the workflow
-  // for real). Set body { live: false } to use the legacy
-  // confidence-gated path which lands in 'dry-run' on a stock deployment.
-  const liveRaw = req.body?.live;
-  const live = liveRaw === undefined ? true : Boolean(liveRaw);
-  const forceMode: 'auto' | undefined = live ? 'auto' : undefined;
-
-  const now = Date.now();
-  const runId = `storm-${now}`;
-  const baseTime = new Date(now).toISOString();
-  const stormSignals: Signal[] = [
-    {
-      id: `${runId}-monitor-bgp`,
-      source: 'monitor',
-      type: 'edge-router.link-flap',
-      severity: 'high',
-      asset: 'edge-router-01',
-      payload: { runId, message: 'BGP session flapping on edge-router-01' },
-      occurredAt: baseTime,
-      origin: 'scripted',
-      forceMode,
-    },
-    {
-      id: `${runId}-snow-inc-001`,
-      source: 'servicenow',
-      type: 'incident.created',
-      severity: 'critical',
-      asset: 'edge-router-01',
-      payload: { runId, number: 'INC9000001', priority: '1', short_description: 'Customers reporting intermittent connectivity loss' },
-      occurredAt: baseTime,
-      origin: 'scripted',
-      forceMode,
-    },
-    {
-      id: `${runId}-snow-inc-002`,
-      source: 'servicenow',
-      type: 'incident.created',
-      severity: 'critical',
-      asset: 'vpn-gw-01',
-      payload: { runId, number: 'INC9000002', priority: '1', short_description: 'VPN gateway returning timeouts for remote workforce' },
-      occurredAt: baseTime,
-      origin: 'scripted',
-      forceMode,
-    },
-    {
-      id: `${runId}-snow-inc-003`,
-      source: 'servicenow',
-      type: 'incident.created',
-      severity: 'critical',
-      asset: 'checkout-svc',
-      payload: { runId, number: 'INC9000003', priority: '1', short_description: 'Production checkout latency spiking above 8s' },
-      occurredAt: baseTime,
-      origin: 'scripted',
-      forceMode,
-    },
-    {
-      id: `${runId}-snow-sla-breach`,
-      source: 'servicenow',
-      type: 'sla.breach-imminent',
-      severity: 'high',
-      asset: 'INC9000001',
-      payload: { runId, number: 'INC9000001', minutesToBreach: 12 },
-      occurredAt: baseTime,
-      origin: 'scripted',
-      forceMode,
-    },
-  ];
-
-  // Fire-and-forget: handlers may be long-running (LLM workflows). We
-  // return immediately so the demo button feels snappy; routing decisions
-  // surface in the Live Ops Feed via /api/decisions polling.
-  for (const s of stormSignals) {
-    void signalRouter.publish(s).catch((err) => {
-      console.warn('[demo:scripted-storm] publish failed', s.id, (err as Error).message);
-    });
-  }
-
-  // ── Visible announcement (live mode only) ───────────────────────
-  // The MIR workflow in auto mode adds a SNOW work-note when it completes
-  // but does NOT directly post to Teams or send email — those are the LLM
-  // agent's discretion. To give the demo button immediate, visible output
-  // we post a "demo storm started" announcement to the alerts channel and
-  // (optionally) email the manager. Fire-and-forget so the HTTP response
-  // stays snappy.
-  const teamsId = process.env.ITSM_TEAM_ID || '';
-  const channelId = process.env.ITSM_ALERTS_CHANNEL_ID || process.env.ITSM_CHANNEL_ID || '';
-  const ownerEmail = process.env.MANAGER_EMAIL || process.env.OWNER_EMAIL || '';
-  const announceDelivered: string[] = [];
-  const announceErrors: Record<string, string> = {};
-  if (live) {
-    const summary = stormSignals
-      .map((s) => `• ${s.type} (${s.severity}) → ${s.asset}`)
-      .join('<br/>');
-    const html = `<div style="font-family:Segoe UI,sans-serif">
-  <div style="font-size:16px;font-weight:600;color:#dc2626">🎬 Scripted P1 storm — LIVE</div>
-  <div style="margin:8px 0;font-size:13px;color:#475569">runId: <code>${runId}</code> · ${stormSignals.length} signals injected · forceMode=auto</div>
-  <div style="margin:8px 0;padding:10px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:13px">${summary}</div>
-  <div style="font-size:12px;color:#64748b">Workflows are running for real (not dry-run). Watch this channel + ServiceNow work-notes for outcomes.</div>
-</div>`;
-    if (teamsId && channelId) {
-      try {
-        const r = await autonomousActions.postToTeamsChannel(teamsId, channelId, html);
-        if (r.success) announceDelivered.push('teams');
-        else announceErrors.teams = r.error || 'unknown';
-      } catch (err) {
-        announceErrors.teams = (err as Error).message;
-      }
-    } else {
-      announceErrors.teams = 'ITSM_TEAM_ID / ITSM_ALERTS_CHANNEL_ID not configured';
-    }
-    if (ownerEmail) {
-      try {
-        const r = await sendGraphMail({
-          to: [ownerEmail],
-          subject: `🎬 Scripted P1 storm injected — ${stormSignals.length} live signals`,
-          body: html,
-          isHtml: true,
-          importance: 'high',
-        });
-        if (r.sent) announceDelivered.push('email');
-        else announceErrors.email = r.error || 'send failed';
-      } catch (err) {
-        announceErrors.email = (err as Error).message;
-      }
-    }
-  }
-
-  res.status(202).json({
-    status: 'accepted',
-    runId,
-    signalsInjected: stormSignals.length,
-    live,
-    forceMode: forceMode || null,
-    announcement: live
-      ? {
-          delivered: announceDelivered,
-          errors: Object.keys(announceErrors).length ? announceErrors : undefined,
-        }
-      : undefined,
-    note: live
-      ? 'Live mode: every signal carries forceMode=auto. Workflows execute against ServiceNow + comms tools. Watch ITSM-Alerts channel and /api/decisions.'
-      : 'Dry-run mode: signals route via confidence-gated trigger-policy. Pass {live:true} to run for real.',
-  });
-});
-
-// ── Live Action Strip — single-button autonomous actions ──────────────
-// Four highly visible buttons in Mission Control prove that Alex really
-// does the work end-to-end:
-//   1. POST /api/demo/action/email   → emails a styled status update to MANAGER_EMAIL
-//   2. POST /api/demo/action/meeting → schedules a 30-min CAB bridge tomorrow 09:00 ET
-//   3. POST /api/demo/action/cabpack → publishes a CAB pack to Teams + email
-//   4. /api/voice/page-me (existing)  → ACS outbound Teams call to MANAGER_TEAMS_OID
-// All three new endpoints are SCHEDULED_SECRET-protected so the same
-// mission-control demo header guards the same envelope as the existing
-// scripted-storm / page-me buttons.
-
-server.post('/api/demo/action/email', async (req: Request, res: Response) => {
-  if (!signalsAuthOk(req)) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
-  const to = (req.body?.to as string) || process.env.MANAGER_EMAIL || process.env.OWNER_EMAIL || '';
-  if (!to) {
-    res.status(400).json({ error: 'no recipient — MANAGER_EMAIL not configured and no `to` supplied' });
-    return;
-  }
-  try {
-    const snap = getEndOfDaySummary();
-    const { renderBriefingEmail } = await import('./email-render');
-    const kpis = [
-      { label: 'Done today', value: snap.totals['done-today'] },
-      { label: 'In cycle', value: snap.totals['in-cycle'] },
-      { label: 'Need review', value: snap.totals['proof'] },
-      { label: 'Awaiting approval', value: snap.totals['waiting'] },
-    ];
-    const fmtLine = (c: { title: string; subtitle?: string }) => `- **${c.title}**${c.subtitle ? ` — ${c.subtitle}` : ''}`;
-    const md = [
-      `## Status update — ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })} ET`,
-      '',
-      snap.proofReview.length > 0
-        ? `### 🔍 Needs your eyes\n${snap.proofReview.map(fmtLine).join('\n')}`
-        : '### ✅ Nothing waiting on you',
-      '',
-      snap.waiting.length > 0
-        ? `### ⏳ Awaiting approval\n${snap.waiting.map(fmtLine).join('\n')}`
-        : '',
-      snap.doneToday.length > 0
-        ? `### 🏁 Recent wins\n${snap.doneToday.map(fmtLine).join('\n')}`
-        : '',
-      '',
-      '> I am still on shift. Reply with **stop** if you want me to hold off; otherwise I will keep working the queue.',
-    ].filter(Boolean).join('\n');
-    const html = renderBriefingEmail({
-      title: 'Status update from Alex',
-      subtitle: `${snap.generatedAt} · ${snap.timeZone}`,
-      emoji: '📧',
-      kpis,
-      markdown: md,
-      footerNote: 'Triggered manually from Mission Control · Live Action Strip',
-    });
-    const r = await sendGraphMail({
-      to: [to],
-      subject: `Alex — Status update · ${snap.totals['proof']} need review, ${snap.totals['waiting']} awaiting approval`,
-      body: html,
-      isHtml: true,
-      importance: 'normal',
-    });
-    res.status(200).json({ status: r.sent ? 'sent' : 'failed', to, ...(r.error ? { error: r.error } : {}) });
-  } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
-  }
-});
-
-server.post('/api/demo/action/meeting', async (req: Request, res: Response) => {
-  if (!signalsAuthOk(req)) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
-  const to = (req.body?.to as string) || process.env.MANAGER_EMAIL || process.env.OWNER_EMAIL || '';
-  if (!to) {
-    res.status(400).json({ error: 'no recipient — MANAGER_EMAIL not configured and no `to` supplied' });
-    return;
-  }
-  try {
-    // Default to tomorrow 09:00 ET, 30 minutes. The Container App TZ is UTC
-    // so we anchor in ET explicitly. ET = UTC-5 (EST) or UTC-4 (EDT); we
-    // pass the local time + IANA zone so Graph handles DST correctly.
-    const subject = (req.body?.subject as string) || 'CAB Bridge — change review with Alex';
-    const tz = (req.body?.timeZone as string) || 'America/New_York';
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const y = tomorrow.getFullYear();
-    const m = String(tomorrow.getMonth() + 1).padStart(2, '0');
-    const d = String(tomorrow.getDate()).padStart(2, '0');
-    const startLocal = `${y}-${m}-${d}T09:00:00`;
-    const endLocal = `${y}-${m}-${d}T09:30:00`;
-    const body = `<p>Alex (autonomous IT Ops Manager) scheduled this CAB bridge to walk through pending changes and blast-radius analysis.</p>
-<p><strong>Agenda</strong></p>
-<ul>
-  <li>Open P1 / P2 incidents — current state and SLA timers</li>
-  <li>Pending changes — risk class, CAB approval status, planned windows</li>
-  <li>Anything Alex paused for human approval (Pattern 3 gate)</li>
-  <li>Q&amp;A — anything you want me to dig into live</li>
-</ul>
-<p>Triggered manually from <strong>Mission Control · Live Action Strip</strong>.</p>`;
-    const r = await autonomousActions.createCalendarEvent(
-      subject,
-      startLocal,
-      endLocal,
-      [{ email: to }],
-      body,
-      true, // isOnlineMeeting → Teams join link
-      { timeZone: tz, location: 'Microsoft Teams meeting' },
-    );
-    if (!r.success) {
-      res.status(500).json({ status: 'failed', error: r.error });
-      return;
-    }
-    res.status(200).json({
-      status: 'scheduled',
-      to,
-      startLocal,
-      endLocal,
-      timeZone: tz,
-      joinUrl: r.joinUrl,
-      webLink: r.webLink,
-      eventId: r.id,
-    });
-  } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
-  }
-});
-
-server.post('/api/demo/action/cabpack', async (req: Request, res: Response) => {
-  if (!signalsAuthOk(req)) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
-  const to = (req.body?.to as string) || process.env.MANAGER_EMAIL || process.env.OWNER_EMAIL || '';
-  const teamsId = process.env.ITSM_TEAM_ID || '';
-  const channelId = process.env.ITSM_ALERTS_CHANNEL_ID || process.env.ITSM_CHANNEL_ID || '';
-  const delivered: string[] = [];
-  const errors: Record<string, string> = {};
-  try {
-    const snap = getEndOfDaySummary();
-    const { renderBriefingEmail } = await import('./email-render');
-    const cardLine = (c: { title: string; subtitle?: string }) =>
-      `- **${c.title}**${c.subtitle ? ` — ${c.subtitle}` : ''}`;
-    const md = [
-      `## CAB Pack — Week ending ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
-      '',
-      '### Executive summary',
-      `Alex (autonomous IT Ops Manager) handled **${snap.totals['done-today']}** items end-to-end since the last CAB, paused **${snap.totals['waiting']}** for human approval per the Pattern 3 governance gate, and queued **${snap.totals['proof']}** items for your review. NIST SP 800-30 risk classification was applied to every change.`,
-      '',
-      '### 🏁 Changes completed without intervention',
-      snap.doneToday.length > 0 ? snap.doneToday.map(cardLine).join('\n') : '_None this period._',
-      '',
-      '### ⏳ Changes awaiting CAB approval',
-      snap.waiting.length > 0 ? snap.waiting.map(cardLine).join('\n') : '_None this period._',
-      '',
-      '### 🔍 Items flagged for review',
-      snap.proofReview.length > 0 ? snap.proofReview.map(cardLine).join('\n') : '_None this period._',
-      '',
-      '### Governance posture',
-      `- **Policy version:** ITSM-Ops Pattern 3 governance gate enabled`,
-      `- **Risk framework:** NIST SP 800-30 r1 (Very Low / Low / Moderate / High / Very High)`,
-      `- **Controls reviewed:** CM-3 (Config Change Control), CM-4 (Impact Analyses), CM-5 (Access Restrictions for Change), RA-3 (Risk Assessment)`,
-      `- **RMF step:** Authorize — CAB approves before promotion to production`,
-      '',
-      '> Reply or open the Mission Control Kanban for one-tap approve / deny on the items above.',
-    ].join('\n');
-
-    const html = renderBriefingEmail({
-      title: 'CAB Pack — weekly bundle',
-      subtitle: `${snap.generatedAt} · ${snap.timeZone}`,
-      emoji: '📄',
-      accent: '#106ebe',
-      kpis: [
-        { label: 'Done', value: snap.totals['done-today'] },
-        { label: 'In cycle', value: snap.totals['in-cycle'] },
-        { label: 'Awaiting CAB', value: snap.totals['waiting'] },
-        { label: 'Need review', value: snap.totals['proof'] },
-      ],
-      markdown: md,
-      footerNote: 'Triggered manually from Mission Control · Live Action Strip',
-    });
-
-    if (to) {
-      try {
-        const r = await sendGraphMail({
-          to: [to],
-          subject: `📄 CAB Pack — ${snap.totals['waiting']} awaiting approval, ${snap.totals['proof']} for review`,
-          body: html,
-          isHtml: true,
-          importance: 'normal',
-        });
-        if (r.sent) delivered.push('email');
-        else errors.email = r.error || 'send failed';
-      } catch (err) {
-        errors.email = (err as Error).message;
-      }
-    } else {
-      errors.email = 'MANAGER_EMAIL / OWNER_EMAIL not configured';
-    }
-
-    if (teamsId && channelId) {
-      try {
-        const r = await autonomousActions.postToTeamsChannel(teamsId, channelId, html);
-        if (r.success) delivered.push('teams');
-        else errors.teams = r.error || 'unknown';
-      } catch (err) {
-        errors.teams = (err as Error).message;
-      }
-    } else {
-      errors.teams = 'ITSM_TEAM_ID / ITSM_ALERTS_CHANNEL_ID not configured';
-    }
-
-    res.status(200).json({
-      status: delivered.length > 0 ? 'published' : 'failed',
-      delivered,
-      errors: Object.keys(errors).length ? errors : undefined,
-    });
-  } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
-  }
-});
 
 // ── Generic mail send ──
 // `POST /api/mail/send` — used by the MCP `send-email` tool so the chat
@@ -1719,20 +1184,6 @@ server.get('/api/jobs/:id', async (req: Request, res: Response) => {
   res.status(200).json({ job });
 });
 
-// Apply JWT auth middleware for routes below — skip public routes
-server.use((req, res, next) => {
-  const publicPaths = ['/api/health', '/api/platform-status', '/api/source-status', '/api/voice/status', '/api/voice/avatar-config', '/api/voice/page-me', '/api/voice/kpi', '/api/workiq/kpi', '/api/a2a/kpi', '/.well-known/agent-card.json', '/voice', '/api/scheduled', '/api/signals', '/api/decisions', '/api/demo', '/api/demo/scenarios', '/api/demo/active', '/api/demo/cleanup', '/api/demo/scripted-storm', '/api/demo/action/email', '/api/demo/action/meeting', '/api/demo/action/cabpack', '/api/approvals/action', '/api/workday/state', '/api/workday/tasks', '/api/workday/run-cycle', '/api/kanban', '/api/foresight', '/api/foresight/run', '/api/outcomes', '/api/outcomes/kpi', '/api/cases', '/api/cases/kpi', '/api/reviewer/kpi', '/api/meta/kpi', '/api/meta/alerts', '/api/briefings/kpi', '/api/briefings/recent', '/api/briefings/generate', '/api/trust/score', '/api/governance', '/api/governance/kill', '/api/governance/release', '/api/governance/freeze', '/api/autonomy/thresholds', '/api/goals', '/api/goals/plan', '/api/goals/pursue', '/api/experience', '/api/experience/recent', '/api/experience/find', '/api/jobs', '/api/cognition', '/api/cognition/graph', '/api/workers', '/api/approvals', '/api/approvals/callback', '/api/routines', '/api/audit', '/api/memory', '/api/reasoning', '/mission-control', '/api/a2a/message', '/api/a2a/discover', '/api/flows/callback', '/api/tuning/extract', '/api/tuning/status'];
-  // Phase 9 — prefix matching for parameterised routes (e.g. /api/jobs/:id).
-  const publicPrefixes = ['/api/jobs/', '/api/cases/'];
-  if (publicPaths.some(p => req.path === p)) {
-    return next();
-  }
-  if (publicPrefixes.some(p => req.path.startsWith(p))) {
-    return next();
-  }
-  return authorizeJWT(authConfig)(req, res, next);
-});
-
 // Main messages endpoint — Teams bot channel via CloudAdapter (Agent 365 SDK)
 server.post('/api/messages', (req: AgentRequest, res: Response) => {
   const adapter = agentApplication.adapter as CloudAdapter;
@@ -1882,27 +1333,6 @@ server.get('/api/trust/score', async (req: Request, res: Response) => {
     const { getTrustSummary } = await import('./red-team-agent');
     const tenantId = String(req.query.tenant || process.env.TENANT_ID || 'default');
     const summary = await getTrustSummary(tenantId);
-    if (
-      summary?.available === false &&
-      process.env.DEMO_TRUST_SCORE_ENABLED !== 'false'
-    ) {
-      res.status(200).json({
-        available: true,
-        score: Number(process.env.DEMO_TRUST_SCORE || 87),
-        sparkline: [82, 84, 83, 86, 85, 87, Number(process.env.DEMO_TRUST_SCORE || 87)],
-        byCategory: {
-          promptInjection: 92,
-          dataExfiltration: 88,
-          toolAbuse: 84,
-          unsafeAutonomy: 86,
-        },
-        lastRunAt: new Date().toISOString(),
-        backend: summary.backend || 'memory',
-        demoMode: true,
-        reason: summary.reason,
-      });
-      return;
-    }
     res.status(200).json(summary);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
@@ -1944,8 +1374,16 @@ const httpServer = http.createServer((req, res) => {
 });
 
 httpServer.listen(port, host, async () => {
-  // Resolve secrets from Key Vault (or env fallback) before anything else
-  await resolveSecrets();
+  try {
+    // Resolve secrets from Key Vault (or env fallback) before anything else
+    await resolveSecrets();
+
+    if (!isDevelopment) {
+      authConfig = loadAuthConfigFromEnv();
+      if (!process.env.SCHEDULED_SECRET) {
+        throw new Error('SCHEDULED_SECRET is required outside development');
+      }
+    }
 
   // Initialize Cosmos DB persistence (falls back to in-memory if not configured)
   await initCosmosStore();
@@ -2049,6 +1487,7 @@ httpServer.listen(port, host, async () => {
   }
 
   initMetrics();
+  startupReady = true;
   console.log('  OpenTelemetry metrics initialized');
   console.log('\n  ITSM Operations Digital Worker is ready!\n');
 
@@ -2057,6 +1496,13 @@ httpServer.listen(port, host, async () => {
     credential.getToken('https://cognitiveservices.azure.com/.default')
       .then(() => console.log('  Managed identity token pre-warmed successfully'))
       .catch((err: unknown) => console.warn('  Token pre-warm failed (will retry on first message):', err));
+  }
+  } catch (err) {
+    startupError = err instanceof Error ? err.message : String(err);
+    console.error('Digital Worker startup failed:', startupError);
+    httpServer.close(() => {
+      process.exitCode = 1;
+    });
   }
 });
 

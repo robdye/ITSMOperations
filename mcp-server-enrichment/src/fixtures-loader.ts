@@ -1,15 +1,10 @@
 /**
- * Demo-mode fixture loader.
+ * Test-only fixture loader.
  *
- * When the caller's `tenant.profile === 'demo'` (signalled via
- * `x-itsm-profile: demo` header or `TENANT_PROFILE=demo` env), the
- * enrichment server returns committed JSON from `__fixtures__/` instead of
- * making live HTTP calls. This keeps demos hermetic and the wire-level
- * trace identical to a real KEV / NVD / MSRC / Azure / M365 / Nager
- * response (same shape, fewer fields).
+ * Tests can request the `demo` profile to return committed JSON without
+ * making live HTTP calls. Runtime authentication never selects this profile.
  *
- * Hard rule (Phase E): "demo profile must return committed fixtures only;
- * no live network calls."
+ * Production must never silently fall back to fixtures.
  */
 
 import { readFileSync, existsSync } from 'node:fs';
@@ -19,8 +14,7 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-/** Repo-root-relative `__fixtures__/` directory inside this package. */
-const FIXTURES_DIR = join(__dirname, '..', '__fixtures__');
+const FIXTURES_DIR = join(__dirname, '__tests__', 'fixtures');
 
 const cache = new Map<string, unknown>();
 
@@ -33,6 +27,9 @@ export type FixtureKey =
   | 'holidays-fixture.json';
 
 export function loadFixture<T = unknown>(name: FixtureKey): T {
+  if (process.env.NODE_ENV !== 'test') {
+    throw new Error('[fixtures-loader] fixtures are available only under NODE_ENV=test');
+  }
   if (cache.has(name)) return cache.get(name) as T;
   const path = join(FIXTURES_DIR, name);
   if (!existsSync(path)) {

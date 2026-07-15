@@ -218,7 +218,7 @@ flowchart LR
 
         subgraph FN[Function App — Linux Y1]
             FN1[Durable timers<br/>11 cron triggers]
-            FN2[Durable orchestrators<br/>major-incident-bridge<br/>change-rollback<br/>cab-voting-cycle]
+            FN2[Durable orchestrator<br/>major-incident-bridge]
             FN3[HTTP triggers<br/>SNOW webhook]
         end
         class FN1,FN2,FN3 compute
@@ -398,8 +398,7 @@ ITSMOperations/
 │   │   │   ├── experiential-memory.ts       # Past-incident fingerprint recall
 │   │   │   ├── anticipatory-store.ts        # Azure Tables persistence for outcomes / tuner / signals
 │   │   │   ├── anticipatory-broadcaster.ts  # SSE broadcaster for foresight / outcomes / governance
-│   │   │   ├── routine-delivery.ts          # Routine result delivery (Email + Teams)
-│   │   │   └── demo/                        # Scripted-storm + tenant-profile demo harness
+│   │   │   └── routine-delivery.ts          # Routine result delivery (Email + Teams)
 │   │   │
 │   │   ├── [Voice & Calling]
 │   │   │   ├── voice/voiceProxy.ts          # WebSocket proxy → Azure Voice Live
@@ -442,8 +441,6 @@ ITSMOperations/
 │   │       ├── __tests__/autonomy-gate.test.ts            # Trigger-policy confidence dampener
 │   │       ├── __tests__/autonomy-tuner.test.ts           # Auto-threshold raise/lower from outcomes
 │   │       ├── __tests__/cognition-graph.test.ts          # CI ↔ incident relationship graph
-│   │       ├── __tests__/contract-equivalence.test.ts     # Worker tool contract parity
-│   │       ├── __tests__/demo-runner.test.ts              # Scripted-storm scenario runner
 │   │       ├── __tests__/escalation-chain.test.ts
 │   │       ├── __tests__/experiential-memory.test.ts      # Past-incident fingerprint recall
 │   │       ├── __tests__/foresight.test.ts                # Cluster mining + trend forecast
@@ -500,9 +497,7 @@ ITSMOperations/
 │       ├── timers/
 │       │   └── scheduled-routines.ts        # 11 timer triggers → POST /api/scheduled
 │       ├── orchestrators/
-│       │   ├── major-incident-bridge.ts     # Durable orchestrator: P1/P2 bridge lifecycle
-│       │   ├── change-rollback.ts           # Durable orchestrator: failed change rollback
-│       │   └── cab-voting-cycle.ts          # Durable orchestrator: CAB voting workflow
+│       │   └── major-incident-bridge.ts     # Durable orchestrator: P1/P2 bridge lifecycle
 │       └── http/
 │           └── triggers.ts                  # HTTP-triggered functions
 │

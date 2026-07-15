@@ -23,8 +23,8 @@ async function getClient(): Promise<Client> {
   connecting = true;
   try {
     const transport = new StdioClientTransport({
-      command: 'npx',
-      args: ['-y', '@microsoft/workiq@latest', 'mcp'],
+      command: process.execPath,
+      args: [require.resolve('@microsoft/workiq/bin/workiq.js'), 'mcp'],
       env: {
         ...process.env,
         ...(process.env.WORKIQ_TENANT_ID ? { WORKIQ_TENANT_ID: process.env.WORKIQ_TENANT_ID } : {}),

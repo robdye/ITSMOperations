@@ -113,24 +113,6 @@ test.describe('ITSM MCP — Dashboard Tools', () => {
     expect(content).toMatch(/<div|<table|briefing|incident|change/i);
   });
 
-  test('show-audit-trail → HTML with audit entries', async ({ request }) => {
-    const res = await mcpCallTool(request, MCP_ENDPOINT, 'show-audit-trail', {}, sessionId);
-    expect(res.status()).toBe(200);
-    const body = await parseMcpResponse(res);
-    expectToolSuccess(body);
-    const content = extractContent(body);
-    expect(content).toMatch(/<div|<table|audit/i);
-  });
-
-  test('show-finops-dashboard → HTML with FinOps data', async ({ request }) => {
-    const res = await mcpCallTool(request, MCP_ENDPOINT, 'show-finops-dashboard', {}, sessionId);
-    expect(res.status()).toBe(200);
-    const body = await parseMcpResponse(res);
-    expectToolSuccess(body);
-    const content = extractContent(body);
-    expect(content).toMatch(/<div|<table|cost|finops|spend/i);
-  });
-
   test('check-eol-status "Windows Server 2019" → EOL data', async ({ request }) => {
     const res = await mcpCallTool(
       request, MCP_ENDPOINT, 'check-eol-status', { product: 'Windows Server 2019' }, sessionId,

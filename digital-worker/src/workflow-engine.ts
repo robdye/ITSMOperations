@@ -719,7 +719,7 @@ export class WorkflowEngine {
     const lastOutput = (status.context.previousStepOutput as string | undefined) ?? '';
 
     // Auto-execution directive: when the workflow was triggered in `auto` mode
-    // (forceMode or confidence ≥ auto threshold) the user has pre-authorised
+    // the confidence policy has pre-authorised
     // side-effects. The default worker system prompts say "confirm with user
     // before notify/write" — which causes auto runs to produce beautiful
     // proposed-message text but never call send_email / post_to_channel /
@@ -731,7 +731,7 @@ export class WorkflowEngine {
     const managerEmail = process.env.MANAGER_EMAIL || process.env.OWNER_EMAIL || '';
     const channelHint = process.env.ITSM_ALERTS_CHANNEL_ID || process.env.ITSM_CHANNEL_ID || '';
     const autoExec = isAuto
-      ? `\n\n⚠️ AUTO-EXECUTION MODE — The user has pre-authorised this workflow (forceMode or confidence ≥ auto threshold). DO NOT ask for confirmation. CALL the required tools now to actually do the work, then summarise what you actually did (not what you would do).${stepIsNotify ? `\n\n🛎  Notify step — you MUST do BOTH of these before responding:\n  1) Call \`send_email\` with to="${managerEmail || 'admin@configured.tenant'}", a tight subject (asset + severity + signal type), and a concise HTML body covering: signal id, what happened, current status, who's been pulled in, and next step.\n  2) Call \`post_to_channel\` with a brief HTML status (1–3 sentences max) so the IT-Ops alerts channel${channelHint ? '' : ' (configure ITSM_ALERTS_CHANNEL_ID)'} sees a real-time pulse. Include the asset name and severity.\n  After both tool calls succeed, output a 2-line confirmation. If a tool returns an error, surface it.` : `\n\nFor write steps (create/update incident), call the ServiceNow tools directly using the \`payload.sys_id\` from context if present.`}\n`
+      ? `\n\n⚠️ AUTO-EXECUTION MODE — The confidence policy has pre-authorised this workflow. DO NOT ask for confirmation. CALL the required tools now to actually do the work, then summarise what you actually did (not what you would do).${stepIsNotify ? `\n\n🛎  Notify step — you MUST do BOTH of these before responding:\n  1) Call \`send_email\` with to="${managerEmail || 'admin@configured.tenant'}", a tight subject (asset + severity + signal type), and a concise HTML body covering: signal id, what happened, current status, who's been pulled in, and next step.\n  2) Call \`post_to_channel\` with a brief HTML status (1–3 sentences max) so the IT-Ops alerts channel${channelHint ? '' : ' (configure ITSM_ALERTS_CHANNEL_ID)'} sees a real-time pulse. Include the asset name and severity.\n  After both tool calls succeed, output a 2-line confirmation. If a tool returns an error, surface it.` : `\n\nFor write steps (create/update incident), call the ServiceNow tools directly using the \`payload.sys_id\` from context if present.`}\n`
       : '';
 
     const prompt = `${stepDef.action}${autoExec}\n\nContext: ${JSON.stringify({ ...stepDef.inputs, ...status.context, previousStepOutput: lastOutput })}`;
@@ -779,13 +779,11 @@ export class WorkflowEngine {
     const correlationId =
       (ctx.correlationId as string | undefined) || status.executionId;
     const reasoningTraceId = (ctx.signalId as string | undefined) || status.executionId;
-    const demoRunId = (payload as { u_demo_run?: string } | undefined)?.u_demo_run;
-
     await addWorkNote(
       'incident',
       sysId,
       `Alex completed major-incident-response workflow.\nSummary: ${summary.slice(0, 800)}`,
-      { correlationId, reasoningTraceId, demoRunId },
+      { correlationId, reasoningTraceId },
     );
   }
 }

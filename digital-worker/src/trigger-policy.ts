@@ -58,8 +58,7 @@ export interface TriggerPolicyInputs {
 // ── Defaults ──
 //
 // Operators can override any of the four knobs at deploy time via env vars
-// without rebuilding. Useful for demos that need to push live workflows past
-// the conservative production thresholds.
+// without rebuilding.
 //
 //   TRIGGER_AUTO_THRESHOLD       — auto when effectiveConfidence ≥ this   (default 0.85)
 //   TRIGGER_PROPOSE_THRESHOLD    — propose / dry-run when ≥ this           (default 0.6)
@@ -116,7 +115,7 @@ export function _resetTriggerPolicyState(): void {
 
 function defaultIsChangeFreeze(): boolean {
   // Change-freeze stub. Real integration with change-manager lives in a
-  // later phase. For MVP we honour an env flag so demos can show it firing.
+  // later phase. For MVP we honour an environment flag.
   const raw = process.env.CHANGE_FREEZE;
   if (!raw) return false;
   return ['1', 'true', 'yes', 'on'].includes(raw.trim().toLowerCase());
@@ -149,40 +148,6 @@ export function evaluateTrigger(inputs: TriggerPolicyInputs): TriggerDecision {
     requireApproval: blastRadius >= 0.5,
     approverGroup: inputs.worker?.id ? `${inputs.worker.id}-approvers` : undefined,
   };
-
-  // ── forceMode bypass ─────────────────────────────────────────────
-  // Demo / scripted signals can carry `forceMode` to short-circuit the
-  // confidence math entirely. This is the lever the Mission-Control storm
-  // button uses to push every signal straight to `auto` so workflows run
-  // live instead of in dry-run. Hard gates (change-freeze + worker
-  // allowAutonomous=false) still take precedence below.
-  if (inputs.signal.forceMode) {
-    const m = inputs.signal.forceMode;
-    if (m === 'auto') {
-      // Still respect the per-tenant budget so a runaway demo can't
-      // exhaust the production action allowance.
-      const used = autoActionsInLastHour(tenantId, now);
-      if (used < config.hourlyAutoBudget) {
-        recordAutoAction(tenantId, now);
-        return {
-          workflowId: inputs.workflowId,
-          mode: 'auto',
-          effectiveConfidence,
-          reason: `forceMode=auto (signal ${inputs.signal.id}) — bypassing confidence math.`,
-          approvalPolicy: { ...approvalPolicy, requireApproval: false },
-        };
-      }
-      // Budget exhausted: fall through to normal evaluation.
-    } else if (m === 'propose' || m === 'dry-run' || m === 'notify-only') {
-      return {
-        workflowId: inputs.workflowId,
-        mode: m,
-        effectiveConfidence,
-        reason: `forceMode=${m} (signal ${inputs.signal.id}) — bypassing confidence math.`,
-        approvalPolicy: { ...approvalPolicy, requireApproval: m === 'propose' },
-      };
-    }
-  }
 
   // Hard gates first ────────────────────────────────────────────────
   if (isFreeze()) {

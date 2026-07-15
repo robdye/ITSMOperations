@@ -13,12 +13,13 @@ import { logAuditEntry } from './audit-trail';
 
 // ── Config ──
 
-const RAW_INSTANCE_URL = process.env.SNOW_INSTANCE_URL || '';
-const SNOW_INSTANCE_URL = RAW_INSTANCE_URL.replace(/\/+$/, '');
-const SNOW_AUTH_HEADER = process.env.SNOW_AUTH_HEADER || '';
-const SNOW_REASONING_BASE_URL = process.env.SNOW_REASONING_BASE_URL || '';
+function getSnowInstanceUrl(): string {
+  return (process.env.SNOW_INSTANCE_URL || process.env.SNOW_INSTANCE || '').replace(/\/+$/, '');
+}
 
-const DEMO_RUN_FIELD = 'u_demo_run';
+function getSnowAuthHeader(): string {
+  return process.env.SNOW_AUTH_HEADER || '';
+}
 
 export interface SnowClientStatus {
   enabled: boolean;
@@ -29,14 +30,16 @@ export interface SnowClientStatus {
 
 export function getSnowClientStatus(): SnowClientStatus {
   const missing: string[] = [];
-  if (!SNOW_INSTANCE_URL) missing.push('SNOW_INSTANCE_URL');
-  if (!SNOW_AUTH_HEADER) missing.push('SNOW_AUTH_HEADER');
+  const instance = getSnowInstanceUrl();
+  const authHeader = getSnowAuthHeader();
+  if (!instance) missing.push('SNOW_INSTANCE or SNOW_INSTANCE_URL');
+  if (!authHeader) missing.push('SNOW_AUTH_HEADER');
   return {
     enabled: missing.length === 0,
-    instance: SNOW_INSTANCE_URL || 'not-configured',
-    authMode: SNOW_AUTH_HEADER.startsWith('Bearer ')
+    instance: instance || 'not-configured',
+    authMode: authHeader.startsWith('Bearer ')
       ? 'oauth'
-      : SNOW_AUTH_HEADER
+      : authHeader
         ? 'basic'
         : 'unconfigured',
     missing,
@@ -48,8 +51,6 @@ export interface WriteContext {
   correlationId: string;
   /** The signal id (or trace id) this write is causally linked to. */
   reasoningTraceId?: string;
-  /** Demo-run id when the write originates from the demo-director. */
-  demoRunId?: string;
   /**
    * Phase 2.1 — when true, every write short-circuits with a planning
    * summary instead of touching SNOW. Threaded from the workflow
@@ -77,8 +78,6 @@ interface SnowRequestOptions {
   method: 'GET' | 'POST' | 'PATCH' | 'PUT';
   path: string;
   body?: unknown;
-  /** Demo-run id; injected as `u_demo_run` on writes when present. */
-  demoRunId?: string;
 }
 
 /**
@@ -89,31 +88,25 @@ async function snowRequest({
   method,
   path,
   body,
-  demoRunId,
 }: SnowRequestOptions): Promise<{ ok: boolean; status: number; body: unknown }> {
   const status = getSnowClientStatus();
   if (!status.enabled) {
     return { ok: false, status: 0, body: { reason: 'snow-not-configured' } };
   }
 
-  const url = `${SNOW_INSTANCE_URL}${path.startsWith('/') ? path : `/${path}`}`;
-  const finalBody =
-    body && demoRunId && method !== 'GET'
-      ? { ...(body as Record<string, unknown>), [DEMO_RUN_FIELD]: demoRunId }
-      : body;
-
+  const url = `${getSnowInstanceUrl()}${path.startsWith('/') ? path : `/${path}`}`;
   const headers: Record<string, string> = {
     Accept: 'application/json',
-    Authorization: SNOW_AUTH_HEADER,
+    Authorization: getSnowAuthHeader(),
   };
-  if (finalBody !== undefined) {
+  if (body !== undefined) {
     headers['Content-Type'] = 'application/json';
   }
 
   const res = await fetch(url, {
     method,
     headers,
-    body: finalBody !== undefined ? JSON.stringify(finalBody) : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
   let parsed: unknown;
@@ -156,16 +149,16 @@ function buildReasoningLink(ctx: WriteContext): string {
   if (!ctx.reasoningTraceId) {
     return `correlation:${ctx.correlationId}`;
   }
-  if (SNOW_REASONING_BASE_URL) {
-    return `${SNOW_REASONING_BASE_URL.replace(/\/+$/, '')}/trace/${ctx.reasoningTraceId}`;
+  const reasoningBaseUrl = process.env.SNOW_REASONING_BASE_URL || '';
+  if (reasoningBaseUrl) {
+    return `${reasoningBaseUrl.replace(/\/+$/, '')}/trace/${ctx.reasoningTraceId}`;
   }
   return `trace:${ctx.reasoningTraceId} (correlation:${ctx.correlationId})`;
 }
 
 function buildWorkNote(text: string, ctx: WriteContext): string {
   const link = buildReasoningLink(ctx);
-  const tag = ctx.demoRunId ? `[demo:run:${ctx.demoRunId}] ` : '';
-  return `${tag}${text}\n— Alex (correlationId=${ctx.correlationId}, reasoning=${link})`;
+  return `${text}\n— Alex (correlationId=${ctx.correlationId}, reasoning=${link})`;
 }
 
 async function audit(toolName: string, params: unknown, ok: boolean, ctx: WriteContext): Promise<void> {
@@ -244,7 +237,6 @@ export async function addWorkNote(
     method: 'PATCH',
     path: `/api/now/table/${table}/${encodeURIComponent(sysId)}`,
     body: { work_notes: note },
-    demoRunId: ctx.demoRunId,
   });
   await audit('snow.addWorkNote', { table, sysId, length: text.length }, res.ok, ctx);
   return { ok: res.ok, status: res.status, body: res.body };
@@ -260,7 +252,6 @@ export async function linkAsChild(
     method: 'PATCH',
     path: `/api/now/table/incident/${encodeURIComponent(childSysId)}`,
     body: { parent_incident: parentSysId },
-    demoRunId: ctx.demoRunId,
   });
   await audit('snow.linkAsChild', { childSysId, parentSysId }, res.ok, ctx);
   return { ok: res.ok, status: res.status, body: res.body };
@@ -283,7 +274,6 @@ export async function updateIncidentState(
     method: 'PATCH',
     path: `/api/now/table/incident/${encodeURIComponent(sysId)}`,
     body: { state: stateMap[state] },
-    demoRunId: ctx.demoRunId,
   });
   await audit('snow.updateIncidentState', { sysId, state }, res.ok, ctx);
   return { ok: res.ok, status: res.status, body: res.body };
@@ -309,7 +299,6 @@ export async function createMajorIncident(
       urgency: '1',
       ...extra,
     },
-    demoRunId: ctx.demoRunId,
   });
   const record = (res.body as { result?: Record<string, unknown> } | null)?.result;
   await audit('snow.createMajorIncident', { shortDescription }, res.ok, ctx);
@@ -332,7 +321,6 @@ export async function attachKBArticle(
     method: 'PATCH',
     path: `/api/now/table/${table}/${encodeURIComponent(sysId)}`,
     body: { kb_knowledge: kbSysId },
-    demoRunId: ctx.demoRunId,
   });
   await audit('snow.attachKBArticle', { table, sysId, kbSysId }, res.ok, ctx);
   return { ok: res.ok, status: res.status, body: res.body };

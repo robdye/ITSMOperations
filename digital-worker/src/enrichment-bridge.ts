@@ -12,8 +12,7 @@
 //     caller's TurnContext via the existing OBO scope used for the rest of
 //     the platform.
 //   - `x-ms-tenant-id` carries the tenant id (gateway contract).
-//   - `x-itsm-profile` carries demo|prod so the server returns fixtures
-//     when the tenant profile says demo.
+//   - `x-itsm-profile` is always `prod` outside test-only calls.
 //   - `x-caller-agent-id` lets the audit trail attribute the call.
 //
 // Transport: MCP StreamableHTTP. We use the SDK's low-level Client so the
@@ -22,7 +21,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { TurnContext } from '@microsoft/agents-hosting';
-import { loadTenantProfile } from './demo/tenant-profile';
 
 /* ── Config ────────────────────────────────────────────────────────────── */
 
@@ -111,7 +109,7 @@ interface OutboundContext {
   token: string;
   /** Tenant id. */
   tenantId: string;
-  /** demo | prod. */
+  /** Tests may inject `demo`; runtime resolution always returns `prod`. */
   profile: 'demo' | 'prod';
   /** Caller worker id (e.g. `incident-manager`). */
   callerAgentId: string;
@@ -121,14 +119,15 @@ async function resolveOutboundContext(
   callerAgentId: string,
   context?: TurnContext,
 ): Promise<OutboundContext | null> {
-  const tenantId =
-    process.env.AZURE_TENANT_ID || process.env.TEAMS_TENANT_ID || 'demo-tenant';
-  const profile = loadTenantProfile(tenantId).profile === 'demo' ? 'demo' : 'prod';
+  const tenantId = process.env.AZURE_TENANT_ID || process.env.TEAMS_TENANT_ID || '';
+  const profile = 'prod' as const;
+  if (!tenantId) {
+    return null;
+  }
 
   // OBO resolution: prefer the agent's TurnContext-driven flow used elsewhere.
-  // For autonomous paths (no TurnContext) and demo profile, fall back to a
-  // synthetic dev token — the enrichment server enforces 401 in production
-  // when a real bearer is missing.
+  // Tests and local development may opt into a synthetic token. Production
+  // always requires a real OBO context.
   if (context) {
     try {
       const { AgenticAuthenticationService } = await import('@microsoft/agents-a365-runtime');
@@ -156,7 +155,7 @@ async function resolveOutboundContext(
     }
   }
 
-  if (profile === 'demo' || process.env.ENRICHMENT_DEV_MODE === '1') {
+  if (process.env.NODE_ENV !== 'production' && process.env.ENRICHMENT_DEV_MODE === '1') {
     return { token: 'dev-mode-token', tenantId, profile, callerAgentId };
   }
 

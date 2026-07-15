@@ -8,18 +8,13 @@
     {
       "name": "get-azure-alerts",
       "description": "Get Azure Monitor alerts for infrastructure health."
-    },
-    {
-      "name": "get-resource-health",
-      "description": "Get Azure resource health status for monitored infrastructure components."
     }
   ],
   "runtimes": [
     {
       "type": "RemoteMCPServer",
       "run_for_functions": [
-        "get-azure-alerts",
-        "get-resource-health"
+        "get-azure-alerts"
       ],
       "spec": {
         "url": "${{CHANGE_MCP_ENDPOINT}}",
@@ -34,27 +29,6 @@
                   "limit": {
                     "type": "number",
                     "description": "Max results"
-                  }
-                },
-                "additionalProperties": false
-              },
-              "annotations": {
-                "readOnlyHint": true
-              }
-            },
-            {
-              "name": "get-resource-health",
-              "description": "Get Azure resource health status for monitored infrastructure components.",
-              "inputSchema": {
-                "type": "object",
-                "properties": {
-                  "resource_name": {
-                    "type": "string",
-                    "description": "Name of the Azure resource to check"
-                  },
-                  "resource_type": {
-                    "type": "string",
-                    "description": "Azure resource type (e.g. Microsoft.Compute/virtualMachines)"
                   }
                 },
                 "additionalProperties": false

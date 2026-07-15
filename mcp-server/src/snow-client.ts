@@ -365,6 +365,12 @@ export async function getIncidents(filters?: {
   return snowGet("incident", q.build(), INCIDENT_FIELDS, filters?.limit ?? 200);
 }
 
+export async function getIncident(number?: string, sysId?: string): Promise<any> {
+  const query = number ? SnowQuery.eq('number', number) : SnowQuery.eq('sys_id', sysId || '');
+  const results = await snowGet("incident", query.build(), INCIDENT_FIELDS, 1);
+  return results[0] ?? null;
+}
+
 /** Get all incidents including closed (for metrics) */
 export async function getAllIncidents(limit = 200): Promise<any[]> {
   return snowGet("incident", new SnowQuery().orderByDesc('opened_at').build(), INCIDENT_FIELDS, limit);

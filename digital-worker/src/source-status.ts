@@ -2,8 +2,6 @@ import { getSnowClientStatus, probeSnowTable } from './snow-client';
 
 type SourceMode =
   | 'live-servicenow'
-  | 'synthetic-servicenow'
-  | 'scenario-injected'
   | 'cached'
   | 'auth-failed'
   | 'mcp-unavailable';

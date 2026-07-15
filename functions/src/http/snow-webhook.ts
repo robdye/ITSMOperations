@@ -8,7 +8,7 @@
  *
  * The payload-to-Signal mapping intentionally lives in the digital-worker
  * module (`snow-signal-mapper.ts`) so the same code path is exercised by the
- * webhook in production and by the demo-director / unit tests in CI.
+ * webhook in production and by unit tests in CI.
  */
 
 import { app, HttpRequest, HttpResponse, InvocationContext } from '@azure/functions';
@@ -101,7 +101,6 @@ app.http('snowWebhook', {
     }
     recordReplay(replayKey);
 
-    const isDemo = !!payload.current?.['u_demo_run'];
     const signal = {
       id: computeSignalId(payload),
       source: 'servicenow',
@@ -118,7 +117,7 @@ app.http('snowWebhook', {
       correlationId: (payload.current?.correlation_id as string | undefined) || undefined,
       confidence: 1,
       predicted: false,
-      origin: isDemo ? 'scripted' : 'observed',
+      origin: 'observed',
     };
 
     const workerUrl = process.env.DIGITAL_WORKER_URL || '';

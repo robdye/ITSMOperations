@@ -108,24 +108,6 @@ test.describe('ITSM Demo Script — Full Scenario Validation', () => {
     expect(content).toMatch(/eol|end.of.life|lifecycle|support|windows/i);
   });
 
-  test('FinOps dashboard → show-finops-dashboard', async ({ request }) => {
-    const res = await mcpCallTool(request, MCP_ENDPOINT, 'show-finops-dashboard', {}, sessionId);
-    expect(res.status()).toBe(200);
-    const body = await parseMcpResponse(res);
-    expectToolSuccess(body);
-    const content = extractContent(body);
-    expect(content).toMatch(/finops|cost|spend|budget|<div/i);
-  });
-
-  test('Shadow agents → scan-shadow-agents', async ({ request }) => {
-    const res = await mcpCallTool(request, MCP_ENDPOINT, 'scan-shadow-agents', {}, sessionId);
-    expect(res.status()).toBe(200);
-    const body = await parseMcpResponse(res);
-    expectToolSuccess(body);
-    const content = extractContent(body);
-    expect(content).toMatch(/agent|shadow|scan|found|<div/i);
-  });
-
   test('Shift handover → generate-shift-handover', async ({ request }) => {
     const res = await mcpCallTool(request, MCP_ENDPOINT, 'generate-shift-handover', {}, sessionId);
     expect(res.status()).toBe(200);
@@ -133,24 +115,6 @@ test.describe('ITSM Demo Script — Full Scenario Validation', () => {
     expectToolSuccess(body);
     const content = extractContent(body);
     expect(content).toMatch(/handover|shift|summary|incident|<div/i);
-  });
-
-  test('Audit trail → show-audit-trail', async ({ request }) => {
-    const res = await mcpCallTool(request, MCP_ENDPOINT, 'show-audit-trail', {}, sessionId);
-    expect(res.status()).toBe(200);
-    const body = await parseMcpResponse(res);
-    expectToolSuccess(body);
-    const content = extractContent(body);
-    expect(content).toMatch(/audit|trail|action|<div/i);
-  });
-
-  test('Scheduled routines → show-scheduled-jobs', async ({ request }) => {
-    const res = await mcpCallTool(request, MCP_ENDPOINT, 'show-scheduled-jobs', {}, sessionId);
-    expect(res.status()).toBe(200);
-    const body = await parseMcpResponse(res);
-    expectToolSuccess(body);
-    const content = extractContent(body);
-    expect(content).toMatch(/schedule|routine|job|cron|<div/i);
   });
 
   test('Vendor contracts → get-expiring-contracts', async ({ request }) => {

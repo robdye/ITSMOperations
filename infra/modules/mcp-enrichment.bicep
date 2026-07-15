@@ -4,8 +4,7 @@
 // Mirrors the existing mcp-server module but on port 3010, with extra
 // env vars for the enrichment-specific OBO trade-up to Microsoft Graph
 // (used by the m365 service-health source) and for the optional NIST NVD
-// API key. Demo profile reads fixtures from the image so no outbound
-// HTTPS is performed when `x-itsm-profile: demo` is on the request.
+// API key used by the live enrichment source.
 // ──────────────────────────────────────────────────────────────
 
 @description('Environment name used in resource naming')

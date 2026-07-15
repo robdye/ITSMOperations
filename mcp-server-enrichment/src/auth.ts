@@ -14,7 +14,7 @@ export interface EnrichmentAuthContext {
   userToken: string;
   /** Tenant id from `x-ms-tenant-id`. */
   tenantId: string;
-  /** `prod` (live calls) | `demo` (fixtures only) — set via `x-itsm-profile` header. */
+  /** `demo` is accepted only under NODE_ENV=test for fixture-based tests. */
   profile: 'prod' | 'demo';
   /** Logical id of the calling worker (e.g. `incident-manager`). */
   callerAgentId: string;
@@ -34,7 +34,9 @@ export interface EnrichmentAuthContext {
 export function buildAuthContextFromRequest(req: Request): EnrichmentAuthContext | null {
   const auth = req.header('authorization') ?? req.header('Authorization') ?? '';
   const tenantId = req.header('x-ms-tenant-id') ?? '';
-  const profile = (req.header('x-itsm-profile') ?? process.env.TENANT_PROFILE ?? 'prod').toLowerCase();
+  const requestedProfile = (req.header('x-itsm-profile') ?? 'prod').toLowerCase();
+  const profile: 'prod' | 'demo' =
+    process.env.NODE_ENV === 'test' && requestedProfile === 'demo' ? 'demo' : 'prod';
   const callerAgentId = req.header('x-caller-agent-id') ?? 'unknown-agent';
   const correlationId = req.header('x-correlation-id') ?? req.header('x-ms-correlation-id') ?? undefined;
 
@@ -47,7 +49,7 @@ export function buildAuthContextFromRequest(req: Request): EnrichmentAuthContext
       return {
         userToken: looksLikeBearer ? auth.replace(/^Bearer\s+/i, '') : 'dev-mode-token',
         tenantId: hasTenant ? tenantId : 'dev-tenant',
-        profile: profile === 'demo' ? 'demo' : 'prod',
+        profile,
         callerAgentId,
         correlationId,
       };
@@ -58,7 +60,7 @@ export function buildAuthContextFromRequest(req: Request): EnrichmentAuthContext
   return {
     userToken: auth.replace(/^Bearer\s+/i, ''),
     tenantId,
-    profile: profile === 'demo' ? 'demo' : 'prod',
+    profile,
     callerAgentId,
     correlationId,
   };

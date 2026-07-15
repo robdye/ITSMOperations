@@ -30,8 +30,6 @@ Keep ITSMOperations reliable, safe and token-efficient when calling ServiceNow, 
 Every tool response must include `sourceMode`:
 
 - `live-servicenow`
-- `synthetic-servicenow`
-- `scenario-injected`
 - `cached`
 - `auth-failed`
 - `mcp-unavailable`

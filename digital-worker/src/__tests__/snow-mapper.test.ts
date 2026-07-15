@@ -6,7 +6,7 @@ import {
   verifySnowSignature,
   type SnowBusinessRulePayload,
 } from '../snow-signal-mapper';
-import { MockServiceNow, signPayload, type BusinessRuleEvent } from '../demo/mock-snow';
+import { MockServiceNow, signPayload, type BusinessRuleEvent } from './fixtures/mock-snow';
 
 const samplePayload: SnowBusinessRulePayload = {
   table: 'incident',
@@ -33,14 +33,6 @@ describe('snow-signal-mapper', () => {
     expect(signal.source).toBe('servicenow');
     expect(signal.type).toBe('incident.insert');
     expect(signal.origin).toBe('observed');
-  });
-
-  it('marks demo records as scripted via u_demo_run', () => {
-    const signal = mapSnowPayloadToSignal({
-      ...samplePayload,
-      current: { ...samplePayload.current, u_demo_run: 'run-42' },
-    });
-    expect(signal.origin).toBe('scripted');
   });
 
   it('verifies HMAC signatures with constant-time comparison', () => {

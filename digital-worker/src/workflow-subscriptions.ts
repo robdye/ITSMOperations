@@ -257,7 +257,7 @@ async function runWorkflowWithModes(
   workerId: string,
   signal: Signal,
 ): Promise<void> {
-  // Preflight — refuse to run when SNOW lacks the seeded record the
+  // Preflight — refuse to run when ServiceNow lacks the referenced record the
   // workflow expects. Catches the "no SNOW sys_id on originating signal"
   // and "record-not-found" classes of bad outcomes BEFORE any tool runs.
   const pf = await assertSnowPrecondition(workflowId, signal);
@@ -297,7 +297,7 @@ async function runWorkflowWithModes(
   }
 
   // Phase 3.4 — Reviewer worker (default-on for blast radius >= 0.5).
-  // For 'auto' mode only, we ask the reviewer to look at a synthetic plan
+  // For 'auto' mode only, we ask the reviewer to look at the proposed plan
   // before commit. If the reviewer blocks, we downgrade to 'propose'.
   // Phase E — Critical CVSS forces the gate to run regardless of nominal radius.
   if (decision.mode === 'auto') {
@@ -411,7 +411,7 @@ async function proposeWorkflow(
 
 async function runMajorIncidentResponse(signal: Signal): Promise<void> {
   // Preflight — must have a verifiable SNOW incident before MIR fires.
-  // Customer requirement: never run workflows without seeded data.
+  // Never run the workflow without a verifiable ServiceNow record.
   const pf = await assertSnowPrecondition('major-incident-response', signal);
   if (!pf.ok) {
     await auditSnowBlocked('major-incident-response', signal, pf);

@@ -41,7 +41,6 @@
         { "name": "harvest-knowledge", "description": "Harvest knowledge from resolved incidents to identify candidates for new KB articles." },
         { "name": "create-kb-article", "description": "Create a new Knowledge Base article in ServiceNow." },
         { "name": "get-azure-alerts", "description": "Get Azure Monitor alerts for infrastructure health." },
-        { "name": "get-resource-health", "description": "Get Azure resource health status for monitored infrastructure components." },
         { "name": "show-command-bridge", "description": "Display the Command Bridge — hero status, P1/SLA/approvals tiles, estate health rings and the top 5 actions for today. Answers 'what should I look at first?'" },
         { "name": "show-estate-heatmap", "description": "Display the Estate Health Heatmap — CMDB CIs sized by criticality and coloured by health. Answers 'where is the pain right now?'" },
         { "name": "show-time-travel", "description": "Display the Time-Travel EOL forecast slider (today \u2192 +24 months). Drag to see which assets cross EOL thresholds." },
@@ -90,7 +89,6 @@
                 "harvest-knowledge",
                 "create-kb-article",
                 "get-azure-alerts",
-                "get-resource-health",
                 "show-command-bridge",
                 "show-estate-heatmap",
                 "show-time-travel",
@@ -577,19 +575,6 @@
                             "inputSchema": {
                                 "type": "object",
                                 "properties": { "limit": { "type": "number", "description": "Max results" } },
-                                "additionalProperties": false
-                            },
-                            "annotations": { "readOnlyHint": true }
-                        },
-                        {
-                            "name": "get-resource-health",
-                            "description": "Get Azure resource health status for monitored infrastructure components.",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {
-                                    "resource_name": { "type": "string", "description": "Name of the Azure resource to check" },
-                                    "resource_type": { "type": "string", "description": "Azure resource type (e.g. Microsoft.Compute/virtualMachines)" }
-                                },
                                 "additionalProperties": false
                             },
                             "annotations": { "readOnlyHint": true }

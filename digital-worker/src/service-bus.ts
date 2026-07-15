@@ -12,10 +12,7 @@
 
 import crypto from 'crypto';
 import { ServiceBusClient, ServiceBusSender, ServiceBusReceiver, ServiceBusReceivedMessage } from '@azure/service-bus';
-
-// ── Configuration ──
-const SERVICE_BUS_CONNECTION = process.env.SERVICE_BUS_CONNECTION_STRING || '';
-const SERVICE_BUS_NAMESPACE = process.env.SERVICE_BUS_NAMESPACE || '';
+import { DefaultAzureCredential } from '@azure/identity';
 
 let client: ServiceBusClient | null = null;
 const senders = new Map<string, ServiceBusSender>();
@@ -80,7 +77,7 @@ export interface SlaEvent {
 // ── Initialization ──
 
 export function isServiceBusEnabled(): boolean {
-  return !!(SERVICE_BUS_CONNECTION || SERVICE_BUS_NAMESPACE);
+  return !!(process.env.SERVICE_BUS_CONNECTION_STRING || process.env.SERVICE_BUS_NAMESPACE);
 }
 
 export async function initServiceBus(): Promise<void> {
@@ -89,11 +86,16 @@ export async function initServiceBus(): Promise<void> {
     return;
   }
 
-  try {
-    client = new ServiceBusClient(SERVICE_BUS_CONNECTION);
-    console.log('[ServiceBus] Connected to Azure Service Bus');
-  } catch (err) {
-    console.error('[ServiceBus] Connection failed:', (err as Error).message);
+  const connectionString = process.env.SERVICE_BUS_CONNECTION_STRING || '';
+  const namespace = (process.env.SERVICE_BUS_NAMESPACE || '')
+    .replace(/^https?:\/\//, '')
+    .replace(/\/+$/, '');
+  if (connectionString) {
+    client = new ServiceBusClient(connectionString);
+    console.log('[ServiceBus] Initialized with a connection string');
+  } else {
+    client = new ServiceBusClient(namespace, new DefaultAzureCredential());
+    console.log(`[ServiceBus] Initialized with managed identity for ${namespace}`);
   }
 }
 
@@ -137,8 +139,7 @@ export async function publishEvent<T>(
       console.log(`[ServiceBus] Published ${eventType} to ${topic}`);
     } catch (err) {
       console.error(`[ServiceBus] Publish failed for ${topic}:`, (err as Error).message);
-      // Fall through to local dispatch
-      dispatchLocal(topic, event);
+      throw err;
     }
   } else {
     // Local fallback when Service Bus not configured
@@ -156,7 +157,7 @@ export function subscribe(
   subscription: string,
   handler: EventHandler,
 ): void {
-  // Register for local dispatch (always, as fallback)
+  // Register for in-process dispatch when Service Bus is intentionally disabled.
   const key = `${topic}:${subscription}`;
   if (!localHandlers.has(key)) localHandlers.set(key, []);
   localHandlers.get(key)!.push(handler);
@@ -184,7 +185,7 @@ export function subscribe(
 
       console.log(`[ServiceBus] Subscribed: ${subscription} on ${topic}`);
     } catch (err) {
-      console.error(`[ServiceBus] Subscribe failed for ${key}:`, (err as Error).message);
+      throw new Error(`Service Bus subscription failed for ${key}: ${(err as Error).message}`);
     }
   }
 }

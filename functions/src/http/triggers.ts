@@ -27,46 +27,6 @@ app.http('startIncidentBridge', {
   },
 });
 
-// Start CAB Voting Cycle
-app.http('startCabVoting', {
-  methods: ['POST'],
-  route: 'orchestrations/cab-voting',
-  handler: async (request: HttpRequest, context: InvocationContext): Promise<HttpResponse> => {
-    const body = await request.json() as any;
-    const client = df.getClient(context);
-    
-    const instanceId = await client.startNew('cabVotingCycleOrchestrator', {
-      instanceId: `cab-${Date.now()}`,
-      input: body,
-    });
-    
-    return new HttpResponse({
-      status: 202,
-      jsonBody: { instanceId },
-    });
-  },
-});
-
-// Start Change Rollback
-app.http('startRollback', {
-  methods: ['POST'],
-  route: 'orchestrations/rollback',
-  handler: async (request: HttpRequest, context: InvocationContext): Promise<HttpResponse> => {
-    const body = await request.json() as any;
-    const client = df.getClient(context);
-    
-    const instanceId = await client.startNew('changeRollbackOrchestrator', {
-      instanceId: `rollback-${body.changeNumber}`,
-      input: body,
-    });
-    
-    return new HttpResponse({
-      status: 202,
-      jsonBody: { instanceId },
-    });
-  },
-});
-
 // Check orchestration status
 app.http('orchestrationStatus', {
   methods: ['GET'],

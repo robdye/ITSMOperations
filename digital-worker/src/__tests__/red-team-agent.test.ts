@@ -11,7 +11,6 @@ import {
   type ProbeResult,
 } from '../red-team-agent';
 import { _resetAnticipatoryStore } from '../anticipatory-store';
-import { _resetTenantProfileCache } from '../demo/tenant-profile';
 
 describe('red-team-agent: probe bank', () => {
   it('covers all three probe categories', () => {
@@ -134,14 +133,14 @@ describe('red-team-agent: runProbes', () => {
 describe('red-team-agent: tenant gate', () => {
   beforeEach(() => {
     _resetAnticipatoryStore();
-    _resetTenantProfileCache();
+    delete process.env.RED_TEAM_ENABLED;
   });
 
-  it('skips when tenant has allowRedTeam=false (default)', async () => {
+  it('skips when RED_TEAM_ENABLED is false by default', async () => {
     const result = await runRedTeamForTenant('default', async () => 'whatever');
     if ('skipped' in result) {
       expect(result.skipped).toBe(true);
-      expect(result.reason).toMatch(/allowRedTeam=false/);
+      expect(result.reason).toMatch(/RED_TEAM_ENABLED=false/);
     } else {
       throw new Error('expected skipped result');
     }
@@ -150,7 +149,7 @@ describe('red-team-agent: tenant gate', () => {
   it('getTrustSummary returns available=false with explanatory reason for non-opted-in tenant', async () => {
     const summary = await getTrustSummary('default');
     expect(summary.available).toBe(false);
-    expect(summary.reason).toMatch(/allowRedTeam=false/);
+    expect(summary.reason).toMatch(/RED_TEAM_ENABLED=false/);
     expect(summary.score).toBeNull();
     expect(summary.sparkline).toEqual([]);
   });

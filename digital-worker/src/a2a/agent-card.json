@@ -4,7 +4,7 @@
   "name": "Alex — IT Operations Manager",
   "description": "Autonomous IT Operations Manager. Owns major-incident response, change lifecycle, vulnerability-to-change, SLA-breach escalation, and knowledge harvest workflows on ServiceNow + M365.",
   "version": "1.0.0",
-  "publisher": "Microsoft Demo Agents",
+  "publisher": "ITSM Operations",
   "endpoint": "/api/agent-messages",
   "discovery": "/.well-known/agent-card.json",
   "transport": "bot-framework",

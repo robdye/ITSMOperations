@@ -20,7 +20,7 @@ describe('live ServiceNow source-truth audit artefacts', () => {
     expect(existsSync(standardPath)).toBe(true);
     const standard = readFileSync(standardPath, 'utf8');
     expect(standard).toContain('live-servicenow');
-    expect(standard).toContain('synthetic-servicenow');
+    expect(standard).not.toContain('synthetic-servicenow');
     expect(standard).toContain('auth-failed');
   });
 

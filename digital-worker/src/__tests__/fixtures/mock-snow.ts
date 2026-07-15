@@ -1,10 +1,6 @@
-// ITSM Operations — Mock ServiceNow backend
+// Test-only mock ServiceNow backend.
 // In-process HTTP server implementing a minimal Table API surface plus
-// Business-Rule-equivalent webhook callbacks. Used by the demo-director and
-// integration tests so the SNOW→Alex→SNOW loop runs end-to-end without a PDI.
-//
-// Lives under digital-worker/src/demo so the prod tree-shaker can drop it
-// alongside the rest of the demo isolation surface.
+// Business-Rule-equivalent webhook callbacks used by integration tests.
 
 import http from 'http';
 import crypto from 'crypto';
@@ -105,20 +101,6 @@ export class MockServiceNow {
     this.deliveredEvents = [];
   }
 
-  /** Delete records tagged with the given demo run id. */
-  resetDemoRun(demoRunId: string): number {
-    let removed = 0;
-    for (const t of Object.keys(this.tables) as SnowTable[]) {
-      for (const [sysId, record] of this.tables[t]) {
-        if (record['u_demo_run'] === demoRunId) {
-          this.tables[t].delete(sysId);
-          removed++;
-        }
-      }
-    }
-    return removed;
-  }
-
   getRecord(table: SnowTable, sysId: string): MockSnowRecord | undefined {
     return this.tables[table].get(sysId);
   }
@@ -131,7 +113,7 @@ export class MockServiceNow {
     return [...this.deliveredEvents];
   }
 
-  /** Test/demo helper that inserts a record without going through HTTP. */
+  /** Test helper that inserts a record without going through HTTP. */
   insertRecord(table: SnowTable, fields: Record<string, unknown>): MockSnowRecord {
     return this.insertInternal(table, fields, /*emit*/ true);
   }
