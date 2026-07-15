@@ -140,11 +140,11 @@ This creates ~29 resources across two resource groups (digital-worker in `rg-por
 
 ### Option B — GitHub Actions (continuous deploy)
 
-Push to `master` → CI runs typecheck + tests on all three packages → deploy.yml builds and pushes Docker images, tagged `<git-sha7>`, then `az containerapp update`s both apps.
+Push to `master` → CI runs typechecks, tests, manifest checks, and deployment-safety tests. The protected production workflow then deploys the exact commit that passed CI, using immutable `<git-sha7>` image tags.
 
-GitHub secrets needed: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (for OIDC), plus the variables `ACR_NAME`, `ACR_LOGIN_SERVER`, `MCP_ACR_NAME`, `MCP_ACR_LOGIN_SERVER`, `AZURE_RESOURCE_GROUP`, `MCP_RESOURCE_GROUP`, `DW_CONTAINER_APP_NAME`, `MCP_CONTAINER_APP_NAME`. See [.github/workflows/deploy.yml](.github/workflows/deploy.yml).
+The production environment must provide Azure OIDC, Graph, scheduled-callback, and M365 deployment secrets, plus the ACR, resource-group, Container App, Function App, Graph, mail, and Teams variables declared in [.github/workflows/deploy.yml](.github/workflows/deploy.yml). The preflight job fails before mutation when any required value or Azure target is missing.
 
-After deploy, hit `/api/health` — it returns the running build SHA so you can confirm which commit is live.
+After deployment, the workflow verifies Functions registration and runs `scripts/validate-live-deployment.mjs`. A release is accepted only when the expected build SHA is live, all services are healthy, ServiceNow reads succeed, and no fallback source is active. Failed Container App validation restores the previous images.
 
 ---
 
@@ -182,7 +182,7 @@ The README is the landing page. Deep details live in dedicated documents:
 | [docs/production-readiness.md](docs/production-readiness.md) | Health envelope, secret-resolver audit, Bicep audit, gaps |
 | [docs/README-full.md](docs/README-full.md) | The original long-form README — capability index, every config knob, every API endpoint |
 
-For the demo flow see [DEMO-SCRIPT.md](DEMO-SCRIPT.md).
+For the read-only, live-data customer flow see [DEMO-SCRIPT.md](DEMO-SCRIPT.md).
 
 ---
 
@@ -212,12 +212,13 @@ For the demo flow see [DEMO-SCRIPT.md](DEMO-SCRIPT.md).
 cd digital-worker     && npm test                   # 399 tests
 cd mcp-server         && npm test                   # 176 tests
 cd mcp-server-enrichment && npm test                # 19 tests
+node --test scripts/__tests__/*.test.mjs             # deployment safety tests
 
 # With coverage
 cd digital-worker && npx vitest run --coverage
 ```
 
-594 tests across 53 files run on every push. Coverage thresholds are enforced per package — see [docs/coverage.md](docs/coverage.md).
+Component suites and deployment-safety tests run on every push. Coverage thresholds are enforced per package — see [docs/coverage.md](docs/coverage.md).
 
 ---
 

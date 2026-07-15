@@ -133,16 +133,16 @@ The MSRC probe is registered directly (no prior probe to compose with) and follo
 
 Each consult is appended to the case via `case-manager.appendEnrichment` so the audit trail records the exact citation, including the source URL.
 
-## Demo profile
+## Test-only fixture profile
 
-When `loadTenantProfile(tenantId).profile === 'demo'` (or env `ENRICHMENT_DEV_MODE=1`):
+Fixture responses are available only under `NODE_ENV=test`. They support deterministic automated tests and are excluded from the production container image.
 
-- The bridge mints `dev-mode-token` instead of calling OBO. This avoids the Entra round-trip during demo replay.
+- The bridge mints `dev-mode-token` instead of calling OBO.
 - The MCP server passes `x-itsm-profile: demo` through to source modules.
-- Source modules read from `__fixtures__/*.json` and tag `fixtureUsed=true` in the envelope.
+- Source modules read from `src/__tests__/fixtures/*.json` and tag `fixtureUsed=true` in the envelope.
 - The audit ring still records the call so reviewers can see what would have happened.
 
-The fixtures (KEV with Log4Shell, MSRC October 2024 with CVE-2024-43572, holiday calendars for US/GB/DE 2024, Azure Status East US degradation, M365 Exchange health degraded) are deliberately curated to produce a clean, deterministic demo path.
+Production rejects the fixture profile and uses live sources.
 
 ## Deployment
 

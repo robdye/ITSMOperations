@@ -109,3 +109,16 @@ jobs:
             if (!m.copilotAgents?.declarativeAgents?.length) { console.error('No declarative agents'); process.exit(1); }
             console.log('Manifest valid:', m.name.short, 'v' + m.version);
           "
+
+  deployment-safety:
+    name: Validate deployment safety
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Test deployment readiness controls
+        run: node --test scripts/__tests__/*.test.mjs

@@ -55,7 +55,7 @@ Service Bus pump to exercise meaningfully. The integration suite in
 - `service-bus.ts`, `signal-router.ts` outbound adapters
 - `mock-snow-client.ts`, `snow-client.ts`, `snow-auth.ts`
 - `redis-store.ts`, `token-cache.ts`, `secret-resolver.ts`
-- `seed.ts`, `scheduled-routines.ts`, `subscriptions.ts`
+- `scheduled-routines.ts`, `subscriptions.ts`
 - `outcome-processor.ts`, `outcome-delegation.ts`
 - `runbook-generator.ts`, `automate-flows.ts`, `power-automate.ts`
 - `planner-tasks.ts`, `sharepoint-docs.ts`, `shift-handover.ts`
@@ -85,7 +85,7 @@ dominates the per-package number.
 | `auth.ts` | 92.85% | OBO token broker |
 | `envelope.ts` | 92.85% | Provenance envelope wrapping |
 | `audit.ts` | 80.00% | Audit emitter |
-| `fixtures-loader.ts` | 84.61% | Demo fixtures |
+| `fixtures-loader.ts` | 84.61% | Test-only fixtures |
 | `cache.ts` | 72.22% | LRU + TTL cache |
 | `index.ts` | 73.84% | Express boot |
 | `sources/cisa-kev.ts` | 76.92% | KEV pull |

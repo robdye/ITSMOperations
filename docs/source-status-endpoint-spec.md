@@ -8,7 +8,7 @@ Date: 2026-06-10
 
 ## Purpose
 
-Expose whether ITSMOperations is operating against live ServiceNow, synthetic data, cached data, or failing auth/source checks.
+Expose whether ITSMOperations is operating against live ServiceNow, cached data, or failing auth/source checks.
 
 ## Response schema
 

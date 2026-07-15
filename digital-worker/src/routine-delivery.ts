@@ -329,14 +329,15 @@ export function buildRoutineSummaryCard(summary: RoutineSummary): AdaptiveCardLi
     }
   }
 
+  const missionControlUrl = process.env.MISSION_CONTROL_URL;
   return {
     type: 'AdaptiveCard',
     $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
     version: '1.5',
     body,
-    actions: [
-      { type: 'Action.OpenUrl', title: 'Open Mission Control', url: process.env.MISSION_CONTROL_URL || 'https://itsm-operations-worker.jollysand-88b78b02.eastus.azurecontainerapps.io/mission-control' },
-    ],
+    actions: missionControlUrl
+      ? [{ type: 'Action.OpenUrl', title: 'Open Mission Control', url: missionControlUrl }]
+      : [],
   };
 }
 

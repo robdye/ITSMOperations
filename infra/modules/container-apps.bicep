@@ -128,6 +128,41 @@ resource digitalWorker 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'MCP_ENRICHMENT_ENDPOINT', value: 'https://itsm-ops-${environmentName}-enrichment.${containerAppsEnv.properties.defaultDomain}' }
             { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
           ]
+          probes: [
+            {
+              type: 'Startup'
+              httpGet: {
+                path: '/api/health'
+                port: 3978
+              }
+              initialDelaySeconds: 0
+              periodSeconds: 10
+              timeoutSeconds: 5
+              failureThreshold: 30
+            }
+            {
+              type: 'Liveness'
+              httpGet: {
+                path: '/api/health'
+                port: 3978
+              }
+              initialDelaySeconds: 10
+              periodSeconds: 30
+              timeoutSeconds: 5
+              failureThreshold: 3
+            }
+            {
+              type: 'Readiness'
+              httpGet: {
+                path: '/api/health'
+                port: 3978
+              }
+              initialDelaySeconds: 5
+              periodSeconds: 10
+              timeoutSeconds: 5
+              failureThreshold: 6
+            }
+          ]
         }
       ]
       scale: {
@@ -189,6 +224,41 @@ resource mcpServer 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'AZURE_SEARCH_ENDPOINT', value: aiSearchEndpoint }
             { name: 'KEY_VAULT_NAME', value: keyVaultName }
             { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsightsConnectionString }
+          ]
+          probes: [
+            {
+              type: 'Startup'
+              httpGet: {
+                path: '/health'
+                port: 3002
+              }
+              initialDelaySeconds: 0
+              periodSeconds: 5
+              timeoutSeconds: 3
+              failureThreshold: 24
+            }
+            {
+              type: 'Liveness'
+              httpGet: {
+                path: '/health'
+                port: 3002
+              }
+              initialDelaySeconds: 10
+              periodSeconds: 30
+              timeoutSeconds: 3
+              failureThreshold: 3
+            }
+            {
+              type: 'Readiness'
+              httpGet: {
+                path: '/health'
+                port: 3002
+              }
+              initialDelaySeconds: 5
+              periodSeconds: 10
+              timeoutSeconds: 3
+              failureThreshold: 6
+            }
           ]
         }
       ]

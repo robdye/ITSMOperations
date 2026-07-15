@@ -1,10 +1,11 @@
 import { defineConfig } from '@playwright/test';
 
-// ITSM Operations Digital Assistant - live URLs
+// Set these variables explicitly for live validation. Defaults stay local so
+// an e2e run cannot accidentally target a stale customer environment.
 const ITSM_BASE = process.env.ITSM_BASE_URL
-  || 'https://itsm-operations-worker.jollysand-88b78b02.eastus.azurecontainerapps.io';
+  || 'http://127.0.0.1:3978';
 const ITSM_MCP = process.env.ITSM_MCP_URL
-  || 'https://change-mgmt-mcp.jollysand-88b78b02.eastus.azurecontainerapps.io';
+  || 'http://127.0.0.1:3002';
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -34,8 +35,8 @@ export default defineConfig({
       use: { baseURL: ITSM_MCP },
     },
     {
-      name: 'itsm-demo',
-      testMatch: /itsm-demo-script\.spec\.ts/,
+      name: 'itsm-customer-readiness',
+      testMatch: /itsm-customer-readiness\.spec\.ts/,
       use: { baseURL: ITSM_MCP },
     },
     {

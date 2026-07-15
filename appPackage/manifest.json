@@ -2,7 +2,7 @@
     "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.24/MicrosoftTeams.schema.json",
     "manifestVersion": "1.24",
     "version": "1.0.0",
-    "id": "68dceb5d-e149-417e-b25a-a9a60c1329ce",
+    "id": "${{TEAMS_APP_ID}}",
     "developer": {
         "name": "ITSM Operations",
         "websiteUrl": "https://www.microsoft.com",
@@ -22,7 +22,7 @@
         "declarativeAgents": [{ "id": "declarativeAgent", "file": "declarativeAgent.json" }]
     },
     "validDomains": [
-        "change-mgmt-mcp.jollysand-88b78b02.eastus.azurecontainerapps.io",
+        "${{MCP_VALID_DOMAIN}}",
         "*.azurecontainerapps.io",
         "*.devtunnels.ms",
         "graph.microsoft.com"

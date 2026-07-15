@@ -46,7 +46,7 @@ param graphOboClientId string = ''
 @description('Graph OBO client secret name in KV (only used when graphOboClientId is set)')
 param graphOboClientSecretName string = 'ENRICHMENT-GRAPH-OBO-SECRET'
 
-@description('Number of min replicas (set to 1 for demo, scale rules drive up to maxReplicas)')
+@description('Minimum replicas; production keeps one warm replica')
 param minReplicas int = 1
 
 @description('Maximum replicas')
@@ -100,6 +100,17 @@ resource mcpEnrichment 'Microsoft.App/containerApps@2024-03-01' = {
           ]
           probes: [
             {
+              type: 'Startup'
+              httpGet: {
+                path: '/health'
+                port: 3010
+              }
+              initialDelaySeconds: 0
+              periodSeconds: 5
+              timeoutSeconds: 3
+              failureThreshold: 24
+            }
+            {
               type: 'Liveness'
               httpGet: {
                 path: '/health'
@@ -107,6 +118,8 @@ resource mcpEnrichment 'Microsoft.App/containerApps@2024-03-01' = {
               }
               initialDelaySeconds: 10
               periodSeconds: 30
+              timeoutSeconds: 3
+              failureThreshold: 3
             }
             {
               type: 'Readiness'
@@ -116,6 +129,8 @@ resource mcpEnrichment 'Microsoft.App/containerApps@2024-03-01' = {
               }
               initialDelaySeconds: 5
               periodSeconds: 10
+              timeoutSeconds: 3
+              failureThreshold: 6
             }
           ]
         }

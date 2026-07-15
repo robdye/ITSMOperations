@@ -130,4 +130,23 @@ describe('buildRoutineSummaryCard', () => {
     expect(json).toContain('Alice');
     expect(json).toContain('Bob');
   });
+
+  it('does not link to an unrelated deployment when Mission Control is not configured', () => {
+    delete process.env.MISSION_CONTROL_URL;
+    const card = buildRoutineSummaryCard({ ...sampleSummary, output: 'Brief output text.' });
+    expect(card.actions).toEqual([]);
+  });
+
+  it('uses the configured Mission Control URL', () => {
+    process.env.MISSION_CONTROL_URL = 'https://worker.example.com/mission-control';
+    const card = buildRoutineSummaryCard({ ...sampleSummary, output: 'Brief output text.' });
+    expect(card.actions).toEqual([
+      {
+        type: 'Action.OpenUrl',
+        title: 'Open Mission Control',
+        url: 'https://worker.example.com/mission-control',
+      },
+    ]);
+    delete process.env.MISSION_CONTROL_URL;
+  });
 });

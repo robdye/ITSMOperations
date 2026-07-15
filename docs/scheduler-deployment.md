@@ -173,7 +173,7 @@ az functionapp logs tail \
 
 ```powershell
 # Hit the Digital Worker outcomes endpoint
-curl -s "https://itsm-operations-worker.jollysand-88b78b02.eastus.azurecontainerapps.io/api/outcomes?limit=10" \
+curl -s "${ITSM_WORKER_URL}/api/outcomes?limit=10" \
   | jq '.outcomes[] | {label, timestamp, status}'
 
 # You should see recent outcomes like:

@@ -7,12 +7,12 @@ import {
   extractContent,
 } from './helpers';
 
-const MCP_URL = 'https://change-mgmt-mcp.jollysand-88b78b02.eastus.azurecontainerapps.io';
+const MCP_URL = process.env.ITSM_MCP_URL || 'http://127.0.0.1:3002';
 test.use({ baseURL: MCP_URL });
 
 const MCP_ENDPOINT = '/mcp';
 
-test.describe('ITSM Demo Script — Full Scenario Validation', () => {
+test.describe('ITSM Customer Readiness — Live Tool Validation', () => {
   let sessionId: string | undefined;
 
   test.beforeAll(async ({ request }) => {

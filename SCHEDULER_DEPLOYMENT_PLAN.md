@@ -73,7 +73,7 @@ az functionapp config appsettings set \
   --name itsm-operations-scheduler \
   --resource-group rg-portfolio-agent \
   --settings \
-    DIGITAL_WORKER_URL="https://itsm-operations-worker.jollysand-88b78b02.eastus.azurecontainerapps.io" \
+    DIGITAL_WORKER_URL="https://<worker-host>" \
     WORKER_SCHEDULED_SECRET="<copy from container app environment>" \
     FUNCTIONS_WORKER_RUNTIME="node"
 ```

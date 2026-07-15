@@ -40,7 +40,7 @@ and `BUILD_TIMESTAMP` Docker build args. CI's
 
 ```yaml
 docker build \
-  --build-arg GIT_COMMIT_SHA=${{ github.sha }} \
+  --build-arg GIT_COMMIT_SHA=${{ env.DEPLOY_SHA }} \
   --build-arg BUILD_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
   -t <tag> digital-worker/
 ```
@@ -68,13 +68,11 @@ resolved value, not bypassing the resolver.
 Any call site can request a Key Vault value at runtime. The fallback
 returns `process.env[name]` if Key Vault isn't wired up (local dev).
 
-### Gap — secrets currently sourced only from `process.env`
+### Secrets sourced through runtime secret references
 
-These keys are read directly from environment in production code. In
-the Container Apps deployment they're injected as secret refs from
-Key Vault by the Bicep module, so the **value** does come from Key
-Vault — but the resolver isn't in the loop, so secret rotation
-requires a container restart rather than a hot reload.
+Some services read secrets from environment variables after Container Apps
+resolves a protected secret reference. Secret values are not committed as
+configuration. Rotation requires a new revision or replica restart.
 
 | Env var | Used by |
 | --- | --- |
@@ -87,11 +85,8 @@ requires a container restart rather than a hot reload.
 | `OPENAI_API_KEY` | `openai-config.ts` |
 | `SCHEDULED_SECRET` | `index.ts` (scheduler webhook auth) |
 
-**Recommendation** — extend `SECRET_MAP` to include these names so
-the resolver picks them up at startup and rotation lands without a
-restart. Tracked as a follow-up; the current Container Apps deploy
-already injects them as Key Vault secret references, so the values
-themselves are not in environment-as-config.
+The deployment workflow stores Graph and callback credentials as Container
+App secrets and exposes only `secretref:` environment entries.
 
 ## Bicep module audit
 
@@ -118,12 +113,11 @@ subscription-scope deployment.
 
 The CI workflow (`.github/workflows/ci.yml`) runs:
 
-1. `npm ci` (clean install) in all 3 packages
-2. `npm run build` (TypeScript compile) in all 3 packages
-3. `npm test -- --run` (vitest) in all 3 packages
-4. ESLint over the `digital-worker` and `mcp-server` source trees
-5. Coverage threshold gate (per-package floors documented in
-   [docs/coverage.md](coverage.md))
+1. Installs each component's dependencies
+2. Typechecks and tests all three services
+3. Builds all three production container images
+4. Validates the Teams manifest
+5. Tests exact-commit deployment, production Teams targeting, live-source gates, and rollback controls
 
 The deploy workflow (`.github/workflows/deploy.yml`) runs after CI
 passes on `master` and:
@@ -132,10 +126,10 @@ passes on `master` and:
    build args
 2. Pushes to ACR with `:<sha7>` tag
 3. Updates 3 Container Apps to the new image tag
-4. Verifies HEAD `/api/health` returns 200 with the new build SHA
+4. Verifies Functions registration
+5. Requires the expected build SHA, live ServiceNow reads, healthy MCP services, no fallback source, and a rendered Mission Control page
 
-A failed health probe rolls the revision back automatically through
-Container Apps' built-in revision-traffic rules.
+A failed release gate restores all three previous Container App images.
 
 ## Known gaps not closed in this pass
 
@@ -143,9 +137,6 @@ Container Apps' built-in revision-traffic rules.
 - **`/api/health` does not include dependency states** — a deeper
   variant lives at `/api/platform-status`. Consider folding the
   dependency probe results into `/api/health` for liveness probes.
-- **Container Apps liveness probe** — currently uses `/api/health`
-  (HTTP 200). For deeper probing, switch to `/api/platform-status`
-  with a JSON-path probe condition.
 - **`mcp-server.ts` and `mcp-server-enrichment/server.ts` are
   large** — they dominate per-package coverage numbers.
   See [docs/coverage.md](coverage.md) for the split-up roadmap.

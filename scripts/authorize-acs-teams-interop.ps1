@@ -99,7 +99,7 @@ Write-Host ""
 Write-Host "──────────────────────────────────────────────────────────────────" -ForegroundColor Cyan
 Write-Host " Done. Note: tenant policy can take 5–15 minutes to propagate." -ForegroundColor Cyan
 Write-Host " Test by clicking the Page Me button on Mission Control or:" -ForegroundColor Cyan
-Write-Host '   $base = "https://itsm-operations-worker.jollysand-88b78b02.eastus.azurecontainerapps.io"' -ForegroundColor Gray
+Write-Host '   $base = $env:ITSM_WORKER_URL' -ForegroundColor Gray
 Write-Host '   $body = @{ reason = "Interop test"; notify = $false } | ConvertTo-Json' -ForegroundColor Gray
 Write-Host '   Invoke-RestMethod -Uri "$base/api/voice/page-me" -Method Post -ContentType "application/json" -Body $body' -ForegroundColor Gray
 Write-Host "──────────────────────────────────────────────────────────────────" -ForegroundColor Cyan

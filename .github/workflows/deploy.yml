@@ -19,6 +19,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
   ACR_NAME: ${{ vars.ACR_NAME }}
   ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
   RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -31,14 +32,129 @@ env:
   ENRICHMENT_RESOURCE_GROUP: ${{ vars.ENRICHMENT_RESOURCE_GROUP || vars.MCP_RESOURCE_GROUP }}
   ENRICHMENT_ACR_NAME: ${{ vars.ENRICHMENT_ACR_NAME || vars.MCP_ACR_NAME }}
   ENRICHMENT_ACR_LOGIN_SERVER: ${{ vars.ENRICHMENT_ACR_LOGIN_SERVER || vars.MCP_ACR_LOGIN_SERVER }}
-  FUNCTIONS_APP: ${{ vars.FUNCTIONS_APP_NAME || format('itsm-ops-{0}-func', github.event.inputs.environment || 'prod') }}
+  FUNCTIONS_APP: ${{ vars.FUNCTIONS_APP_NAME }}
   FUNCTIONS_RESOURCE_GROUP: ${{ vars.FUNCTIONS_RESOURCE_GROUP || vars.AZURE_RESOURCE_GROUP }}
 
 jobs:
-  # ── Build & Push Images ────────────────────────────────────────
-  build-push:
-    name: Build & push Docker images
+  preflight:
+    name: Validate production prerequisites
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'prod' }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+
+      - name: Require protected configuration
+        shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          GRAPH_APP_ID: ${{ vars.GRAPH_APP_ID }}
+          GRAPH_APP_SECRET: ${{ secrets.GRAPH_APP_SECRET }}
+          GRAPH_MAIL_SENDER: ${{ vars.GRAPH_MAIL_SENDER }}
+          GRAPH_TENANT_ID: ${{ vars.GRAPH_TENANT_ID || secrets.AZURE_TENANT_ID }}
+          AGENT_EMAIL: ${{ vars.AGENT_EMAIL }}
+          MANAGER_EMAIL: ${{ vars.MANAGER_EMAIL }}
+          ITSM_TEAM_ID: ${{ vars.ITSM_TEAM_ID }}
+          ITSM_ALERTS_CHANNEL_ID: ${{ vars.ITSM_ALERTS_CHANNEL_ID }}
+          ROUTINE_REPORT_RECIPIENTS: ${{ vars.ROUTINE_REPORT_RECIPIENTS }}
+          SCHEDULED_SECRET: ${{ secrets.SCHEDULED_SECRET }}
+          TEAMS_APP_TENANT_ID: ${{ secrets.TEAMS_APP_TENANT_ID }}
+          M365_ACCOUNT_NAME: ${{ secrets.M365_ACCOUNT_NAME }}
+          M365_ACCOUNT_PASSWORD: ${{ secrets.M365_ACCOUNT_PASSWORD }}
+        run: |
+          required=(
+            AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID
+            ACR_NAME ACR_LOGIN_SERVER RESOURCE_GROUP
+            MCP_ACR_NAME MCP_ACR_LOGIN_SERVER MCP_RESOURCE_GROUP
+            DW_CONTAINER_APP MCP_CONTAINER_APP
+            ENRICHMENT_CONTAINER_APP ENRICHMENT_RESOURCE_GROUP
+            ENRICHMENT_ACR_NAME ENRICHMENT_ACR_LOGIN_SERVER
+            FUNCTIONS_APP FUNCTIONS_RESOURCE_GROUP
+            GRAPH_APP_ID GRAPH_APP_SECRET GRAPH_MAIL_SENDER GRAPH_TENANT_ID
+            AGENT_EMAIL MANAGER_EMAIL ITSM_TEAM_ID ITSM_ALERTS_CHANNEL_ID
+            ROUTINE_REPORT_RECIPIENTS
+            SCHEDULED_SECRET TEAMS_APP_TENANT_ID
+            M365_ACCOUNT_NAME M365_ACCOUNT_PASSWORD
+          )
+          missing=()
+          for key in "${required[@]}"; do
+            if [ -z "${!key:-}" ]; then
+              missing+=("$key")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            printf '::error::Missing required production configuration: %s\n' "${missing[*]}"
+            exit 1
+          fi
+
+      - name: Verify Microsoft Graph application permissions
+        shell: bash
+        env:
+            GRAPH_APP_ID: ${{ vars.GRAPH_APP_ID }}
+            GRAPH_APP_SECRET: ${{ secrets.GRAPH_APP_SECRET }}
+            GRAPH_TENANT_ID: ${{ vars.GRAPH_TENANT_ID || secrets.AZURE_TENANT_ID }}
+        run: |
+            token=$(curl --fail --silent --show-error \
+              --request POST \
+              --url "https://login.microsoftonline.com/${GRAPH_TENANT_ID}/oauth2/v2.0/token" \
+              --header "Content-Type: application/x-www-form-urlencoded" \
+              --data-urlencode "client_id=${GRAPH_APP_ID}" \
+              --data-urlencode "client_secret=${GRAPH_APP_SECRET}" \
+              --data-urlencode "scope=https://graph.microsoft.com/.default" \
+              --data-urlencode "grant_type=client_credentials" \
+              | jq -r .access_token)
+            if [ -z "$token" ] || [ "$token" = "null" ]; then
+              echo "::error::Microsoft Graph client credentials did not return an access token"
+              exit 1
+            fi
+            TOKEN="$token" node -e "
+              const payload = JSON.parse(Buffer.from(process.env.TOKEN.split('.')[1], 'base64url').toString());
+              if (!Array.isArray(payload.roles) || !payload.roles.includes('Mail.Send')) {
+                console.error('::error::Microsoft Graph application is missing the Mail.Send application role');
+                process.exit(1);
+              }
+            "
+
+      - name: Azure Login
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify deployment targets
+        shell: bash
+        env:
+          SCHEDULED_SECRET: ${{ secrets.SCHEDULED_SECRET }}
+        run: |
+          az acr show --name "$ACR_NAME" --output none
+          az acr show --name "$MCP_ACR_NAME" --output none
+          az acr show --name "$ENRICHMENT_ACR_NAME" --output none
+          az containerapp show --name "$DW_CONTAINER_APP" --resource-group "$RESOURCE_GROUP" --output none
+          az containerapp show --name "$MCP_CONTAINER_APP" --resource-group "$MCP_RESOURCE_GROUP" --output none
+          az containerapp show --name "$ENRICHMENT_CONTAINER_APP" --resource-group "$ENRICHMENT_RESOURCE_GROUP" --output none
+          az functionapp show --name "$FUNCTIONS_APP" --resource-group "$FUNCTIONS_RESOURCE_GROUP" --output none
+          function_settings=$(az functionapp config appsettings list \
+            --resource-group "$FUNCTIONS_RESOURCE_GROUP" \
+            --name "$FUNCTIONS_APP" \
+            --output json)
+          for key in SCHEDULED_SECRET WORKER_SCHEDULED_SECRET; do
+            if ! jq -e --arg key "$key" 'any(.[]; .name == $key and .value == env.SCHEDULED_SECRET)' <<<"$function_settings" >/dev/null; then
+              echo "::error::Function App setting ${key} must match the protected callback secret; releases do not rotate it"
+              exit 1
+            fi
+          done
+
+  build-push:
+    name: Build and push immutable images
+    needs: preflight
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || 'prod' }}
     permissions:
@@ -50,6 +166,8 @@ jobs:
       enrichment-image: ${{ steps.tags.outputs.enrichment }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
 
       - name: Azure Login
         uses: azure/login@v3
@@ -60,207 +178,41 @@ jobs:
 
       - name: ACR Login
         run: |
-          az acr login --name ${{ env.ACR_NAME }}
-          az acr login --name ${{ env.MCP_ACR_NAME }}
-          if [ "${{ env.ENRICHMENT_ACR_NAME }}" != "${{ env.MCP_ACR_NAME }}" ] && [ "${{ env.ENRICHMENT_ACR_NAME }}" != "${{ env.ACR_NAME }}" ]; then
-            az acr login --name ${{ env.ENRICHMENT_ACR_NAME }}
+          az acr login --name "$ACR_NAME"
+          az acr login --name "$MCP_ACR_NAME"
+          if [ "$ENRICHMENT_ACR_NAME" != "$MCP_ACR_NAME" ] && [ "$ENRICHMENT_ACR_NAME" != "$ACR_NAME" ]; then
+            az acr login --name "$ENRICHMENT_ACR_NAME"
           fi
 
-      - name: Generate image tags
+      - name: Generate immutable image tags
         id: tags
         run: |
-          SHA=$(echo ${{ github.sha }} | cut -c1-7)
-          echo "dw=${{ env.ACR_LOGIN_SERVER }}/itsm-worker:${SHA}" >> $GITHUB_OUTPUT
-          echo "mcp=${{ env.MCP_ACR_LOGIN_SERVER }}/itsm-mcp-server:${SHA}" >> $GITHUB_OUTPUT
-          echo "enrichment=${{ env.ENRICHMENT_ACR_LOGIN_SERVER }}/itsm-mcp-enrichment:${SHA}" >> $GITHUB_OUTPUT
+          short_sha=$(echo "$DEPLOY_SHA" | cut -c1-7)
+          echo "dw=${ACR_LOGIN_SERVER}/itsm-worker:${short_sha}" >> "$GITHUB_OUTPUT"
+          echo "mcp=${MCP_ACR_LOGIN_SERVER}/itsm-mcp-server:${short_sha}" >> "$GITHUB_OUTPUT"
+          echo "enrichment=${ENRICHMENT_ACR_LOGIN_SERVER}/itsm-mcp-enrichment:${short_sha}" >> "$GITHUB_OUTPUT"
 
-      - name: Build & push digital-worker
+      - name: Build and push digital-worker
         run: |
           docker build \
-            --build-arg GIT_COMMIT_SHA=${{ github.sha }} \
-            --build-arg BUILD_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-            -t ${{ steps.tags.outputs.dw }} digital-worker/
-          docker push ${{ steps.tags.outputs.dw }}
+            --build-arg GIT_COMMIT_SHA="$DEPLOY_SHA" \
+            --build-arg BUILD_TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -t "${{ steps.tags.outputs.dw }}" digital-worker/
+          docker push "${{ steps.tags.outputs.dw }}"
 
-      - name: Build & push mcp-server
+      - name: Build and push mcp-server
         run: |
-          docker build -t ${{ steps.tags.outputs.mcp }} mcp-server/
-          docker push ${{ steps.tags.outputs.mcp }}
+          docker build -t "${{ steps.tags.outputs.mcp }}" mcp-server/
+          docker push "${{ steps.tags.outputs.mcp }}"
 
-      - name: Build & push mcp-server-enrichment
+      - name: Build and push mcp-server-enrichment
         run: |
-          docker build -t ${{ steps.tags.outputs.enrichment }} mcp-server-enrichment/
-          docker push ${{ steps.tags.outputs.enrichment }}
+          docker build -t "${{ steps.tags.outputs.enrichment }}" mcp-server-enrichment/
+          docker push "${{ steps.tags.outputs.enrichment }}"
 
-  # ── Deploy to Container Apps ───────────────────────────────────
-  deploy:
-    name: Deploy to Azure Container Apps
-    needs: build-push
-    runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || 'prod' }}
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Azure Login
-        uses: azure/login@v3
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Deploy digital-worker
-        run: |
-          az containerapp update \
-            --name ${{ env.DW_CONTAINER_APP }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image ${{ needs.build-push.outputs.dw-image }}
-
-      - name: Configure digital-worker runtime settings
-        shell: bash
-        env:
-          AGENT_EMAIL: ${{ vars.AGENT_EMAIL }}
-          MANAGER_EMAIL: ${{ vars.MANAGER_EMAIL }}
-          GRAPH_MAIL_SENDER: ${{ vars.GRAPH_MAIL_SENDER }}
-          GRAPH_APP_ID: ${{ vars.GRAPH_APP_ID }}
-          GRAPH_APP_SECRET: ${{ secrets.GRAPH_APP_SECRET }}
-          GRAPH_TENANT_ID: ${{ vars.GRAPH_TENANT_ID || secrets.AZURE_TENANT_ID }}
-          ITSM_TEAM_ID: ${{ vars.ITSM_TEAM_ID }}
-          ITSM_ALERTS_CHANNEL_ID: ${{ vars.ITSM_ALERTS_CHANNEL_ID }}
-          ROUTINE_REPORT_RECIPIENTS: ${{ vars.ROUTINE_REPORT_RECIPIENTS }}
-          SCHEDULED_SECRET: ${{ secrets.SCHEDULED_SECRET }}
-        run: |
-          ENV_ARGS=()
-
-          add_env() {
-            local key="$1"
-            local value="$2"
-            if [ -n "$value" ]; then
-              ENV_ARGS+=("${key}=${value}")
-            fi
-          }
-
-          add_env "AGENT_EMAIL" "$AGENT_EMAIL"
-          add_env "MANAGER_EMAIL" "$MANAGER_EMAIL"
-          add_env "GRAPH_MAIL_SENDER" "$GRAPH_MAIL_SENDER"
-          add_env "GRAPH_APP_ID" "$GRAPH_APP_ID"
-          add_env "GRAPH_APP_SECRET" "$GRAPH_APP_SECRET"
-          add_env "GRAPH_TENANT_ID" "$GRAPH_TENANT_ID"
-          add_env "ITSM_TEAM_ID" "$ITSM_TEAM_ID"
-          add_env "ITSM_ALERTS_CHANNEL_ID" "$ITSM_ALERTS_CHANNEL_ID"
-          add_env "ROUTINE_REPORT_RECIPIENTS" "$ROUTINE_REPORT_RECIPIENTS"
-          add_env "SCHEDULED_SECRET" "$SCHEDULED_SECRET"
-          # Always enable proactive engagement so HITL Adaptive Cards are
-          # actually posted to the operator's Teams 1:1 chat instead of
-          # being silently dropped on the floor.
-          add_env "PROACTIVE_ENGAGEMENT_ENABLED" "true"
-
-          if [ ${#ENV_ARGS[@]} -eq 0 ]; then
-            echo "No optional digital-worker runtime settings supplied via GitHub environment/secrets."
-            exit 0
-          fi
-
-          az containerapp update \
-            --name ${{ env.DW_CONTAINER_APP }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --set-env-vars "${ENV_ARGS[@]}"
-
-      - name: Deploy mcp-server
-        run: |
-          az containerapp update \
-            --name ${{ env.MCP_CONTAINER_APP }} \
-            --resource-group ${{ env.MCP_RESOURCE_GROUP }} \
-            --image ${{ needs.build-push.outputs.mcp-image }}
-
-      - name: Configure mcp-server runtime settings
-        shell: bash
-        env:
-          SCHEDULED_SECRET: ${{ secrets.SCHEDULED_SECRET }}
-        run: |
-          # The new send-email MCP tool proxies through the digital-worker
-          # /api/mail/send endpoint, which is gated by SCHEDULED_SECRET.
-          # Wire both so chat agents (Alex IT Ops) can email on request.
-          DW_URL=$(az containerapp show \
-            --name ${{ env.DW_CONTAINER_APP }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --query properties.configuration.ingress.fqdn -o tsv)
-          if [ -z "$DW_URL" ]; then
-            echo "::error::Unable to resolve digital-worker FQDN — mcp-server send-email tool will not work"
-            exit 1
-          fi
-
-          ENV_ARGS=("WORKER_BASE_URL=https://${DW_URL}" "DIGITAL_WORKER_URL=https://${DW_URL}")
-          if [ -n "$SCHEDULED_SECRET" ]; then
-            ENV_ARGS+=("SCHEDULED_SECRET=${SCHEDULED_SECRET}")
-          fi
-
-          az containerapp update \
-            --name ${{ env.MCP_CONTAINER_APP }} \
-            --resource-group ${{ env.MCP_RESOURCE_GROUP }} \
-            --set-env-vars "${ENV_ARGS[@]}"
-
-      - name: Deploy mcp-server-enrichment (skip if app missing)
-        run: |
-          if az containerapp show \
-               --name ${{ env.ENRICHMENT_CONTAINER_APP }} \
-               --resource-group ${{ env.ENRICHMENT_RESOURCE_GROUP }} \
-               -o none 2>/dev/null; then
-            az containerapp update \
-              --name ${{ env.ENRICHMENT_CONTAINER_APP }} \
-              --resource-group ${{ env.ENRICHMENT_RESOURCE_GROUP }} \
-              --image ${{ needs.build-push.outputs.enrichment-image }}
-          else
-            echo "::warning::Enrichment Container App ${{ env.ENRICHMENT_CONTAINER_APP }} not found in ${{ env.ENRICHMENT_RESOURCE_GROUP }} — skipping. Bootstrap the Container App once via az CLI to enable automatic deploys."
-          fi
-
-      - name: Wire MCP_ENRICHMENT_ENDPOINT into digital-worker
-        run: |
-          if FQDN=$(az containerapp show \
-                      --name ${{ env.ENRICHMENT_CONTAINER_APP }} \
-                      --resource-group ${{ env.ENRICHMENT_RESOURCE_GROUP }} \
-                      --query properties.configuration.ingress.fqdn -o tsv 2>/dev/null) && [ -n "$FQDN" ]; then
-            az containerapp update \
-              --name ${{ env.DW_CONTAINER_APP }} \
-              --resource-group ${{ env.RESOURCE_GROUP }} \
-              --set-env-vars "MCP_ENRICHMENT_ENDPOINT=https://${FQDN}/enrichment/mcp"
-          else
-            echo "::warning::Enrichment FQDN not resolvable — leaving MCP_ENRICHMENT_ENDPOINT untouched on digital-worker."
-          fi
-
-      - name: Health check — digital-worker
-        run: |
-          DW_URL=$(az containerapp show \
-            --name ${{ env.DW_CONTAINER_APP }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --query properties.configuration.ingress.fqdn -o tsv)
-          curl --fail --retry 5 --retry-delay 10 "https://${DW_URL}/api/health" || exit 1
-
-      - name: Health check — mcp-server
-        run: |
-          MCP_URL=$(az containerapp show \
-            --name ${{ env.MCP_CONTAINER_APP }} \
-            --resource-group ${{ env.MCP_RESOURCE_GROUP }} \
-            --query properties.configuration.ingress.fqdn -o tsv)
-          curl --fail --retry 5 --retry-delay 10 "https://${MCP_URL}/health" || exit 1
-
-      - name: Health check — mcp-server-enrichment (best-effort)
-        run: |
-          ENR_URL=$(az containerapp show \
-            --name ${{ env.ENRICHMENT_CONTAINER_APP }} \
-            --resource-group ${{ env.ENRICHMENT_RESOURCE_GROUP }} \
-            --query properties.configuration.ingress.fqdn -o tsv 2>/dev/null) || ENR_URL=""
-          if [ -n "$ENR_URL" ]; then
-            curl --fail --retry 5 --retry-delay 10 "https://${ENR_URL}/health" || exit 1
-          else
-            echo "::warning::Enrichment Container App not yet bootstrapped — skipping health check."
-          fi
-
-  # ── Deploy to Azure Functions ──────────────────────────────────
   deploy-functions:
-    name: Deploy to Azure Functions
-    needs: deploy
+    name: Deploy and verify Azure Functions
+    needs: [preflight, build-push]
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || 'prod' }}
     permissions:
@@ -268,6 +220,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
 
       - uses: actions/setup-node@v6
         with:
@@ -282,80 +236,127 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Build Functions
+      - name: Build production package
         working-directory: functions
         run: |
           npm ci --include=dev
           npm run build
-          # Flex Consumption + v4 programming model: the runtime needs
-          # node_modules in the package (no remote Oryx build). Prune dev
-          # deps so the zip only ships production runtime dependencies.
           npm prune --omit=dev
-
-      - name: Create deployment package
-        working-directory: functions
-        run: |
-          # Include node_modules so @azure/functions, durable-functions etc.
-          # are resolvable at host startup. Exclude only sources/tests/git.
           zip -r ../deploy-functions.zip . \
             -x "*.git*" ".env*" "test/*" "tests/*" "src/*" "tsconfig.json" "vitest.config*"
 
-      - name: Validate Function App target
+      - name: Back up current Functions deployment
+        id: functions-backup
+        shell: bash
         run: |
-          az functionapp show \
-            --resource-group ${{ env.FUNCTIONS_RESOURCE_GROUP }} \
-            --name ${{ env.FUNCTIONS_APP }} \
-            --query "{name:name,state:state,defaultHostName:defaultHostName}" \
-            -o table
+          credentials=$(az functionapp deployment list-publishing-credentials \
+            --resource-group "$FUNCTIONS_RESOURCE_GROUP" \
+            --name "$FUNCTIONS_APP" \
+            --output json)
+          username=$(jq -r .publishingUserName <<<"$credentials")
+          password=$(jq -r .publishingPassword <<<"$credentials")
+          scm_host=$(az functionapp show \
+            --resource-group "$FUNCTIONS_RESOURCE_GROUP" \
+            --name "$FUNCTIONS_APP" \
+            --query enabledHostNames \
+            --output tsv | tr '\t' '\n' | grep '\.scm\.' | head -1)
+          curl --fail --silent --show-error \
+            --user "${username}:${password}" \
+            "https://${scm_host}/api/zip/site/wwwroot/" \
+            --output previous-functions.zip
+          az functionapp config appsettings list \
+            --resource-group "$FUNCTIONS_RESOURCE_GROUP" \
+            --name "$FUNCTIONS_APP" \
+            --query "[?name=='DIGITAL_WORKER_URL' || name=='DEPLOYED_COMMIT_SHA'].{name:name,value:value}" \
+            --output json > previous-functions-settings.json
 
-      - name: Deploy Functions (config-zip)
+      - name: Preserve Functions rollback package
+        uses: actions/upload-artifact@v4
+        with:
+          name: functions-rollback-${{ github.run_id }}
+          path: |
+            previous-functions.zip
+            previous-functions-settings.json
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Deploy Functions package
         run: |
           az functionapp deployment source config-zip \
-            -g ${{ env.FUNCTIONS_RESOURCE_GROUP }} \
-            -n ${{ env.FUNCTIONS_APP }} \
-            --src deploy-functions.zip \
-            --verbose
+            --resource-group "$FUNCTIONS_RESOURCE_GROUP" \
+            --name "$FUNCTIONS_APP" \
+            --src deploy-functions.zip
 
-      - name: Configure Function App runtime settings
-        shell: bash
-        env:
-          SCHEDULED_SECRET: ${{ secrets.SCHEDULED_SECRET }}
+      - name: Configure Function App
         run: |
-          DW_URL=$(az containerapp show \
-            --name ${{ env.DW_CONTAINER_APP }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
+          DW_FQDN=$(az containerapp show \
+            --name "$DW_CONTAINER_APP" \
+            --resource-group "$RESOURCE_GROUP" \
             --query properties.configuration.ingress.fqdn -o tsv)
-
-          if [ -z "$DW_URL" ]; then
-            echo "Unable to resolve digital-worker ingress FQDN"
-            exit 1
-          fi
-
-          APP_SETTINGS=("DIGITAL_WORKER_URL=https://${DW_URL}")
-
-          if [ -n "$SCHEDULED_SECRET" ]; then
-            APP_SETTINGS+=("WORKER_SCHEDULED_SECRET=${SCHEDULED_SECRET}")
-            APP_SETTINGS+=("SCHEDULED_SECRET=${SCHEDULED_SECRET}")
-          fi
-
           az functionapp config appsettings set \
-            --resource-group ${{ env.FUNCTIONS_RESOURCE_GROUP }} \
-            --name ${{ env.FUNCTIONS_APP }} \
-            --settings "${APP_SETTINGS[@]}"
+            --resource-group "$FUNCTIONS_RESOURCE_GROUP" \
+            --name "$FUNCTIONS_APP" \
+            --settings \
+              "DIGITAL_WORKER_URL=https://${DW_FQDN}" \
+              "DEPLOYED_COMMIT_SHA=${DEPLOY_SHA}" \
+            --output none
 
+      - name: Verify Functions loaded
+        id: verify-functions
+        run: |
+          for attempt in {1..12}; do
+            function_count=$(az functionapp function list \
+              --resource-group "$FUNCTIONS_RESOURCE_GROUP" \
+              --name "$FUNCTIONS_APP" \
+              --query "length(@)" -o tsv 2>/dev/null || echo 0)
+            if [ "$function_count" -gt 0 ]; then
+              echo "Loaded ${function_count} Functions"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Function App did not expose any functions after deployment"
+          exit 1
 
+      - name: Rollback failed Functions deployment
+        if: ${{ always() && steps.functions-backup.outcome == 'success' && steps.verify-functions.outcome != 'success' }}
+        shell: bash
+        run: |
+          echo "::warning::Functions deployment failed; restoring the previous package"
+          az functionapp deployment source config-zip \
+            --resource-group "$FUNCTIONS_RESOURCE_GROUP" \
+            --name "$FUNCTIONS_APP" \
+            --src previous-functions.zip
+          az functionapp config appsettings delete \
+            --resource-group "$FUNCTIONS_RESOURCE_GROUP" \
+            --name "$FUNCTIONS_APP" \
+            --setting-names DIGITAL_WORKER_URL DEPLOYED_COMMIT_SHA \
+            --output none
+          mapfile -t previous_settings < <(jq -r '.[] | "\(.name)=\(.value)"' previous-functions-settings.json)
+          if [ ${#previous_settings[@]} -gt 0 ]; then
+            az functionapp config appsettings set \
+              --resource-group "$FUNCTIONS_RESOURCE_GROUP" \
+              --name "$FUNCTIONS_APP" \
+              --settings "${previous_settings[@]}" \
+              --output none
+          fi
 
-  # ── Update Teams App (dev only) ────────────────────────────────
-  update-teams-app:
-    name: Update Teams app package
-    needs: deploy
+  deploy:
+    name: Deploy and validate Container Apps
+    needs: [build-push, deploy-functions]
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || 'prod' }}
     permissions:
       id-token: write
       contents: read
+    outputs:
+      worker-url: ${{ steps.urls.outputs.worker-url }}
+      mcp-url: ${{ steps.urls.outputs.mcp-url }}
+      enrichment-url: ${{ steps.urls.outputs.enrichment-url }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
 
       - uses: actions/setup-node@v6
         with:
@@ -368,20 +369,256 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Resolve Container App URL
+      - name: Capture current images
+        id: previous
         run: |
-          FQDN=$(az containerapp show \
-            --name ${{ env.MCP_CONTAINER_APP }} \
-            --resource-group ${{ env.MCP_RESOURCE_GROUP }} \
-            --query properties.configuration.ingress.fqdn -o tsv)
-          echo "CONTAINER_APP_URL=https://${FQDN}" >> $GITHUB_ENV
+          echo "dw-image=$(az containerapp show -n "$DW_CONTAINER_APP" -g "$RESOURCE_GROUP" --query 'properties.template.containers[0].image' -o tsv)" >> "$GITHUB_OUTPUT"
+          echo "mcp-image=$(az containerapp show -n "$MCP_CONTAINER_APP" -g "$MCP_RESOURCE_GROUP" --query 'properties.template.containers[0].image' -o tsv)" >> "$GITHUB_OUTPUT"
+          echo "enrichment-image=$(az containerapp show -n "$ENRICHMENT_CONTAINER_APP" -g "$ENRICHMENT_RESOURCE_GROUP" --query 'properties.template.containers[0].image' -o tsv)" >> "$GITHUB_OUTPUT"
+          echo "dw-min-replicas=$(az containerapp show -n "$DW_CONTAINER_APP" -g "$RESOURCE_GROUP" --query 'properties.template.scale.minReplicas' -o tsv)" >> "$GITHUB_OUTPUT"
+          echo "mcp-min-replicas=$(az containerapp show -n "$MCP_CONTAINER_APP" -g "$MCP_RESOURCE_GROUP" --query 'properties.template.scale.minReplicas' -o tsv)" >> "$GITHUB_OUTPUT"
+          echo "enrichment-min-replicas=$(az containerapp show -n "$ENRICHMENT_CONTAINER_APP" -g "$ENRICHMENT_RESOURCE_GROUP" --query 'properties.template.scale.minReplicas' -o tsv)" >> "$GITHUB_OUTPUT"
+          az containerapp show -n "$DW_CONTAINER_APP" -g "$RESOURCE_GROUP" --query 'properties.template.containers[0].env' -o json > previous-dw-env.json
+          az containerapp show -n "$MCP_CONTAINER_APP" -g "$MCP_RESOURCE_GROUP" --query 'properties.template.containers[0].env' -o json > previous-mcp-env.json
+          az containerapp show -n "$ENRICHMENT_CONTAINER_APP" -g "$ENRICHMENT_RESOURCE_GROUP" --query 'properties.template.containers[0].env' -o json > previous-enrichment-env.json
 
-      - name: Install Teams Toolkit CLI
-        run: npm install -g @microsoft/m365agentstoolkit-cli || npm install -g @microsoft/teamsapp-cli
+      - name: Deploy digital-worker
+        run: |
+          az containerapp update \
+            --name "$DW_CONTAINER_APP" \
+            --resource-group "$RESOURCE_GROUP" \
+            --image "${{ needs.build-push.outputs.dw-image }}" \
+            --min-replicas 1 \
+            --output none
 
-      - name: Deploy Teams app package
+      - name: Configure digital-worker runtime
         env:
+          AGENT_EMAIL: ${{ vars.AGENT_EMAIL }}
+          MANAGER_EMAIL: ${{ vars.MANAGER_EMAIL }}
+          GRAPH_MAIL_SENDER: ${{ vars.GRAPH_MAIL_SENDER }}
+          GRAPH_APP_ID: ${{ vars.GRAPH_APP_ID }}
+          GRAPH_APP_SECRET: ${{ secrets.GRAPH_APP_SECRET }}
+          GRAPH_TENANT_ID: ${{ vars.GRAPH_TENANT_ID || secrets.AZURE_TENANT_ID }}
+          ITSM_TEAM_ID: ${{ vars.ITSM_TEAM_ID }}
+          ITSM_ALERTS_CHANNEL_ID: ${{ vars.ITSM_ALERTS_CHANNEL_ID }}
+          ROUTINE_REPORT_RECIPIENTS: ${{ vars.ROUTINE_REPORT_RECIPIENTS }}
+          SCHEDULED_SECRET: ${{ secrets.SCHEDULED_SECRET }}
+        run: |
+          secret_suffix="${DEPLOY_SHA:0:12}"
+          graph_secret_name="graph-${secret_suffix}"
+          scheduled_secret_name="scheduled-${secret_suffix}"
+          DW_FQDN=$(az containerapp show \
+            --name "$DW_CONTAINER_APP" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          az containerapp secret set \
+            --name "$DW_CONTAINER_APP" \
+            --resource-group "$RESOURCE_GROUP" \
+            --secrets \
+              "${graph_secret_name}=${GRAPH_APP_SECRET}" \
+              "${scheduled_secret_name}=${SCHEDULED_SECRET}" \
+            --output none
+          az containerapp update \
+            --name "$DW_CONTAINER_APP" \
+            --resource-group "$RESOURCE_GROUP" \
+            --set-env-vars \
+              "AGENT_EMAIL=${AGENT_EMAIL}" \
+              "MANAGER_EMAIL=${MANAGER_EMAIL}" \
+              "GRAPH_MAIL_SENDER=${GRAPH_MAIL_SENDER}" \
+              "GRAPH_APP_ID=${GRAPH_APP_ID}" \
+              "GRAPH_APP_SECRET=secretref:${graph_secret_name}" \
+              "GRAPH_TENANT_ID=${GRAPH_TENANT_ID}" \
+              "ITSM_TEAM_ID=${ITSM_TEAM_ID}" \
+              "ITSM_ALERTS_CHANNEL_ID=${ITSM_ALERTS_CHANNEL_ID}" \
+              "ROUTINE_REPORT_RECIPIENTS=${ROUTINE_REPORT_RECIPIENTS}" \
+              "MISSION_CONTROL_URL=https://${DW_FQDN}/mission-control" \
+              "SCHEDULED_SECRET=secretref:${scheduled_secret_name}" \
+              "PROACTIVE_ENGAGEMENT_ENABLED=true" \
+            --output none
+
+      - name: Deploy and configure mcp-server
+        env:
+          SCHEDULED_SECRET: ${{ secrets.SCHEDULED_SECRET }}
+        run: |
+          secret_suffix="${DEPLOY_SHA:0:12}"
+          scheduled_secret_name="scheduled-${secret_suffix}"
+          DW_FQDN=$(az containerapp show \
+            --name "$DW_CONTAINER_APP" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          az containerapp secret set \
+            --name "$MCP_CONTAINER_APP" \
+            --resource-group "$MCP_RESOURCE_GROUP" \
+            --secrets "${scheduled_secret_name}=${SCHEDULED_SECRET}" \
+            --output none
+          az containerapp update \
+            --name "$MCP_CONTAINER_APP" \
+            --resource-group "$MCP_RESOURCE_GROUP" \
+            --image "${{ needs.build-push.outputs.mcp-image }}" \
+            --min-replicas 1 \
+            --set-env-vars \
+              "WORKER_BASE_URL=https://${DW_FQDN}" \
+              "DIGITAL_WORKER_URL=https://${DW_FQDN}" \
+              "SCHEDULED_SECRET=secretref:${scheduled_secret_name}" \
+            --output none
+
+      - name: Deploy mcp-server-enrichment
+        run: |
+          az containerapp update \
+            --name "$ENRICHMENT_CONTAINER_APP" \
+            --resource-group "$ENRICHMENT_RESOURCE_GROUP" \
+            --image "${{ needs.build-push.outputs.enrichment-image }}" \
+            --min-replicas 1 \
+            --output none
+
+      - name: Wire live MCP endpoints
+        run: |
+          MCP_FQDN=$(az containerapp show \
+            --name "$MCP_CONTAINER_APP" \
+            --resource-group "$MCP_RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          ENRICHMENT_FQDN=$(az containerapp show \
+            --name "$ENRICHMENT_CONTAINER_APP" \
+            --resource-group "$ENRICHMENT_RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          az containerapp update \
+            --name "$DW_CONTAINER_APP" \
+            --resource-group "$RESOURCE_GROUP" \
+            --set-env-vars \
+              "MCP_CHANGE_ENDPOINT=https://${MCP_FQDN}/mcp" \
+              "MCP_ENRICHMENT_ENDPOINT=https://${ENRICHMENT_FQDN}/enrichment/mcp" \
+            --output none
+
+      - name: Resolve deployed URLs
+        id: urls
+        run: |
+          worker_fqdn=$(az containerapp show -n "$DW_CONTAINER_APP" -g "$RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)
+          mcp_fqdn=$(az containerapp show -n "$MCP_CONTAINER_APP" -g "$MCP_RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)
+          enrichment_fqdn=$(az containerapp show -n "$ENRICHMENT_CONTAINER_APP" -g "$ENRICHMENT_RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)
+          echo "worker-url=https://${worker_fqdn}" >> "$GITHUB_OUTPUT"
+          echo "mcp-url=https://${mcp_fqdn}" >> "$GITHUB_OUTPUT"
+          echo "enrichment-url=https://${enrichment_fqdn}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate live customer readiness
+        id: readiness
+        env:
+          ITSM_WORKER_URL: ${{ steps.urls.outputs.worker-url }}
+          ITSM_MCP_URL: ${{ steps.urls.outputs.mcp-url }}
+          ITSM_ENRICHMENT_URL: ${{ steps.urls.outputs.enrichment-url }}
+          EXPECTED_COMMIT_SHA: ${{ env.DEPLOY_SHA }}
+        run: node scripts/validate-live-deployment.mjs
+
+      - name: Rollback Container Apps
+        if: ${{ always() && steps.previous.outcome == 'success' && steps.readiness.outcome != 'success' }}
+        shell: bash
+        run: |
+          restore_app() {
+            local app="$1" resource_group="$2" image="$3" min_replicas="$4" env_file="$5"
+            mapfile -t env_vars < <(jq -r '.[] | if .secretRef then "\(.name)=secretref:\(.secretRef)" else "\(.name)=\(.value)" end' "$env_file")
+            az containerapp update \
+              --name "$app" \
+              --resource-group "$resource_group" \
+              --image "$image" \
+              --min-replicas "$min_replicas" \
+              --replace-env-vars "${env_vars[@]}" \
+              --output none
+          }
+          echo "::warning::Release validation failed; restoring previous Container App images and environment"
+          restore_app "$DW_CONTAINER_APP" "$RESOURCE_GROUP" "${{ steps.previous.outputs.dw-image }}" "${{ steps.previous.outputs.dw-min-replicas }}" previous-dw-env.json
+          restore_app "$MCP_CONTAINER_APP" "$MCP_RESOURCE_GROUP" "${{ steps.previous.outputs.mcp-image }}" "${{ steps.previous.outputs.mcp-min-replicas }}" previous-mcp-env.json
+          restore_app "$ENRICHMENT_CONTAINER_APP" "$ENRICHMENT_RESOURCE_GROUP" "${{ steps.previous.outputs.enrichment-image }}" "${{ steps.previous.outputs.enrichment-min-replicas }}" previous-enrichment-env.json
+          secret_suffix="${DEPLOY_SHA:0:12}"
+          az containerapp secret remove -n "$DW_CONTAINER_APP" -g "$RESOURCE_GROUP" \
+            --secret-names "graph-${secret_suffix}" "scheduled-${secret_suffix}" --output none || true
+          az containerapp secret remove -n "$MCP_CONTAINER_APP" -g "$MCP_RESOURCE_GROUP" \
+            --secret-names "scheduled-${secret_suffix}" --output none || true
+
+  rollback-functions:
+    name: Rollback Functions after failed release
+    needs: [deploy-functions, deploy]
+    if: ${{ always() && needs.deploy-functions.result == 'success' && needs.deploy.result != 'success' }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'prod' }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Download Functions rollback package
+        uses: actions/download-artifact@v4
+        with:
+          name: functions-rollback-${{ github.run_id }}
+
+      - name: Azure Login
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Restore previous Functions deployment
+        shell: bash
+        run: |
+          az functionapp deployment source config-zip \
+            --resource-group "$FUNCTIONS_RESOURCE_GROUP" \
+            --name "$FUNCTIONS_APP" \
+            --src previous-functions.zip
+          az functionapp config appsettings delete \
+            --resource-group "$FUNCTIONS_RESOURCE_GROUP" \
+            --name "$FUNCTIONS_APP" \
+            --setting-names DIGITAL_WORKER_URL DEPLOYED_COMMIT_SHA \
+            --output none
+          mapfile -t previous_settings < <(jq -r '.[] | "\(.name)=\(.value)"' previous-functions-settings.json)
+          if [ ${#previous_settings[@]} -gt 0 ]; then
+            az functionapp config appsettings set \
+              --resource-group "$FUNCTIONS_RESOURCE_GROUP" \
+              --name "$FUNCTIONS_APP" \
+              --settings "${previous_settings[@]}" \
+              --output none
+          fi
+
+  update-teams-app:
+    name: Update production Teams app package
+    needs: deploy
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'prod' }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Create protected production environment
+        env:
+          WORKER_URL: ${{ needs.deploy.outputs.worker-url }}
+          MCP_URL: ${{ needs.deploy.outputs.mcp-url }}
           TEAMS_APP_TENANT_ID: ${{ secrets.TEAMS_APP_TENANT_ID }}
+          TEAMS_APP_ID: ${{ vars.TEAMS_APP_ID || '68dceb5d-e149-417e-b25a-a9a60c1329ce' }}
+          M365_TITLE_ID: ${{ vars.M365_TITLE_ID || 'T_a5b55f9c-055a-feb6-3cc2-f16e8e9150d3' }}
+          M365_APP_ID: ${{ vars.M365_APP_ID || '55e21953-5483-4035-98d3-90c129bd69ea' }}
+        run: |
+          mcp_host=$(node -e "console.log(new URL(process.env.MCP_URL).hostname)")
+          cat > env/.env.prod <<EOF
+          APP_NAME_SUFFIX=prod
+          TEAMSFX_ENV=prod
+          CONTAINER_APP_URL=${WORKER_URL}
+          CHANGE_MCP_ENDPOINT=${MCP_URL}/mcp
+          MCP_VALID_DOMAIN=${mcp_host}
+          TEAMS_APP_TENANT_ID=${TEAMS_APP_TENANT_ID}
+          TEAMS_APP_ID=${TEAMS_APP_ID}
+          M365_TITLE_ID=${M365_TITLE_ID}
+          M365_APP_ID=${M365_APP_ID}
+          EOF
+
+      - name: Install Microsoft 365 Agents Toolkit CLI
+        run: npm install --global @microsoft/m365agentstoolkit-cli
+
+      - name: Deploy production app package
+        env:
           M365_ACCOUNT_NAME: ${{ secrets.M365_ACCOUNT_NAME }}
           M365_ACCOUNT_PASSWORD: ${{ secrets.M365_ACCOUNT_PASSWORD }}
-        run: teamsapp deploy --env dev
+        run: teamsapp deploy --env prod
