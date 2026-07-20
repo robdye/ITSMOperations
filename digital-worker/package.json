@@ -41,7 +41,7 @@
     "@microsoft/microsoft-graph-client": "^3.0.7",
     "@microsoft/workiq": "1.0.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
-    "@openai/agents": "^0.1.11",
+    "@openai/agents": "^0.13.5",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/auto-instrumentations-node": "^0.73.0",
     "@opentelemetry/exporter-metrics-otlp-http": "^0.215.0",
